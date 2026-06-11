@@ -3,7 +3,7 @@
 **Author:** MiMo  
 **Date:** 2026-06-12  
 **Status:** Draft  
-**Use Case:** Node → Edge → Node queries, multi-hop traversal
+**Use Case:** Node → Edge → Node queries, multi-hop traversal, fraud detection
 
 ---
 
@@ -210,7 +210,7 @@ WHERE edge_types @> ARRAY['SAME_PHONE'];
 
 ---
 
-### 2.3 HBase Adjacency List
+### 2.3 HBase Adjacency List (Native)
 
 **Architecture:**
 ```
@@ -247,7 +247,75 @@ Column Family: properties
   - risk_level    → "HIGH"
 ```
 
-**Query Example (using HBase Shell):**
+**Native HBase Operations (Java):**
+```java
+// Single-hop query using HBase Get
+public List<Edge> getNeighbors(String custId) throws IOException {
+    Get get = new Get(Bytes.toBytes(custId));
+    get.addFamily(Bytes.toBytes("edges"));
+    
+    Result result = table.get(get);
+    List<Edge> edges = new ArrayList<>();
+    
+    for (Cell cell : result.rawCells()) {
+        String qualifier = Bytes.toString(CellUtil.cloneQualifier(custId));
+        String[] parts = qualifier.split(":");
+        String edgeType = parts[0];
+        String targetId = parts[1];
+        String value = Bytes.toString(CellUtil.cloneValue(cell));
+        
+        edges.add(new Edge(custId, targetId, edgeType, value));
+    }
+    return edges;
+}
+
+// Single-hop with edge type filter
+public List<Edge> getNeighborsByType(String custId, String edgeType) throws IOException {
+    Get get = new Get(Bytes.toBytes(custId));
+    get.addFamily(Bytes.toBytes("edges"));
+    
+    // Use prefix filter for edge type
+    PrefixFilter filter = new PrefixFilter(Bytes.toBytes(edgeType + ":"));
+    get.setFilter(filter);
+    
+    Result result = table.get(get);
+    // ... parse results
+}
+
+// Multi-hop query (2 hops)
+public List<String> getTwoHopNeighbors(String custId) throws IOException {
+    Set<String> result = new HashSet<>();
+    
+    // First hop
+    List<Edge> firstHop = getNeighbors(custId);
+    for (Edge edge : firstHop) {
+        // Second hop
+        List<Edge> secondHop = getNeighbors(edge.targetId);
+        for (Edge edge2 : secondHop) {
+            if (!edge2.targetId.equals(custId)) {
+                result.add(edge2.targetId);
+            }
+        }
+    }
+    return new ArrayList<>(result);
+}
+
+// Batch multi-hop query (using HBase batch get)
+public Map<String, List<Edge>> batchGetNeighbors(List<String> custIds) throws IOException {
+    List<Get> gets = custIds.stream()
+        .map(id -> {
+            Get get = new Get(Bytes.toBytes(id));
+            get.addFamily(Bytes.toBytes("edges"));
+            return get;
+        })
+        .collect(Collectors.toList());
+    
+    Result[] results = table.get(gets);
+    // ... parse results
+}
+```
+
+**HBase Shell Operations:**
 ```bash
 # Single-hop query
 get 'dwd_graph_adjacency', '12345', {COLUMN => 'edges'}
@@ -255,33 +323,8 @@ get 'dwd_graph_adjacency', '12345', {COLUMN => 'edges'}
 # Filter by edge type
 get 'dwd_graph_adjacency', '12345', {COLUMN => 'edges:SAME_PHONE'}
 
-# Multi-hop (using MapReduce or Spark)
-# Step 1: Get neighbors of 12345
-# Step 2: Get neighbors of those neighbors
-# Step 3: Filter and join
-```
-
-**Query Example (using Spark):**
-```python
-from pyspark.sql import SparkSession
-
-spark = SparkSession.builder \
-    .config("hbase.table", "dwd_graph_adjacency") \
-    .getOrCreate()
-
-# Read adjacency list
-df = spark.read.format("org.apache.hadoop.hbase.spark") \
-    .option("hbase.table", "dwd_graph_adjacency") \
-    .load()
-
-# Single-hop query
-single_hop = df.filter(df.rowkey == "12345") \
-    .select(explode("edges").alias("edge_type", "target_id", "properties"))
-
-# Multi-hop (3 hops)
-hop1 = df.filter(df.rowkey == "12345").select(explode("edges"))
-hop2 = df.join(hop1, df.rowkey == hop1.target_id).select(explode("edges"))
-hop3 = df.join(hop2, df.rowkey == hop2.target_id).select(explode("edges"))
+# Scan for specific edge value
+scan 'dwd_graph_adjacency', {FILTER => "PrefixFilter('SAME_PHONE:')"}
 ```
 
 **Pros:**
@@ -291,39 +334,398 @@ hop3 = df.join(hop2, df.rowkey == hop2.target_id).select(explode("edges"))
 - ✅ Block cache for hot data
 - ✅ Native Hadoop ecosystem integration
 - ✅ Can store edge properties in column values
+- ✅ Tight integration with existing HBase infrastructure
 
 **Cons:**
-- ❌ No SQL interface (requires HBase Shell or Spark)
-- ❌ Complex multi-hop queries (requires MapReduce/Spark)
+- ❌ No SQL interface (requires HBase Shell or Java API)
+- ❌ Complex multi-hop queries (requires application code)
 - ❌ No built-in graph algorithms
 - ❌ Schema design requires careful rowkey planning
 - ❌ Operational complexity
 
 **Performance:**
 - Single-hop: ~1-10ms (point lookup)
-- 3-hop: ~100ms-1s (with Spark)
-- 6-hop: ~1-10s (with Spark)
+- 3-hop: ~10-100ms (with batch get)
+- 6-hop: ~100ms-1s (with parallel traversal)
 
 ---
 
-### 2.4 Comparison Matrix
+### 2.4 JanusGraph (on HBase)
 
-| Feature | DuckDB | PostgreSQL | HBase |
-|---------|--------|------------|-------|
-| **Deployment** | In-process | Server | Distributed cluster |
-| **SQL Support** | Full (PGQ) | Full | Limited (Spark SQL) |
-| **Multi-hop** | Native PGQ | Recursive CTE | MapReduce/Spark |
-| **Scalability** | Single node | Single node (with replicas) | Horizontal |
-| **Latency (1-hop)** | 1-10ms | 1-5ms | 1-10ms |
-| **Latency (3-hop)** | 10-100ms | 50-500ms | 100ms-1s |
-| **Data Size** | Memory bound | Disk bound | Petabyte scale |
-| **Integration** | Parquet/Hudi native | FDW to Hudi | Native Hadoop |
-| **Maturity** | Experimental | Production | Production |
-| **Ops Complexity** | Low | Medium | High |
+**Architecture:**
+```
+┌─────────────────────────────────────────────────┐
+│              JanusGraph                         │
+│  ┌─────────────────────────────────────────┐    │
+│  │         Gremlin Query Engine            │    │
+│  │  (Apache TinkerPop)                     │    │
+│  └─────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────┐    │
+│  │         Storage Backend                 │    │
+│  │  (HBase, Cassandra, BerkeleyDB)         │    │
+│  └─────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────┐    │
+│  │         Index Backend                   │    │
+│  │  (Elasticsearch, Solr)                  │    │
+│  └─────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────┘
+```
+
+**Setup with HBase:**
+```java
+// Connect to JanusGraph with HBase backend
+JanusGraph graph = JanusGraphFactory.build()
+    .set("storage.backend", "hbase")
+    .set("storage.hostname", "skyeenn1,skyeenn2,skyeedn1")
+    .set("storage.hbase.table", "janusgraph")
+    .open();
+
+GraphTraversalSource g = graph.traversal();
+```
+
+**Gremlin Query Examples:**
+```groovy
+// Single-hop query
+g.V().has('cust_id', '12345')
+    .outE('SAME_PHONE', 'SAME_EMAIL')
+    .inV()
+    .valueMap(true)
+
+// Multi-hop query (3 hops)
+g.V().has('cust_id', '12345')
+    .repeat(outE().inV().simplePath())
+    .times(3)
+    .has('cust_id', '67890')
+    .path()
+    .by('cust_id')
+    .by('edge_type')
+
+// Find all connected nodes within 2 hops
+g.V().has('cust_id', '12345')
+    .repeat(out().simplePath())
+    .times(2)
+    .dedup()
+    .valueMap('cust_id', 'cust_name', 'risk_level')
+
+// Filter by edge type and strength
+g.V().has('cust_id', '12345')
+    .outE('SAME_PHONE')
+    .has('strength', 'strong')
+    .inV()
+    .valueMap('cust_id', 'cust_name')
+
+// Find shortest path
+g.V().has('cust_id', '12345')
+    .repeat(out().simplePath().until(has('cust_id', '67890')))
+    .limit(1)
+    .path()
+    .by('cust_id')
+```
+
+**Pros:**
+- ✅ Distributed graph database
+- ✅ Native graph storage and indexing
+- ✅ Gremlin query language (TinkerPop standard)
+- ✅ Pluggable backends (HBase, Cassandra, etc.)
+- ✅ Built-in graph algorithms
+- ✅ OLTP and OLAP support
+- ✅ Open source (Apache 2.0)
+
+**Cons:**
+- ❌ Complex setup and operations
+- ❌ Requires HBase + Elasticsearch
+- ❌ Gremlin learning curve
+- ❌ Performance depends on backend configuration
+
+**Performance:**
+- Single-hop: ~1-10ms
+- 3-hop: ~10-100ms
+- 6-hop: ~100ms-1s
 
 ---
 
-## 3. Recommendation
+### 2.5 Neo4j
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────┐
+│                  Neo4j                          │
+│  ┌─────────────────────────────────────────┐    │
+│  │         Cypher Query Engine             │    │
+│  │  (Native graph processing)              │    │
+│  └─────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────┐    │
+│  │         Native Graph Storage            │    │
+│  │  (Index-free adjacency)                 │    │
+│  └─────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────┘
+```
+
+**Cypher Query Examples:**
+```cypher
+// Single-hop query
+MATCH (n1:Customer {cust_id: '12345'})-[e:SAME_PHONE|SAME_EMAIL]->(n2:Customer)
+RETURN n2.cust_id, n2.cust_name, type(e), e.strength
+
+// Multi-hop query (3 hops)
+MATCH path = (n1:Customer {cust_id: '12345'})-[*1..3]->(n2:Customer {cust_id: '67890'})
+RETURN path, length(path) as hops
+ORDER BY hops
+LIMIT 1
+
+// Find all connected nodes within 2 hops
+MATCH (n1:Customer {cust_id: '12345'})-[*1..2]-(n2:Customer)
+WHERE n1 <> n2
+RETURN DISTINCT n2.cust_id, n2.cust_name, n2.risk_level
+
+// Filter by edge type and strength
+MATCH (n1:Customer {cust_id: '12345'})-[e:SAME_PHONE]->(n2:Customer)
+WHERE e.strength = 'strong'
+RETURN n2.cust_id, n2.cust_name, e.edge_value
+
+// Find shortest path
+MATCH path = shortestPath(
+    (n1:Customer {cust_id: '12345'})-[*]-(n2:Customer {cust_id: '67890'})
+)
+RETURN path, length(path) as hops
+
+// Find fraud rings (connected components)
+CALL gds.wcc.stream('customer-graph')
+YIELD nodeId, componentId
+RETURN componentId, collect(gds.util.asNode(nodeId).cust_id) as members
+ORDER BY size(members) DESC
+```
+
+**Pros:**
+- ✅ Best-in-class graph database
+- ✅ Cypher query language (intuitive, ISO GQL standard)
+- ✅ Native graph storage (index-free adjacency)
+- ✅ Built-in graph algorithms (PageRank, Connected Components, etc.)
+- ✅ Excellent tooling and visualization (Neo4j Browser)
+- ✅ AuraDB managed service
+- ✅ Strong community and ecosystem
+
+**Cons:**
+- ❌ Requires separate database
+- ❌ Data synchronization needed
+- ❌ Enterprise clustering requires license
+- ❌ Memory intensive for large graphs
+
+**Performance:**
+- Single-hop: ~1-5ms
+- 3-hop: ~5-50ms
+- 6-hop: ~50-500ms
+
+---
+
+### 2.6 TigerGraph
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────┐
+│              TigerGraph                         │
+│  ┌─────────────────────────────────────────┐    │
+│  │         GSQL Query Engine               │    │
+│  │  (Massively parallel processing)        │    │
+│  └─────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────┐    │
+│  │         Native Graph Storage            │    │
+│  │  (Compressed, distributed)              │    │
+│  └─────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────┘
+```
+
+**GSQL Query Examples:**
+```sql
+-- Single-hop query
+CREATE QUERY getNeighbors(STRING custId) FOR GRAPH CustomerGraph {
+    Start = {Customer.*};
+    neighbors = SELECT t FROM Start:s-(SAME_PHONE|SAME_EMAIL:e)->Customer:t
+                WHERE s.cust_id == custId;
+    PRINT neighbors;
+}
+
+-- Multi-hop query (3 hops)
+CREATE QUERY getThreeHops(STRING startId, STRING endId) FOR GRAPH CustomerGraph {
+    Start = {Customer.*};
+    paths = SELECT t FROM Start:s-(SAME_PHONE|SAME_EMAIL:e)->Customer:t
+            WHERE s.cust_id == startId
+            ACCUM t.@visited += 1;
+    PRINT paths;
+}
+
+-- Find shortest path
+CREATE QUERY findShortestPath(STRING startId, STRING endId) FOR GRAPH CustomerGraph {
+    Start = {Customer.*};
+    shortest = SELECT t FROM Start:s-(SAME_PHONE|SAME_EMAIL:e)->Customer:t
+               WHERE s.cust_id == startId
+               SHORTEST 3 TO t
+               WHERE t.cust_id == endId;
+    PRINT shortest;
+}
+```
+
+**Pros:**
+- ✅ High-performance deep-link analytics
+- ✅ Massively parallel processing
+- ✅ GSQL query language
+- ✅ Built-in graph algorithms
+- ✅ Real-time and batch processing
+- ✅ TigerGraph Cloud managed service
+
+**Cons:**
+- ❌ Proprietary (not open source)
+- ❌ Steeper learning curve
+- ❌ Enterprise pricing
+- ❌ Less community support
+
+**Performance:**
+- Single-hop: ~1-5ms
+- 3-hop: ~5-50ms
+- 6-hop: ~50-200ms
+
+---
+
+### 2.7 Apache HugeGraph
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────┐
+│              Apache HugeGraph                    │
+│  ┌─────────────────────────────────────────┐    │
+│  │         Gremlin Query Engine            │    │
+│  │  (Apache TinkerPop)                     │    │
+│  └─────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────┐    │
+│  │         Multiple Storage Backends       │    │
+│  │  (HBase, MySQL, RocksDB, etc.)          │    │
+│  └─────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────┐    │
+│  │         RESTful API                    │    │
+│  │  (Graph management & querying)          │    │
+│  └─────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────┘
+```
+
+**Setup with HBase:**
+```properties
+# hugegraph.properties
+backend=hbase
+serializer=hbase
+hosts=skyeenn1,skyeenn2,skyeedn1
+port=2181
+```
+
+**REST API Examples:**
+```bash
+# Single-hop query
+GET /graphs/graph/vertices/12345?adjacent_edges=true
+
+# Multi-hop query (Gremlin)
+POST /graphs/graph/gremlin
+{
+  "gremlin": "g.V('12345').repeat(out().simplePath()).times(3).has('cust_id', '67890').path().by('cust_id')"
+}
+
+# Find all connected nodes
+POST /graphs/graph/gremlin
+{
+  "gremlin": "g.V('12345').repeat(out().simplePath()).times(2).dedup().valueMap('cust_id', 'cust_name')"
+}
+```
+
+**Pros:**
+- ✅ Open source (Apache 2.0)
+- ✅ Multiple storage backends (HBase, MySQL, RocksDB)
+- ✅ RESTful API
+- ✅ Built-in graph algorithms
+- ✅ Integration with Spark and Flink
+- ✅ GraphRAG capabilities for LLM
+
+**Cons:**
+- ❌ Newer project (less mature)
+- ❌ Smaller community
+- ❌ Performance varies by backend
+
+**Performance:**
+- Single-hop: ~1-10ms
+- 3-hop: ~10-100ms
+- 6-hop: ~100ms-1s
+
+---
+
+### 2.8 PuppyGraph (Graph Query Engine)
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────┐
+│              PuppyGraph                         │
+│  ┌─────────────────────────────────────────┐    │
+│  │         Graph Query Engine              │    │
+│  │  (Gremlin/SQL support)                  │    │
+│  └─────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────┐    │
+│  │         Data Source Connectors          │    │
+│  │  (Hudi, Iceberg, Delta, HBase, etc.)    │    │
+│  └─────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────┘
+```
+
+**Query Examples:**
+```sql
+-- Single-hop query
+SELECT * FROM GRAPH_TABLE (
+    my_graph
+    MATCH (n1:Customer {cust_id: '12345'}) -[e:SAME_PHONE|SAME_EMAIL]-> (n2:Customer)
+    COLUMNS (n2.cust_id, n2.cust_name, e.edge_type, e.strength)
+);
+
+-- Multi-hop query
+SELECT * FROM GRAPH_TABLE (
+    my_graph
+    MATCH (n1:Customer {cust_id: '12345'}) -[e1]-> (n2) -[e2]-> (n3) -[e3]-> (n4:Customer {cust_id: '67890'})
+    COLUMNS (n1.cust_id, n2.cust_id, n3.cust_id, n4.cust_id)
+);
+```
+
+**Pros:**
+- ✅ Zero ETL (reads directly from data lake)
+- ✅ Supports Hudi, Iceberg, Delta, HBase
+- ✅ Gremlin and SQL support
+- ✅ Distributed query engine
+- ✅ No data duplication needed
+
+**Cons:**
+- ❌ Newer product
+- ❌ Commercial (not open source)
+- ❌ Less community support
+
+**Performance:**
+- Single-hop: ~10-100ms (depends on data source)
+- 3-hop: ~100ms-1s
+- 6-hop: ~1-10s
+
+---
+
+## 3. Comparison Matrix
+
+| Feature | DuckDB | PostgreSQL | HBase (Native) | JanusGraph | Neo4j | TigerGraph | HugeGraph | PuppyGraph |
+|---------|--------|------------|----------------|------------|-------|------------|-----------|------------|
+| **Deployment** | In-process | Server | Distributed | Distributed | Server | Distributed | Distributed | Engine |
+| **Query Language** | SQL/PGQ | SQL | Java API | Gremlin | Cypher | GSQL | Gremlin | Gremlin/SQL |
+| **Multi-hop** | Native PGQ | Recursive CTE | App code | Native | Native | Native | Native | Native |
+| **Scalability** | Single node | Single node | Horizontal | Horizontal | Cluster | Horizontal | Horizontal | Horizontal |
+| **Latency (1-hop)** | 1-10ms | 1-5ms | 1-10ms | 1-10ms | 1-5ms | 1-5ms | 1-10ms | 10-100ms |
+| **Latency (3-hop)** | 10-100ms | 50-500ms | 10-100ms | 10-100ms | 5-50ms | 5-50ms | 10-100ms | 100ms-1s |
+| **Data Size** | Memory bound | Disk bound | Petabyte | Petabyte | Memory | Petabyte | Petabyte | Petabyte |
+| **HBase Integration** | None | FDW | Native | Native | None | None | Native | Connector |
+| **Hudi Integration** | Native | FDW | None | None | None | None | None | Native |
+| **Open Source** | Yes | Yes | Yes | Yes | Community | No | Yes | No |
+| **Ops Complexity** | Low | Medium | High | High | Low | Medium | Medium | Low |
+
+---
+
+## 4. Recommendation
 
 ### For Current Scale (100K nodes, 1M edges)
 
@@ -336,129 +738,26 @@ hop3 = df.join(hop2, df.rowkey == hop2.target_id).select(explode("edges"))
 4. **SQL/PGQ standard** - Future-proof syntax
 5. **Prototyping friendly** - Easy to iterate
 
-**Implementation:**
-```python
-import duckdb
+### For Production with HBase Infrastructure
 
-# Connect to DuckDB (in-memory or file-based)
-conn = duckdb.connect(':memory:')
+**Recommended: JanusGraph on HBase**
 
-# Install and load DuckPGQ
-conn.execute("INSTALL duckpgq")
-conn.execute("LOAD duckpgq")
-
-# Read directly from Hudi/Parquet
-conn.execute("""
-    CREATE TABLE nodes AS 
-    SELECT * FROM read_parquet('/path/to/dwd_graph_nodes/*.parquet')
-""")
-
-conn.execute("""
-    CREATE TABLE edges AS 
-    SELECT * FROM read_parquet('/path/to/dwd_graph_edges/*.parquet')
-""")
-
-# Create property graph
-conn.execute("""
-    CREATE PROPERTY GRAPH my_graph
-    VERTEX TABLES (nodes AS node)
-    EDGE TABLES (edges AS edge
-        SOURCE KEY (source_cust_id) REFERENCES node (cust_id)
-        DESTINATION KEY (target_cust_id) REFERENCES node (cust_id)
-    )
-""")
-
-# Query
-result = conn.execute("""
-    SELECT n2.cust_id, e.edge_type
-    FROM GRAPH_TABLE (my_graph
-        MATCH (n1) -[e]-> (n2)
-        WHERE n1.cust_id = 12345
-        COLUMNS (n2.cust_id, e.edge_type)
-    )
-""").fetchall()
-```
+**Rationale:**
+1. **Native HBase integration** - Uses existing HBase cluster
+2. **Distributed** - Scales horizontally
+3. **Gremlin query language** - Powerful graph traversals
+4. **Built-in algorithms** - PageRank, Connected Components, etc.
+5. **Open source** - Apache 2.0 license
 
 ### For Future Scale (1M+ nodes, 100M+ edges)
 
-**Recommended: HBase Adjacency List + Spark**
+**Recommended: Neo4j or TigerGraph**
 
 **Rationale:**
-1. **Horizontal scaling** - Can handle petabyte-scale graphs
-2. **Existing infrastructure** - Already have HBase/HDFS
-3. **Spark integration** - Can use GraphX for complex algorithms
-4. **Low latency** - Point lookups are fast
-
-**Implementation:**
-```python
-# HBase table design
-# RowKey: cust_id
-# CF: edges
-#   CQ: edge_type:target_cust_id
-#   Value: JSON with properties
-
-# Spark job for multi-hop
-from pyspark.sql import SparkSession
-from pyspark.graphx import Graph
-
-spark = SparkSession.builder \
-    .config("hbase.table", "dwd_graph_adjacency") \
-    .getOrCreate()
-
-# Load graph from HBase
-vertices = spark.read.format("hbase").load()
-edges = spark.read.format("hbase").load()
-
-# Create GraphX graph
-graph = Graph(vertices, edges)
-
-# Run connected components
-cc = graph.connectedComponents()
-
-# Find shortest path
-sp = graph.shortestPaths(12345)
-```
-
----
-
-## 4. Hybrid Approach
-
-**Best of both worlds:**
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Query Layer                          │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  DuckDB (for prototyping & small queries)       │    │
-│  │  - Read from Hudi/Parquet directly              │    │
-│  │  - SQL/PGQ syntax                               │    │
-│  │  - In-memory, fast iteration                    │    │
-│  └─────────────────────────────────────────────────┘    │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  HBase (for production & large queries)         │    │
-│  │  - Adjacency list storage                       │    │
-│  │  - Spark for complex traversals                 │    │
-│  │  - Distributed, scalable                        │    │
-│  └─────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Data Layer                           │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Hudi (dwd_graph_nodes, dwd_graph_edges)        │    │
-│  │  - Source of truth                              │    │
-│  │  - Incremental updates                          │    │
-│  │  - Parquet format                               │    │
-│  └─────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Workflow:**
-1. **Development/Testing:** Use DuckDB directly on Hudi files
-2. **Small Queries (< 1M edges):** Use DuckDB
-3. **Large Queries (> 1M edges):** Use HBase + Spark
-4. **Production:** Sync Hudi → HBase for low-latency access
+1. **Best performance** - Native graph storage
+2. **Rich algorithms** - Fraud detection, community detection
+3. **Excellent tooling** - Visualization, monitoring
+4. **Managed services** - AuraDB, TigerGraph Cloud
 
 ---
 
@@ -471,23 +770,18 @@ sp = graph.shortestPaths(12345)
 - [ ] Implement 3-hop queries
 - [ ] Performance benchmarking
 
-### Phase 2: PostgreSQL Alternative (Week 3-4)
-- [ ] Design adjacency list schema
-- [ ] Create GIN indexes
-- [ ] Implement recursive CTE queries
-- [ ] Compare with DuckDB performance
-
-### Phase 3: HBase Production (Week 5-8)
-- [ ] Design HBase rowkey schema
-- [ ] Create HBase table
-- [ ] Implement Spark jobs for multi-hop
-- [ ] Sync Hudi → HBase pipeline
+### Phase 2: JanusGraph on HBase (Week 3-6)
+- [ ] Deploy JanusGraph with HBase backend
+- [ ] Import graph data from Hudi
+- [ ] Implement Gremlin queries
 - [ ] Performance benchmarking
+- [ ] Integration with existing systems
 
-### Phase 4: Integration (Week 9-10)
-- [ ] API layer for graph queries
-- [ ] Caching layer for hot queries
-- [ ] Monitoring and alerting
+### Phase 3: Production Deployment (Week 7-10)
+- [ ] Set up monitoring and alerting
+- [ ] Implement data sync pipeline (Hudi → JanusGraph)
+- [ ] Build API layer
+- [ ] Performance optimization
 - [ ] Documentation
 
 ---
@@ -497,6 +791,9 @@ sp = graph.shortestPaths(12345)
 - [DuckDB Graph Queries](https://duckdb.org/docs/current/guides/graph_queries)
 - [DuckPGQ Extension](https://duckdb.org/library/duckpgq/)
 - [PostgreSQL GIN Indexes](https://www.postgresql.org/docs/current/gin.html)
-- [HBase Adjacency List](https://hbase.apache.org/book.html#schema)
-- [Apache S2Graph](https://s2graph.apache.org/)
-- [GRainDB: Making RDBMSs Efficient on Graph Workloads](https://arxiv.org/pdf/2108.10540.pdf)
+- [JanusGraph Documentation](https://docs.janusgraph.org/)
+- [JanusGraph on HBase](https://docs.janusgraph.org/storage-backend/hbase/)
+- [Apache HugeGraph](https://hugegraph.apache.org/)
+- [Neo4j](https://neo4j.com/)
+- [TigerGraph](https://www.tigergraph.com/)
+- [PuppyGraph](https://www.puppygraph.com/)
