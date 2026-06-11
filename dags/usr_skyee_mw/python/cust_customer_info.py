@@ -33,8 +33,8 @@ class CustCustomerInfoEtl(MySqlEtl):
 
     # Destination
     dst_db = "usr_skyee_mw"
-    dst_tbl = "cust_customer_info"
-    path = "/user/hive/warehouse/usr_skyee_mw.db/cust_customer_info"
+    dst_tbl = "stg_cust_customer_info"
+    path = "/user/hive/warehouse/usr_skyee_mw.db/stg_cust_customer_info"
 
     # Keys
     id = "CUST_ID"
