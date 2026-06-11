@@ -1,0 +1,237 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1660" viewBox="0 0 1600 1660" role="img" aria-labelledby="title desc">
+  <title id="title">基于客户流程重绘的系统模块承载图</title>
+  <desc id="desc">基于客户四层风控流程重绘的系统架构图，展示需要建设的案件来源适配、案件接入、案件池、关联图谱触发、Workflow任务编排、Workflow Task Queue、Coordinator、Executor、Connector、Dashboard看板、Human Review、后续任务和反馈沉淀模块。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#334155"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#2563eb"/>
+    </marker>
+    <style>
+      .title { font: 700 34px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #020617; }
+      .subtitle { font: 500 17px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #475569; }
+      .layer { fill: #f1f5f9; stroke: #a8a29e; stroke-width: 1.5; rx: 8; }
+      .layer-text { font: 700 23px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #52525b; }
+      .source-group { fill: none; stroke: #94a3b8; stroke-width: 2; stroke-dasharray: 8 7; rx: 14; }
+      .bau { fill: #f8fafc; stroke: #64748b; stroke-width: 2.5; rx: 10; }
+      .upgrade { fill: #fffbeb; stroke: #d97706; stroke-width: 3; rx: 10; }
+      .new { fill: #f0f6fa; stroke: #00a6fd; stroke-width: 3; rx: 16; }
+      .agent { fill: #fff8dc; stroke: #ffc500; stroke-width: 3.4; }
+      .box-title { font: 700 20px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #020617; }
+      .box-text { font: 500 15px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #334155; }
+      .box-text-tight { font: 500 14px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #334155; }
+      .small { font: 500 13px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #64748b; }
+      .arrow { stroke: #52525b; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .arrow-blue { stroke: #2563eb; stroke-width: 2.6; fill: none; marker-end: url(#arrowBlue); }
+      .arrow-dash { stroke: #64748b; stroke-width: 2.2; fill: none; stroke-dasharray: 8 7; marker-end: url(#arrow); }
+      .note { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.8; rx: 10; }
+      .formula-note { fill: #fff8dc; stroke: #ffc500; stroke-width: 2.4; rx: 10; }
+      .formula-text { font: 700 22px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #1f2937; }
+      .workbench-hint { font: 700 16px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #b45309; }
+      .scope-tag { fill: #0f172a; stroke: #ffffff; stroke-width: 1.4; rx: 11; }
+      .scope-text { font: 700 12px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1660" fill="#ffffff"/>
+  <text class="title" x="800" y="52" text-anchor="middle">AI 案件调查自动化系统：基于客户流程的系统模块承载图</text>
+  <text class="subtitle" x="800" y="82" text-anchor="middle">保留客户原四层业务流程；新增系统模块用于承载接入、编排、调查、处置和反馈闭环</text>
+
+  <rect class="formula-note" x="52" y="102" width="750" height="52"/>
+  <rect class="scope-tag" x="64" y="117" width="30" height="22"/>
+  <text class="scope-text" x="79" y="133" text-anchor="middle">A4</text>
+  <text class="formula-text" x="112" y="136">Agent 工程平台：建设、测试、发布和治理 Agent / Skills / Connectors</text>
+
+  <rect class="note" x="830" y="102" width="718" height="52"/>
+  <rect class="bau" x="852" y="118" width="26" height="20"/>
+  <text class="small" x="888" y="133">客户原有能力</text>
+  <rect class="upgrade" x="1008" y="118" width="26" height="20"/>
+  <text class="small" x="1044" y="133">业务AI工作台</text>
+  <rect class="new" x="1188" y="118" width="26" height="20"/>
+  <text class="small" x="1224" y="133">案件流程平台</text>
+  <polygon class="agent" points="1384,118 1404,118 1410,124 1410,132 1404,138 1384,138 1378,132 1378,124"/>
+  <text class="small" x="1414" y="133">Agent工程平台</text>
+  <text class="workbench-hint" x="800" y="171" text-anchor="middle">业务 AI 工作台范围：W1-W6（橙色模块，业务操作入口；不拥有主流程状态）</text>
+
+  <rect class="layer" x="42" y="178" width="1516" height="58"/>
+  <text class="layer-text" x="72" y="215">第一层：风险审查 / 案件来源</text>
+
+  <rect class="source-group" x="62" y="248" width="956" height="132"/>
+  <text class="small" x="82" y="260">客户原流程中的已有来源</text>
+
+  <rect class="bau" x="82" y="265" width="280" height="94"/>
+  <text class="box-title" x="222" y="301" text-anchor="middle">KYC准入与重检</text>
+  <text class="box-text" x="222" y="328" text-anchor="middle">身份认证 / 黑名单 / 资料审核</text>
+
+  <rect class="bau" x="400" y="265" width="280" height="94"/>
+  <text class="box-title" x="540" y="301" text-anchor="middle">交易规则预警</text>
+  <text class="box-text" x="540" y="328" text-anchor="middle">事中规则 / 事后规则</text>
+
+  <rect class="bau" x="718" y="265" width="280" height="94"/>
+  <text class="box-title" x="858" y="301" text-anchor="middle">实地核查</text>
+  <text class="box-text" x="858" y="328" text-anchor="middle">初验 / 定期 / 派单</text>
+
+  <rect class="new" x="1085" y="252" width="380" height="120"/>
+  <rect class="scope-tag" x="1072" y="240" width="30" height="22"/>
+  <text class="scope-text" x="1087" y="256" text-anchor="middle">F1</text>
+  <text class="box-title" x="1275" y="291" text-anchor="middle">案件来源适配器</text>
+  <text class="box-text" x="1275" y="319" text-anchor="middle">KYC / 规则 / 实地核查 / 内部举报</text>
+  <text class="box-text" x="1275" y="345" text-anchor="middle">专项整治 / RFI / 离线规则 / 图谱关联</text>
+
+  <path class="arrow-blue" d="M1018 314 H1085"/>
+
+  <rect class="layer" x="42" y="410" width="1516" height="58"/>
+  <text class="layer-text" x="72" y="447">第二层：触发条件 / 案件接入 / 案件池</text>
+
+  <rect class="bau" x="82" y="500" width="360" height="152"/>
+  <text class="box-title" x="262" y="535" text-anchor="middle">内部触发</text>
+  <text class="box-text" x="262" y="563" text-anchor="middle">流程触发 / 规则预警 / 内部举报</text>
+  <text class="box-text" x="262" y="589" text-anchor="middle">专项触发 / 时间窗排查 / 业务线排查</text>
+  <rect class="new" x="290" y="608" width="132" height="34"/>
+  <rect class="scope-tag" x="278" y="596" width="30" height="22"/>
+  <text class="scope-text" x="293" y="612" text-anchor="middle">F9</text>
+  <text class="box-text" x="356" y="630" text-anchor="middle">关联图谱触发</text>
+
+  <rect class="bau" x="82" y="682" width="360" height="140"/>
+  <text class="box-title" x="262" y="722" text-anchor="middle">外部触发</text>
+  <text class="box-text" x="262" y="752" text-anchor="middle">资金召回 / RFI异常 / 投诉</text>
+  <text class="box-text" x="262" y="780" text-anchor="middle">账户被盗 / 被拉黑 / 监管协查</text>
+
+  <rect class="new" x="560" y="520" width="300" height="96"/>
+  <rect class="scope-tag" x="548" y="508" width="30" height="22"/>
+  <text class="scope-text" x="563" y="524" text-anchor="middle">F2</text>
+  <text class="box-title" x="710" y="555" text-anchor="middle">案件接入层</text>
+  <text class="box-text" x="710" y="583" text-anchor="middle">触发归一 / 标准化 / 去重 / 归并</text>
+
+  <rect class="new" x="985" y="520" width="300" height="96"/>
+  <rect class="scope-tag" x="973" y="508" width="30" height="22"/>
+  <text class="scope-text" x="988" y="524" text-anchor="middle">F3</text>
+  <text class="box-title" x="1135" y="555" text-anchor="middle">案件池</text>
+  <text class="box-text" x="1135" y="583" text-anchor="middle">优先级 / SLA / 队列 / 分派入口</text>
+
+  <rect class="new" x="930" y="660" width="260" height="100"/>
+  <rect class="scope-tag" x="918" y="648" width="30" height="22"/>
+  <text class="scope-text" x="933" y="664" text-anchor="middle">F4</text>
+  <text class="box-title" x="1060" y="696" text-anchor="middle">Workflow编排层</text>
+  <text class="box-text" x="1060" y="724" text-anchor="middle">状态流转 / 节点审批</text>
+  <text class="box-text" x="1060" y="750" text-anchor="middle">ONSITE / REVIEW / EDD</text>
+
+  <rect class="new" x="1240" y="660" width="260" height="100"/>
+  <rect class="scope-tag" x="1228" y="648" width="30" height="22"/>
+  <text class="scope-text" x="1243" y="664" text-anchor="middle">F5</text>
+  <text class="box-title" x="1370" y="696" text-anchor="middle">Workflow Task Queue</text>
+  <text class="box-text" x="1370" y="724" text-anchor="middle">可执行任务队列</text>
+  <text class="box-text" x="1370" y="750" text-anchor="middle">调查 / 复核 / 回应 / 反馈</text>
+
+  <path class="arrow-blue" d="M1275 372 C1275 425, 710 430, 710 520"/>
+  <path class="arrow-blue" d="M442 570 H560"/>
+  <path class="arrow-blue" d="M422 625 C500 625, 500 600, 560 600"/>
+  <path class="arrow-blue" d="M442 752 C510 752, 500 568, 560 568"/>
+  <path class="arrow-blue" d="M860 568 H985"/>
+  <path class="arrow-blue" d="M1135 616 C1135 635, 1060 635, 1060 660"/>
+  <path class="arrow-blue" d="M1190 710 H1240"/>
+
+  <rect class="layer" x="42" y="845" width="1516" height="58"/>
+  <text class="layer-text" x="72" y="882">第三层：调查与处置建议 / 业务AI工作台执行区</text>
+
+  <polygon class="agent" points="86,955 284,955 300,971 300,1041 284,1057 86,1057 70,1041 70,971"/>
+  <rect class="scope-tag" x="58" y="943" width="30" height="22"/>
+  <text class="scope-text" x="73" y="959" text-anchor="middle">A1</text>
+  <text class="box-title" x="185" y="991" text-anchor="middle">Coordinator</text>
+  <text class="box-text" x="185" y="1019" text-anchor="middle">Agent调度 / 执行控制</text>
+  <text class="box-text" x="185" y="1043" text-anchor="middle">选择 Executor / 聚合输出</text>
+
+  <rect class="upgrade" x="360" y="920" width="260" height="86"/>
+  <rect class="scope-tag" x="348" y="908" width="30" height="22"/>
+  <text class="scope-text" x="363" y="924" text-anchor="middle">W1</text>
+  <text class="box-title" x="490" y="954" text-anchor="middle">浅层调查</text>
+  <text class="box-text" x="490" y="981" text-anchor="middle">Basic Investigation</text>
+
+  <rect class="upgrade" x="360" y="1072" width="260" height="86"/>
+  <rect class="scope-tag" x="348" y="1060" width="30" height="22"/>
+  <text class="scope-text" x="363" y="1076" text-anchor="middle">W2</text>
+  <text class="box-title" x="490" y="1106" text-anchor="middle">深层调查</text>
+  <text class="box-text" x="490" y="1133" text-anchor="middle">EDD / 链路还原 / 深查</text>
+
+  <polygon class="agent" points="706,955 924,955 940,971 940,1041 924,1057 706,1057 690,1041 690,971"/>
+  <rect class="scope-tag" x="678" y="943" width="30" height="22"/>
+  <text class="scope-text" x="693" y="959" text-anchor="middle">A2</text>
+  <text class="box-title" x="815" y="991" text-anchor="middle">Executor</text>
+  <text class="box-text" x="815" y="1019" text-anchor="middle">多类型 agent / 岗位职责</text>
+  <text class="box-text" x="815" y="1043" text-anchor="middle">RFI / 交易 / KYC / 图谱</text>
+
+  <polygon class="agent" points="706,1112 924,1112 940,1128 940,1182 924,1198 706,1198 690,1182 690,1128"/>
+  <rect class="scope-tag" x="678" y="1100" width="30" height="22"/>
+  <text class="scope-text" x="693" y="1116" text-anchor="middle">A3</text>
+  <text class="box-title" x="815" y="1146" text-anchor="middle">Connector</text>
+  <text class="box-text" x="815" y="1171" text-anchor="middle">Custom connector / 权限</text>
+  <text class="box-text" x="815" y="1193" text-anchor="middle">KYC / 交易 / RFI / 图谱</text>
+
+  <rect class="upgrade" x="1010" y="930" width="280" height="102"/>
+  <rect class="scope-tag" x="998" y="918" width="30" height="22"/>
+  <text class="scope-text" x="1013" y="934" text-anchor="middle">W3</text>
+  <text class="box-title" x="1150" y="966" text-anchor="middle">调查包 / 处置建议</text>
+  <text class="box-text" x="1150" y="994" text-anchor="middle">摘要 / 时间线 / 证据链</text>
+  <text class="box-text" x="1150" y="1018" text-anchor="middle">缺口 / 建议处置 / RFI草稿</text>
+
+  <rect class="upgrade" x="1310" y="1072" width="220" height="86"/>
+  <rect class="scope-tag" x="1298" y="1060" width="30" height="22"/>
+  <text class="scope-text" x="1313" y="1076" text-anchor="middle">W6</text>
+  <text class="box-title" x="1420" y="1106" text-anchor="middle">Dashboard看板</text>
+  <text class="box-text" x="1420" y="1133" text-anchor="middle">案件 / SLA / 风险分布</text>
+
+  <path class="arrow-blue" d="M1370 760 C1370 835, 185 835, 185 955"/>
+  <path class="arrow-blue" d="M300 1006 H330 V963 H360"/>
+  <path class="arrow-blue" d="M330 1006 V1115 H360"/>
+  <path class="arrow-blue" d="M620 963 H655 V1006 H690"/>
+  <path class="arrow-blue" d="M620 1115 H655 V1006 H690"/>
+  <path class="arrow-blue" d="M815 1057 V1112"/>
+  <path class="arrow-blue" d="M940 1006 H1010"/>
+  <path class="arrow-dash" d="M1290 1010 C1360 1010, 1360 1115, 1310 1115"/>
+  <path class="arrow-blue" d="M1150 1032 V1280"/>
+  <path class="arrow-dash" d="M1290 981 C1450 965, 1498 850, 1370 760"/>
+  <text class="small" x="1458" y="928" text-anchor="middle">建议 EDD 后回队列</text>
+
+  <rect class="layer" x="42" y="1280" width="1516" height="58"/>
+  <text class="layer-text" x="72" y="1317">第四层：事后处置与反馈沉淀 / 业务AI工作台复核反馈区</text>
+
+  <rect class="upgrade" x="70" y="1370" width="245" height="88"/>
+  <rect class="scope-tag" x="58" y="1358" width="30" height="22"/>
+  <text class="scope-text" x="73" y="1374" text-anchor="middle">W4</text>
+  <text class="box-title" x="192" y="1404" text-anchor="middle">Human Review</text>
+  <text class="box-text" x="192" y="1432" text-anchor="middle">复核确认 / 升级 / 回应</text>
+
+  <rect class="new" x="370" y="1370" width="245" height="88"/>
+  <rect class="scope-tag" x="358" y="1358" width="30" height="22"/>
+  <text class="scope-text" x="373" y="1374" text-anchor="middle">F6</text>
+  <text class="box-title" x="492" y="1404" text-anchor="middle">处置流转模块</text>
+  <text class="box-text-tight" x="492" y="1432" text-anchor="middle">ACCEPT / REJECT / ESCALATION</text>
+
+  <rect class="new" x="670" y="1370" width="245" height="88"/>
+  <rect class="scope-tag" x="658" y="1358" width="30" height="22"/>
+  <text class="scope-text" x="673" y="1374" text-anchor="middle">F7</text>
+  <text class="box-title" x="792" y="1404" text-anchor="middle">后续任务模块</text>
+  <text class="box-text" x="792" y="1432" text-anchor="middle">RFI回应 / 策略反馈</text>
+
+  <rect class="upgrade" x="70" y="1500" width="245" height="88"/>
+  <rect class="scope-tag" x="58" y="1488" width="30" height="22"/>
+  <text class="scope-text" x="73" y="1504" text-anchor="middle">W5</text>
+  <text class="box-title" x="192" y="1534" text-anchor="middle">反馈沉淀模块</text>
+  <text class="box-text" x="192" y="1562" text-anchor="middle">有效信号 / 误报 / 案例库</text>
+
+  <rect class="new" x="370" y="1500" width="245" height="88"/>
+  <rect class="scope-tag" x="358" y="1488" width="30" height="22"/>
+  <text class="scope-text" x="373" y="1504" text-anchor="middle">F8</text>
+  <text class="box-title" x="492" y="1534" text-anchor="middle">Workflow回写</text>
+  <text class="box-text" x="492" y="1562" text-anchor="middle">状态关闭 / SLA / 审计</text>
+
+  <path class="arrow-blue" d="M1150 1280 C1150 1340, 192 1325, 192 1370"/>
+  <path class="arrow-blue" d="M315 1414 H370"/>
+  <path class="arrow-blue" d="M615 1414 H670"/>
+  <path class="arrow-blue" d="M192 1458 V1500"/>
+  <path class="arrow-blue" d="M315 1544 H370"/>
+  <path class="arrow-dash" d="M615 1544 C1120 1544, 1570 1450, 1570 1180 V900 C1570 825, 1480 780, 1370 760"/>
+
+  <text class="small" x="800" y="1640" text-anchor="middle">原则：Workflow 编排任务和状态；Coordinator / Executor / Connector 执行调查；Human Review 确认最终处置。</text>
+</svg>

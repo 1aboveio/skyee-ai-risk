@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1540" viewBox="0 0 1600 1540" role="img" aria-labelledby="title desc">
+  <title id="title">风控部门运作流程图重绘版</title>
+  <desc id="desc">根据客户原始风控部门运作流程图手工重绘的原生 SVG，保留四层结构、主要节点、必走路径、可选路径和反馈路径。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#3f3f46"/>
+    </marker>
+    <style>
+      .title { font: 700 36px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #020617; }
+      .layer { fill: #f1f5f9; stroke: #a8a29e; stroke-width: 1.5; rx: 8; }
+      .layer-text { font: 700 23px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #52525b; }
+      .box { fill: #ffffff; stroke: #27272a; stroke-width: 3; rx: 10; }
+      .soft { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.4; rx: 6; }
+      .dash { fill: none; stroke: #27272a; stroke-width: 2; stroke-dasharray: 8 7; rx: 6; }
+      .box-title { font: 700 22px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #020617; }
+      .text { font: 500 17px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #52525b; }
+      .muted { font: 500 14px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #8a8a8a; }
+      .small { font: 500 13px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #8a8a8a; }
+      .arrow { stroke: #52525b; stroke-width: 2.3; fill: none; marker-end: url(#arrow); }
+      .arrow-dash { stroke: #8a8a8a; stroke-width: 2.3; fill: none; stroke-dasharray: 8 7; marker-end: url(#arrow); }
+      .legend { font: 500 15px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #a1a1aa; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1322" fill="#ffffff"/>
+  <text class="title" x="800" y="58" text-anchor="middle">风控部门运作流程图</text>
+
+  <rect class="layer" x="42" y="108" width="1516" height="58"/>
+  <text class="layer-text" x="72" y="145">第一层：风险审查（三组并行，独立运作）</text>
+
+  <rect class="box" x="92" y="190" width="430" height="118"/>
+  <text class="box-title" x="307" y="229" text-anchor="middle">① KYC准入与重检</text>
+  <text class="text" x="307" y="260" text-anchor="middle">身份认证·黑名单·资料审核→准入</text>
+  <text class="muted" x="307" y="288" text-anchor="middle">KYC组</text>
+
+  <rect class="box" x="600" y="190" width="430" height="118"/>
+  <text class="box-title" x="815" y="229" text-anchor="middle">② 交易规则预警</text>
+  <text class="text" x="815" y="260" text-anchor="middle">事中规则 + 事后规则，实时监控</text>
+  <text class="muted" x="815" y="288" text-anchor="middle">方法架构师/规则管理员</text>
+
+  <rect class="box" x="1108" y="190" width="430" height="118"/>
+  <text class="box-title" x="1323" y="229" text-anchor="middle">③ 实地核查</text>
+  <text class="text" x="1323" y="260" text-anchor="middle">常规核查（初次+定期）+派单核查</text>
+  <text class="muted" x="1323" y="288" text-anchor="middle">实地核查组</text>
+
+  <path class="arrow" d="M307 308 L307 352"/>
+  <path class="arrow" d="M815 308 L815 352"/>
+  <path class="arrow" d="M1323 308 L1323 352"/>
+
+  <rect class="layer" x="42" y="352" width="1516" height="58"/>
+  <text class="layer-text" x="72" y="389">第二层：触发条件（分内部/外部，分深浅度）</text>
+
+  <rect class="box" x="92" y="442" width="690" height="286"/>
+  <text class="box-title" x="437" y="485" text-anchor="middle">内部触发</text>
+  <line x1="112" y1="510" x2="762" y2="510" stroke="#d4d4d8"/>
+  <rect class="soft" x="122" y="532" width="630" height="90"/>
+  <text class="box-title" x="437" y="568" text-anchor="middle">▸ 流程触发（系统/规则自动推送）</text>
+  <text class="text" x="437" y="598" text-anchor="middle">规则预警（事中→浅度 / 事后→深度）</text>
+  <text class="text" x="437" y="628" text-anchor="middle">实地查核异常 / 内部举报（→深度）</text>
+  <rect class="dash" x="122" y="640" width="630" height="68"/>
+  <text class="box-title" x="437" y="679" text-anchor="middle">▸ 专项触发（管理决策主动发起→深度）</text>
+  <text class="text" x="437" y="704" text-anchor="middle">时间窗排查 · 业务线排查 · 针对性排查</text>
+
+  <rect class="box" x="855" y="442" width="650" height="286"/>
+  <text class="box-title" x="1180" y="485" text-anchor="middle">外部触发</text>
+  <line x1="875" y1="510" x2="1485" y2="510" stroke="#d4d4d8"/>
+  <text class="text" x="1180" y="570" text-anchor="middle">资金召回（单笔→浅度 / 3月2笔·超1w·同渠道≥2→深度）</text>
+  <text class="text" x="1180" y="615" text-anchor="middle">RFI异常（拒绝配合/材料瑕疵→深度）</text>
+  <text class="text" x="1180" y="660" text-anchor="middle">投诉/账户被盗（→深度+研发排查）</text>
+  <text class="text" x="1180" y="705" text-anchor="middle">被拉黑/监管协查（→深度）</text>
+
+  <path class="arrow" d="M437 728 C437 760, 510 785, 650 808"/>
+  <path class="arrow" d="M1180 728 C1180 760, 1070 785, 970 808"/>
+
+  <rect class="layer" x="42" y="782" width="1516" height="58"/>
+  <text class="layer-text" x="72" y="819">第三层：调查与处置</text>
+
+  <rect class="box" x="92" y="870" width="690" height="160"/>
+  <text class="box-title" x="437" y="912" text-anchor="middle">① 浅度调查</text>
+  <text class="text" x="437" y="946" text-anchor="middle">欺诈嫌疑（时长/资金/留存/实地/渠道）</text>
+  <text class="text" x="437" y="980" text-anchor="middle">金额大小 / 非法交易（资金说明）</text>
+  <text class="muted" x="437" y="1012" text-anchor="middle">审查组（初审岗）</text>
+
+  <rect class="box" x="870" y="870" width="690" height="160"/>
+  <text class="box-title" x="1215" y="912" text-anchor="middle">② 深度调查</text>
+  <text class="text" x="1215" y="946" text-anchor="middle">交易行为分析 / 负面网查 / 链路还原</text>
+  <text class="text" x="1215" y="980" text-anchor="middle">确认→关联排查→报告→复核</text>
+  <text class="muted" x="1215" y="1012" text-anchor="middle">调查组（资深岗）</text>
+
+  <path class="arrow-dash" d="M782 950 L870 950"/>
+  <text class="box-title" x="826" y="930" text-anchor="middle">升级</text>
+
+  <rect class="soft" x="245" y="1062" width="80" height="45"/>
+  <text class="box-title" x="285" y="1091" text-anchor="middle">放行</text>
+  <rect class="soft" x="1240" y="1062" width="80" height="45"/>
+  <text class="box-title" x="1280" y="1091" text-anchor="middle">放行</text>
+  <rect class="soft" x="1440" y="1062" width="80" height="45"/>
+  <text class="box-title" x="1480" y="1091" text-anchor="middle">坏人</text>
+  <rect class="soft" x="688" y="1145" width="320" height="52"/>
+  <text class="layer-text" x="848" y="1178" text-anchor="middle">归档（不通知任何人）</text>
+
+  <path class="arrow" d="M285 1030 L285 1062"/>
+  <path class="arrow" d="M325 1085 H735 V1145"/>
+  <path class="arrow" d="M1280 1030 L1280 1062"/>
+  <path class="arrow" d="M1280 1107 C1280 1135, 1010 1115, 910 1145"/>
+  <path class="arrow" d="M1480 1030 L1480 1140"/>
+
+  <rect class="layer" x="42" y="1210" width="1516" height="58"/>
+  <text class="layer-text" x="72" y="1247">第四层：事后处置与沉淀</text>
+
+  <rect class="box" x="92" y="1295" width="360" height="86"/>
+  <text class="box-title" x="272" y="1330" text-anchor="middle">复核确认</text>
+  <text class="muted" x="272" y="1357" text-anchor="middle">复核岗</text>
+  <rect class="dash" x="540" y="1295" width="340" height="86"/>
+  <text class="box-title" x="710" y="1330" text-anchor="middle">冻结与清退</text>
+  <text class="muted" x="710" y="1357" text-anchor="middle">调查组</text>
+  <rect class="box" x="1038" y="1295" width="420" height="86"/>
+  <text class="box-title" x="1248" y="1330" text-anchor="middle">系统标签 / 反哺规则 / 通知合规</text>
+  <text class="muted" x="1248" y="1357" text-anchor="middle">运营支持·方法架构师·合规对接</text>
+
+  <path class="arrow" d="M452 1338 H540"/>
+  <path class="arrow" d="M880 1338 H1038"/>
+  <path class="arrow-dash" d="M1480 1140 C1480 1240, 272 1200, 272 1295"/>
+  <path class="arrow-dash" d="M1248 1381 V1412 H437 V708"/>
+  <rect class="soft" x="540" y="1402" width="640" height="48"/>
+  <text class="text" x="860" y="1432" text-anchor="middle">↑ 规则反哺 / 知识沉淀 ↑　确认坏人→不通知销售</text>
+
+  <text class="legend" x="800" y="1488" text-anchor="middle">实线=必走路径　虚线=条件/可选路径　点线=反哺路径</text>
+</svg>

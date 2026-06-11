@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1400" viewBox="0 0 1200 1400" role="img" aria-labelledby="title desc">
+  <title id="title">任务流转与调查执行分工图</title>
+  <desc id="desc">纵向展示 Workflow 负责任务流转和状态控制，Coordinator 从任务队列领取任务，Executor 执行调查，Connector 提供数据，Human Review 进行人工复核。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#334155"/>
+    </marker>
+    <style>
+      .title { font: 700 34px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 18px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #475569; }
+      .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; rx: 16; }
+      .workflow { fill: #fff7ed; stroke: #ea580c; stroke-width: 3; rx: 12; }
+      .ai { fill: #f5f3ff; stroke: #7c3aed; stroke-width: 3; rx: 12; }
+      .data { fill: #eef6ff; stroke: #2563eb; stroke-width: 2.5; rx: 12; }
+      .human { fill: #ecfdf3; stroke: #16a34a; stroke-width: 3; rx: 12; }
+      .box-title { font: 700 22px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #111827; }
+      .box-text { font: 500 16px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #475569; }
+      .small { font: 500 14px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #64748b; }
+      .arrow { stroke: #334155; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #64748b; stroke-width: 2.2; fill: none; stroke-dasharray: 8 7; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1200" height="1400" fill="#f8fafc"/>
+  <text class="title" x="600" y="58" text-anchor="middle">任务流转与调查执行分工图</text>
+  <text class="subtitle" x="600" y="92" text-anchor="middle">Workflow 决定任务怎么流转；Coordinator/Executor/Connector 完成任务内调查</text>
+
+  <rect class="panel" x="70" y="135" width="1060" height="1135"/>
+
+  <rect class="workflow" x="390" y="190" width="420" height="100"/>
+  <text class="box-title" x="600" y="229" text-anchor="middle">Workflow任务编排</text>
+  <text class="box-text" x="600" y="258" text-anchor="middle">建案 / 分派 / 状态流转 / SLA / 审批 / 审计</text>
+
+  <rect class="workflow" x="390" y="340" width="420" height="100"/>
+  <text class="box-title" x="600" y="379" text-anchor="middle">Workflow Task Queue</text>
+  <text class="box-text" x="600" y="408" text-anchor="middle">RFI调查 / 交易分析 / 现场复核 / 人工复核</text>
+
+  <rect class="workflow" x="390" y="490" width="420" height="100"/>
+  <text class="box-title" x="600" y="529" text-anchor="middle">Coordinator</text>
+  <text class="box-text" x="600" y="558" text-anchor="middle">领取任务 / 选择 Executor / 跟踪执行 / 聚合结果</text>
+
+  <rect class="ai" x="390" y="640" width="420" height="112"/>
+  <text class="box-title" x="600" y="681" text-anchor="middle">Executor</text>
+  <text class="box-text" x="600" y="710" text-anchor="middle">多类型 agent，以岗位职责区分</text>
+  <text class="box-text" x="600" y="736" text-anchor="middle">RFI Analyst / Transaction Analyst / KYC Analyst / Graph Analyst</text>
+
+  <rect class="data" x="120" y="830" width="285" height="86"/>
+  <text class="box-title" x="262" y="863" text-anchor="middle">数据服务</text>
+  <text class="box-text" x="262" y="892" text-anchor="middle">KYC / 交易 / 历史风险</text>
+
+  <rect class="data" x="457" y="830" width="285" height="86"/>
+  <text class="box-title" x="600" y="863" text-anchor="middle">Connector</text>
+  <text class="box-text" x="600" y="892" text-anchor="middle">工具权限 / 数据访问 / 调用审计</text>
+
+  <rect class="data" x="795" y="830" width="285" height="86"/>
+  <text class="box-title" x="938" y="863" text-anchor="middle">关联与材料</text>
+  <text class="box-text" x="938" y="892" text-anchor="middle">RFI / 邮件 / 图谱 / 现场核查</text>
+
+  <rect class="ai" x="270" y="1005" width="660" height="104"/>
+  <text class="box-title" x="600" y="1044" text-anchor="middle">调查包输出</text>
+  <text class="box-text" x="600" y="1073" text-anchor="middle">案件摘要 / 时间线 / 证据链 / 风险类型判断</text>
+  <text class="box-text" x="600" y="1099" text-anchor="middle">证据缺口 / 建议处置 / RFI回应草稿</text>
+
+  <rect class="human" x="390" y="1170" width="420" height="100"/>
+  <text class="box-title" x="600" y="1209" text-anchor="middle">Human Review</text>
+  <text class="box-text" x="600" y="1238" text-anchor="middle">确认是否升级 EDD / 是否关户 / 是否正式回复 RFI</text>
+
+  <path class="arrow" d="M600 290 V350"/>
+  <path class="arrow" d="M600 440 V490"/>
+  <path class="arrow" d="M600 590 V640"/>
+  <path class="dash" d="M600 752 V812"/>
+  <path class="dash" d="M600 812 C500 805, 330 805, 262 830"/>
+  <path class="dash" d="M600 812 V830"/>
+  <path class="dash" d="M600 812 C700 805, 870 805, 938 830"/>
+  <path class="arrow" d="M600 916 V1005"/>
+  <path class="arrow" d="M600 1109 V1170"/>
+
+  <rect class="panel" x="160" y="1300" width="880" height="58"/>
+  <text class="small" x="600" y="1324" text-anchor="middle">示例：Workflow 创建 RFI 基础调查任务；Coordinator 领取任务并选择 RFI Analyst Executor。</text>
+  <text class="small" x="600" y="1348" text-anchor="middle">Executor 通过 Connector 拉取数据并输出调查包，最后进入 Human Review。</text>
+
+  <text class="small" x="600" y="1382" text-anchor="middle">一句话：Workflow 推动案件流转，Coordinator/Executor/Connector 执行案件调查，Human Review 确认结果。</text>
+</svg>

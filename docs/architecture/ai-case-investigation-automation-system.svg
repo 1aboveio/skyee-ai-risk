@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120" role="img" aria-labelledby="title desc">
+  <title id="title">AI 案件调查自动化系统架构图</title>
+  <desc id="desc">展示案件流入来源、案件处理闭环、Workflow任务编排层、AI案件调查执行层、调查数据与证据源、人工复核、处置与后续任务和反馈沉淀层。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#334155"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#1d4ed8"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#15803d"/>
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 38px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 18px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #475569; }
+      .section-title { font: 700 22px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #1e293b; }
+      .box-title { font: 700 19px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #111827; }
+      .box-text { font: 500 15px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #475569; }
+      .small-text { font: 500 13px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #64748b; }
+      .group { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; rx: 14; }
+      .processing { fill: #ffffff; stroke: #2563eb; stroke-width: 2.5; stroke-dasharray: 10 7; rx: 16; }
+      .source { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 2; rx: 10; }
+      .core { fill: #eef6ff; stroke: #2563eb; stroke-width: 2.5; rx: 12; }
+      .workflow { fill: #fff7ed; stroke: #ea580c; stroke-width: 3; rx: 12; }
+      .ai { fill: #eaf2ff; stroke: #1d4ed8; stroke-width: 3; rx: 12; }
+      .data { fill: #f8fafc; stroke: #64748b; stroke-width: 2; rx: 10; }
+      .human { fill: #fff7ed; stroke: #ea580c; stroke-width: 3; rx: 12; }
+      .outcome { fill: #ecfdf3; stroke: #16a34a; stroke-width: 2.5; rx: 10; }
+      .feedback { fill: #f0fdf4; stroke: #15803d; stroke-width: 3; rx: 12; }
+      .arrow { stroke: #334155; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .arrow-blue { stroke: #1d4ed8; stroke-width: 2.5; fill: none; marker-end: url(#arrowBlue); }
+      .arrow-green { stroke: #15803d; stroke-width: 2.5; fill: none; marker-end: url(#arrowGreen); }
+      .arrow-dashed { stroke: #15803d; stroke-width: 2.5; fill: none; stroke-dasharray: 8 7; marker-end: url(#arrowGreen); }
+      .label { font: 700 14px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #334155; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="1120"/>
+  <text class="title" x="800" y="58" text-anchor="middle">AI 案件调查自动化系统架构图</text>
+  <text class="subtitle" x="800" y="91" text-anchor="middle">Workflow 编排任务和状态，AI 执行调查动作，人类确认处置动作</text>
+
+  <rect class="group" x="48" y="130" width="410" height="520"/>
+  <text class="section-title" x="253" y="170" text-anchor="middle">案件流入来源</text>
+
+  <rect class="source" x="80" y="200" width="160" height="86"/>
+  <text class="box-title" x="160" y="234" text-anchor="middle">流程输入</text>
+  <text class="box-text" x="160" y="261" text-anchor="middle">KYC / 准入 / 复检</text>
+
+  <rect class="source" x="266" y="200" width="160" height="86"/>
+  <text class="box-title" x="346" y="234" text-anchor="middle">规则触发</text>
+  <text class="box-text" x="346" y="261" text-anchor="middle">实时 / 周期扫描</text>
+
+  <rect class="source" x="80" y="314" width="160" height="86"/>
+  <text class="box-title" x="160" y="348" text-anchor="middle">内部举报</text>
+  <text class="box-text" x="160" y="375" text-anchor="middle">运营 / 销售 / 风控</text>
+
+  <rect class="source" x="266" y="314" width="160" height="86"/>
+  <text class="box-title" x="346" y="348" text-anchor="middle">专项整治</text>
+  <text class="box-text" x="346" y="375" text-anchor="middle">批量盘点 / 排查</text>
+
+  <rect class="source" x="80" y="428" width="160" height="86"/>
+  <text class="box-title" x="160" y="462" text-anchor="middle">外部举报</text>
+  <text class="box-text" x="160" y="489" text-anchor="middle">RFI / 渠道 / 投诉</text>
+
+  <rect class="source" x="266" y="428" width="160" height="86"/>
+  <text class="box-title" x="346" y="462" text-anchor="middle">离线规则</text>
+  <text class="box-text" x="346" y="489" text-anchor="middle">图谱关联 / 回扫</text>
+
+  <rect class="processing" x="500" y="116" width="370" height="928"/>
+  <text class="section-title" x="685" y="138" text-anchor="middle">案件处理闭环</text>
+
+  <rect class="core" x="535" y="145" width="300" height="84"/>
+  <text class="box-title" x="685" y="178" text-anchor="middle">案件接入层</text>
+  <text class="box-text" x="685" y="204" text-anchor="middle">统一接入 / 标准化 / 去重 / 归并</text>
+
+  <rect class="core" x="535" y="268" width="300" height="84"/>
+  <text class="box-title" x="685" y="301" text-anchor="middle">案件池</text>
+  <text class="box-text" x="685" y="327" text-anchor="middle">优先级 / SLA / 状态流转 / 分派</text>
+
+  <rect class="workflow" x="535" y="391" width="300" height="94"/>
+  <text class="box-title" x="685" y="425" text-anchor="middle">Workflow任务编排层</text>
+  <text class="box-text" x="685" y="452" text-anchor="middle">状态流转 / 任务分派 / SLA</text>
+
+  <rect class="ai" x="535" y="524" width="300" height="94"/>
+  <text class="box-title" x="685" y="558" text-anchor="middle">AI 案件调查执行层</text>
+  <text class="box-text" x="685" y="585" text-anchor="middle">数据拉取 / 证据分析 / 链路还原</text>
+
+  <rect class="ai" x="535" y="657" width="300" height="104"/>
+  <text class="box-title" x="685" y="692" text-anchor="middle">AI 调查工作台</text>
+  <text class="box-text" x="685" y="719" text-anchor="middle">摘要 / 时间线 / 风险信号</text>
+  <text class="box-text" x="685" y="743" text-anchor="middle">证据链 / 风险类型判断 / 缺口识别</text>
+
+  <rect class="ai" x="535" y="800" width="300" height="94"/>
+  <text class="box-title" x="685" y="834" text-anchor="middle">处置建议</text>
+  <text class="box-text" x="685" y="861" text-anchor="middle">Escalation / 关户 / RFI 回应</text>
+
+  <rect class="human" x="535" y="933" width="300" height="94"/>
+  <text class="box-title" x="685" y="967" text-anchor="middle">人工复核与确认</text>
+  <text class="box-text" x="685" y="994" text-anchor="middle">调查员 / 资深岗 / 复核岗</text>
+
+  <rect class="group" x="930" y="130" width="610" height="400"/>
+  <text class="section-title" x="1235" y="170" text-anchor="middle">调查数据与证据源</text>
+
+  <rect class="data" x="970" y="204" width="160" height="72"/>
+  <text class="box-title" x="1050" y="233" text-anchor="middle">客户资料</text>
+  <text class="box-text" x="1050" y="257" text-anchor="middle">主体 / 联系人 / UBO</text>
+
+  <rect class="data" x="1160" y="204" width="160" height="72"/>
+  <text class="box-title" x="1240" y="233" text-anchor="middle">KYC / KYB</text>
+  <text class="box-text" x="1240" y="257" text-anchor="middle">准入 / 黑名单</text>
+
+  <rect class="data" x="1350" y="204" width="150" height="72"/>
+  <text class="box-title" x="1425" y="233" text-anchor="middle">交易流水</text>
+  <text class="box-text" x="1425" y="257" text-anchor="middle">入账 / 出账</text>
+
+  <rect class="data" x="970" y="307" width="160" height="72"/>
+  <text class="box-title" x="1050" y="336" text-anchor="middle">实地核查</text>
+  <text class="box-text" x="1050" y="360" text-anchor="middle">初验 / 巡检</text>
+
+  <rect class="data" x="1160" y="307" width="160" height="72"/>
+  <text class="box-title" x="1240" y="336" text-anchor="middle">历史风险</text>
+  <text class="box-text" x="1240" y="360" text-anchor="middle">召回 / 投诉 / 清退</text>
+
+  <rect class="data" x="1350" y="307" width="150" height="72"/>
+  <text class="box-title" x="1425" y="336" text-anchor="middle">文本材料</text>
+  <text class="box-text" x="1425" y="360" text-anchor="middle">RFI / 邮件 / 聊天</text>
+
+  <rect class="data" x="1065" y="410" width="350" height="72"/>
+  <text class="box-title" x="1240" y="439" text-anchor="middle">关联网络</text>
+  <text class="box-text" x="1240" y="463" text-anchor="middle">账户 / 联系人 / 收款方 / 受益人 / 渠道</text>
+
+  <rect class="group" x="930" y="580" width="610" height="280"/>
+  <text class="section-title" x="1235" y="620" text-anchor="middle">处置与后续任务</text>
+
+  <rect class="outcome" x="970" y="660" width="150" height="76"/>
+  <text class="box-title" x="1045" y="690" text-anchor="middle">Escalation</text>
+  <text class="box-text" x="1045" y="715" text-anchor="middle">深层审核</text>
+
+  <rect class="outcome" x="1140" y="660" width="120" height="76"/>
+  <text class="box-title" x="1200" y="690" text-anchor="middle">关户</text>
+  <text class="box-text" x="1200" y="715" text-anchor="middle">确认处置</text>
+
+  <rect class="outcome" x="1280" y="660" width="180" height="76"/>
+  <text class="box-title" x="1370" y="690" text-anchor="middle">RFI 回应</text>
+  <text class="box-text" x="1370" y="715" text-anchor="middle">材料 / 说明 / 回函</text>
+
+  <rect class="outcome" x="1015" y="765" width="200" height="76"/>
+  <text class="box-title" x="1115" y="795" text-anchor="middle">反馈策略组</text>
+  <text class="box-text" x="1115" y="820" text-anchor="middle">更深层调查</text>
+
+  <rect class="outcome" x="1245" y="765" width="170" height="76"/>
+  <text class="box-title" x="1330" y="795" text-anchor="middle">放行 / 归档</text>
+  <text class="box-text" x="1330" y="820" text-anchor="middle">无实质风险</text>
+
+  <rect class="feedback" x="930" y="922" width="610" height="105"/>
+  <text class="box-title" x="1235" y="959" text-anchor="middle">反馈沉淀层</text>
+  <text class="box-text" x="1235" y="987" text-anchor="middle">有效信号 / 误报原因 / 处置结果 / 规则建议 / 案例知识库</text>
+
+  <path class="arrow" d="M458 390 C495 390, 502 187, 535 187"/>
+  <path class="arrow" d="M685 229 L685 268"/>
+  <path class="arrow-blue" d="M685 352 L685 391"/>
+  <path class="arrow-blue" d="M685 485 L685 524"/>
+  <path class="arrow-blue" d="M685 618 L685 657"/>
+  <path class="arrow-blue" d="M685 761 L685 800"/>
+  <path class="arrow" d="M685 894 L685 933"/>
+
+  <path class="arrow-blue" d="M835 571 C870 571, 890 330, 930 330"/>
+  <path class="arrow-blue" d="M930 380 C890 380, 870 571, 835 571"/>
+  <text class="label" x="872" y="540">调用证据源</text>
+
+  <path class="arrow" d="M835 980 C875 980, 890 720, 930 720"/>
+  <path class="arrow-green" d="M1235 860 L1235 922"/>
+  <path class="arrow-dashed" d="M930 978 C690 1090, 290 980, 253 650"/>
+  <text class="small-text" x="510" y="1038">反馈回规则、专项、离线规则与案例知识库</text>
+
+  <rect x="48" y="1048" width="1492" height="42" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+  <text class="small-text" x="800" y="1075" text-anchor="middle">第一期边界：不替代现有 KYC、交易监控、规则引擎或最终处置权限；Workflow 编排流程，AI 执行调查，人工确认处置。</text>
+</svg>

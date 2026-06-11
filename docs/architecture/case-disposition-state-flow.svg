@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="880" viewBox="0 0 1500 880" role="img" aria-labelledby="title desc">
+  <title id="title">案件处置流转与状态图</title>
+  <desc id="desc">展示风险案件从进入案件池，经现场取证、浅层调查、EDD深层调查，到ACCEPT或REJECT，并在关户后产生RFI回应和反馈策略组等后续任务。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#334155"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#1d4ed8"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#15803d"/>
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 36px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 18px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #475569; }
+      .section-title { font: 700 22px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #1e293b; }
+      .box-title { font: 700 22px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #111827; }
+      .box-text { font: 500 16px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #475569; }
+      .small-text { font: 500 14px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #64748b; }
+      .label { font: 700 15px "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #334155; }
+      .group { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; rx: 16; }
+      .state { fill: #eef6ff; stroke: #2563eb; stroke-width: 3; rx: 14; }
+      .state-soft { fill: #f8fafc; stroke: #64748b; stroke-width: 2.5; rx: 14; }
+      .decision { fill: #fff7ed; stroke: #ea580c; stroke-width: 3; }
+      .accept { fill: #ecfdf3; stroke: #16a34a; stroke-width: 3; rx: 14; }
+      .reject { fill: #fef2f2; stroke: #dc2626; stroke-width: 3; rx: 14; }
+      .task { fill: #f5f3ff; stroke: #7c3aed; stroke-width: 2.5; rx: 14; }
+      .arrow { stroke: #334155; stroke-width: 2.7; fill: none; marker-end: url(#arrow); }
+      .arrow-blue { stroke: #1d4ed8; stroke-width: 2.7; fill: none; marker-end: url(#arrowBlue); }
+      .arrow-green { stroke: #15803d; stroke-width: 2.7; fill: none; marker-end: url(#arrowGreen); }
+      .arrow-dashed { stroke: #64748b; stroke-width: 2.4; fill: none; stroke-dasharray: 8 7; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1500" height="880"/>
+  <text class="title" x="750" y="56" text-anchor="middle">案件处置流转与状态图</text>
+  <text class="subtitle" x="750" y="88" text-anchor="middle">主状态只表达调查阶段与最终处置；RFI 回应和策略反馈作为后续任务</text>
+
+  <rect class="group" x="56" y="135" width="1388" height="505"/>
+  <text class="section-title" x="750" y="176" text-anchor="middle">案件主状态流转</text>
+
+  <rect class="state-soft" x="92" y="270" width="190" height="96"/>
+  <text class="box-title" x="187" y="307" text-anchor="middle">CASE INTAKE</text>
+  <text class="box-text" x="187" y="334" text-anchor="middle">进入案件池</text>
+
+  <polygon class="decision" points="382,248 512,318 382,388 252,318"/>
+  <text class="box-title" x="382" y="308" text-anchor="middle">ONSITE?</text>
+  <text class="box-text" x="382" y="335" text-anchor="middle">是否触发现场取证</text>
+
+  <rect class="state" x="590" y="204" width="230" height="96"/>
+  <text class="box-title" x="705" y="241" text-anchor="middle">ONSITE</text>
+  <text class="box-text" x="705" y="268" text-anchor="middle">现场取证任务</text>
+
+  <rect class="state" x="590" y="362" width="230" height="104"/>
+  <text class="box-title" x="705" y="399" text-anchor="middle">REVIEW 2.1</text>
+  <text class="box-text" x="705" y="426" text-anchor="middle">Basic Investigation</text>
+  <text class="box-text" x="705" y="450" text-anchor="middle">浅层调查</text>
+
+  <rect class="state" x="905" y="362" width="230" height="104"/>
+  <text class="box-title" x="1020" y="399" text-anchor="middle">REVIEW 2.2</text>
+  <text class="box-text" x="1020" y="426" text-anchor="middle">EDD</text>
+  <text class="box-text" x="1020" y="450" text-anchor="middle">深层调查</text>
+
+  <polygon class="decision" points="1235,335 1372,414 1235,493 1098,414"/>
+  <text class="box-title" x="1235" y="404" text-anchor="middle">DECISION</text>
+  <text class="box-text" x="1235" y="431" text-anchor="middle">人工复核确认</text>
+
+  <rect class="accept" x="1105" y="535" width="190" height="80"/>
+  <text class="box-title" x="1200" y="566" text-anchor="middle">ACCEPT</text>
+  <text class="box-text" x="1200" y="591" text-anchor="middle">放行 / 归档</text>
+
+  <rect class="reject" x="1325" y="535" width="90" height="80"/>
+  <text class="box-title" x="1370" y="566" text-anchor="middle">REJECT</text>
+  <text class="box-text" x="1370" y="591" text-anchor="middle">关户</text>
+
+  <path class="arrow" d="M282 318 L512 318"/>
+  <text class="label" x="318" y="299">1</text>
+  <path class="arrow-blue" d="M512 318 C550 318, 550 252, 590 252"/>
+  <text class="label" x="538" y="274">需要</text>
+  <path class="arrow-blue" d="M705 300 L705 362"/>
+  <text class="label" x="723" y="337">取证完成</text>
+  <path class="arrow-blue" d="M512 318 C550 318, 550 414, 590 414"/>
+  <text class="label" x="538" y="390">不需要</text>
+  <path class="arrow-blue" d="M820 414 L905 414"/>
+  <text class="label" x="844" y="394">2.1 -> 2.2</text>
+  <path class="arrow-blue" d="M820 414 C875 414, 885 520, 1102 520 C1160 520, 1172 492, 1193 476"/>
+  <text class="label" x="980" y="543">2.1 可判断</text>
+  <path class="arrow-blue" d="M1135 414 L1160 448"/>
+  <text class="label" x="1146" y="431">2.2 完成</text>
+  <path class="arrow-green" d="M1200 493 L1200 535"/>
+  <text class="label" x="1215" y="520">ACCEPT</text>
+  <path class="arrow" d="M1290 445 C1360 470, 1370 500, 1370 535"/>
+  <text class="label" x="1370" y="505">REJECT</text>
+
+  <rect class="group" x="56" y="682" width="1388" height="142"/>
+  <text class="section-title" x="750" y="724" text-anchor="middle">关户后的后续任务</text>
+
+  <rect class="task" x="460" y="755" width="230" height="54"/>
+  <text class="box-title" x="575" y="790" text-anchor="middle">RFI 回应</text>
+
+  <rect class="task" x="810" y="755" width="230" height="54"/>
+  <text class="box-title" x="925" y="790" text-anchor="middle">反馈策略组</text>
+
+  <path class="arrow-dashed" d="M1370 615 C1370 700, 660 700, 600 755"/>
+  <text class="small-text" x="755" y="688">如案件来源为 RFI</text>
+  <path class="arrow-dashed" d="M1370 615 C1370 730, 1000 720, 945 755"/>
+  <text class="small-text" x="1090" y="720">确认坏人 / 规则优化 / 深层调查</text>
+
+  <rect x="56" y="835" width="1388" height="32" rx="9" fill="#ffffff" stroke="#cbd5e1"/>
+  <text class="small-text" x="750" y="856" text-anchor="middle">状态设计原则：主状态互斥；后续任务可并行、可选、可按来源或处置结果触发。</text>
+</svg>
