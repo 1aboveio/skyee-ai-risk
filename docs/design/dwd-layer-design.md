@@ -155,6 +155,7 @@ Based on ISO 20022 standard for financial messaging:
 - po (stg_pmp_pay_order) — order header
 - pd (stg_pmp_pay_details) — line items
 - co (stg_pmp_coll_order) — collection orders
+- ci (stg_cust_customer_info) — customer risk flags
 
 | Column | Type | Source | Description |
 |--------|------|--------|-------------|
@@ -166,6 +167,18 @@ Based on ISO 20022 standard for financial messaging:
 | order_type | varchar(10) | 'PAY' / 'COLL' | Order type |
 | txn_status | varchar(32) | pd.PAY_STATUS | Transaction status |
 | txn_time | timestamp | pd.PAYMENT_TIME | Transaction time |
+| **Flags** | | | |
+| is_pobo | char(1) | CASE WHEN po.SAME_NAME_PAYER_NAME IS NOT NULL THEN 'Y' ELSE 'N' END | Pay On Behalf Of |
+| is_cross_border | char(1) | CASE WHEN po.COUNTRY_CD != pd.COLL_COUNTRY_CD THEN 'Y' ELSE 'N' END | Cross-border transaction |
+| is_exchange | char(1) | po.IS_EXCHANGE | Has currency exchange |
+| is_refund | char(1) | pd.HAS_REFUND | Has refund |
+| is_refund_commission | char(1) | pd.HAS_REFUND_COMMISSION | Has refund commission |
+| is_same_name_pay | char(1) | pd.USE_SAME_NAME_PAY | Uses same-name payer |
+| is_agent_initiated | char(1) | CASE WHEN po.PROXY_USER IS NOT NULL THEN 'Y' ELSE 'N' END | Initiated by agent |
+| is_high_risk | char(1) | ci.HIGH_RISK | Customer high risk flag |
+| is_sanctioned | char(1) | ci.SANCTIONED | Customer sanctioned flag |
+| is_declared | char(1) | po.NEED_DECLEAR | Needs declaration |
+| is_cross_border_purchase | char(1) | po.IS_CROSS_BORDER_PURCHASE | Cross-border purchase |
 | **Amount** | | | |
 | txn_amount | decimal(15,2) | pd.PAY_TXN_AMT | Transaction amount |
 | txn_currency | varchar(10) | pd.CURRENCY_CD | Transaction currency |
