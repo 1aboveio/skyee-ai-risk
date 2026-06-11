@@ -128,18 +128,28 @@ def main(
     spark = SparkSession.builder.remote(spark_remote).getOrCreate()
     
     # Process each month
-    for month_start, month_end in month_ranges:
+    total_months = len(month_ranges)
+    total_tables = len(table_list)
+    total_jobs = total_months * total_tables
+    completed_jobs = 0
+    failed_jobs = []
+    
+    for month_idx, (month_start, month_end) in enumerate(month_ranges, 1):
         month_label = month_start[:7]  # YYYY-MM
         print(f"\n{'=' * 60}")
         print(f"Processing month: {month_label} ({month_start} to {month_end})")
+        print(f"Month {month_idx}/{total_months}")
         print(f"{'=' * 60}")
         
-        for table_name in table_list:
+        for table_idx, table_name in enumerate(table_list, 1):
             etl_class = TABLE_REGISTRY[table_name]
             dst_table = f"stg_{table_name}"
+            completed_jobs += 1
             
-            print(f"\n  Processing: {table_name} -> {dst_table}")
+            print(f"\n  [{completed_jobs}/{total_jobs}] {table_name} -> {dst_table}")
             print(f"  Date range: {month_start} to {month_end}")
+            
+            start_time = datetime.now()
             
             try:
                 etl = etl_class(
@@ -150,16 +160,29 @@ def main(
                 )
                 etl.spark = spark
                 etl()
-                print(f"  ✓ Completed: {dst_table}")
+                
+                duration = (datetime.now() - start_time).total_seconds()
+                print(f"  ✓ Completed in {duration:.1f}s")
             except Exception as e:
-                print(f"  ✗ Failed: {dst_table}")
+                duration = (datetime.now() - start_time).total_seconds()
+                print(f"  ✗ Failed after {duration:.1f}s")
                 print(f"    Error: {e}")
+                failed_jobs.append((month_label, table_name, str(e)))
                 # Continue with other tables
                 continue
     
     print(f"\n{'=' * 60}")
     print("Backfill completed!")
     print(f"{'=' * 60}")
+    print(f"\nSummary:")
+    print(f"  Total jobs: {total_jobs}")
+    print(f"  Completed: {total_jobs - len(failed_jobs)}")
+    print(f"  Failed: {len(failed_jobs)}")
+    
+    if failed_jobs:
+        print(f"\nFailed jobs:")
+        for month, table, error in failed_jobs:
+            print(f"  - {month}/{table}: {error}")
     
     spark.stop()
 

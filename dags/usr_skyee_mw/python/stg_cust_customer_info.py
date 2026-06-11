@@ -24,7 +24,7 @@ from typing_extensions import Annotated
 import typer
 
 
-class CustCustomerInfoEtl(MySqlEtl):
+class StgCustCustomerInfoEtl(MySqlEtl):
     """ETL for cust_customer_info table."""
 
     # Source
@@ -65,7 +65,7 @@ def main(
     spark = SparkSession.builder.remote(spark_remote).getOrCreate()
 
     # Run ETL
-    etl = CustCustomerInfoEtl(
+    etl = StgCustCustomerInfoEtl(
         url=url,
         start_date=start_date,
         end_date=end_date,
