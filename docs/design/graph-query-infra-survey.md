@@ -407,20 +407,123 @@ SELECT * FROM GRAPH_TABLE (
 
 ---
 
+### 2.7 HBase Adjacency List (1aboveio/a1 Pattern)
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────┐
+│              HBase Adjacency                    │
+│  ┌─────────────────────────────────────────┐    │
+│  │      Adjacency Writer Service           │    │
+│  │  (Creates bidirectional edges)          │    │
+│  └─────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────┐    │
+│  │      Adjacency DAL (Data Access)        │    │
+│  │  (HBase Thrift2 client)                 │    │
+│  └─────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────┐    │
+│  │      HBase Table                        │    │
+│  │  RowKey: {edge_type}~{field}~{value}    │    │
+│  │  CF: edges, CQ: {src}~{dst}~{ts}       │    │
+│  └─────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────┘
+```
+
+**Schema Design:**
+```
+Table: {namespace}:adjacency
+
+RowKey: {edge_type}~{field}~{value}
+Example: SAME_PHONE~cust_mobile~+8613812345678
+
+Column Family: e (edges)
+  Qualifier: {source_cust_id}~{target_cust_id}~{timestamp}
+  Value: JSON with edge properties
+```
+
+**RowKey Examples:**
+```
+# For customer 12345 with phone +8613812345678
+SAME_PHONE~cust_mobile~+8613812345678
+  e:12345~67890~2026-06-01T00:00:00 → {"strength": "strong", ...}
+  e:12345~11111~2026-06-02T00:00:00 → {"strength": "strong", ...}
+
+# For customer 12345 as source
+12345~source~67890 → {"edge_type": "SAME_PHONE", ...}
+12345~source~11111 → {"edge_type": "SAME_EMAIL", ...}
+
+# For customer 67890 as target
+67890~target~12345 → {"edge_type": "SAME_PHONE", ...}
+```
+
+**Query Example (Python):**
+```python
+# Single-hop query - get all neighbors of customer 12345
+async def get_neighbors(self, cust_id: int, direction: str = "both"):
+    results = []
+    
+    if direction in ("out", "both"):
+        prefix = f"{cust_id}~source~"
+        rows = self.hbase_pool.scan(table_name, filter=PrefixFilter(prefix))
+        for rowkey, columns in rows:
+            for qualifier, value in columns.items():
+                results.append(json.loads(value))
+    
+    if direction in ("in", "both"):
+        prefix = f"{cust_id}~target~"
+        rows = self.hbase_pool.scan(table_name, filter=PrefixFilter(prefix))
+        for rowkey, columns in rows:
+            for qualifier, value in columns.items():
+                results.append(json.loads(value))
+    
+    return results
+
+# Multi-hop query (2 hops)
+async def get_two_hop_neighbors(self, cust_id: int):
+    first_hop = await self.get_neighbors(cust_id)
+    second_hop = []
+    for neighbor in first_hop:
+        neighbor_id = neighbor["target_cust_id"]
+        second_hop.extend(await self.get_neighbors(neighbor_id))
+    return second_hop
+```
+
+**Pros:**
+- ✅ Native HBase integration (existing infrastructure)
+- ✅ Distributed and scalable
+- ✅ Low-latency point lookups
+- ✅ Bidirectional queries efficient
+- ✅ Append-only writes (HBase optimized)
+- ✅ Prefix-based scanning for edge types
+
+**Cons:**
+- ❌ No SQL interface (requires Java/Python API)
+- ❌ Complex multi-hop queries (application code)
+- ❌ No built-in graph algorithms
+- ❌ Operational complexity
+
+**Performance:**
+- Single-hop: ~1-10ms (prefix scan)
+- 3-hop: ~10-100ms (with batch get)
+- 6-hop: ~100ms-1s (with parallel traversal)
+
+---
+
 ## 3. Comparison Matrix
 
-| Feature | DuckDB | PostgreSQL | Neo4j | TigerGraph | PuppyGraph |
-|---------|--------|------------|-------|------------|------------|
-| **Deployment** | In-process | Server | Server | Distributed | Engine |
-| **Query Language** | SQL/PGQ | SQL | Cypher | GSQL | Gremlin/SQL |
-| **Multi-hop** | Native PGQ | Recursive CTE | Native | Native | Native |
-| **Scalability** | Single node | Single node | Cluster | Horizontal | Horizontal |
-| **Latency (1-hop)** | 1-10ms | 1-5ms | 1-5ms | 1-5ms | 10-100ms |
-| **Latency (3-hop)** | 10-100ms | 50-500ms | 5-50ms | 5-50ms | 100ms-1s |
-| **Data Size** | Memory bound | Disk bound | Memory | Petabyte | Petabyte |
-| **Hudi Integration** | Native | FDW | None | None | Native |
-| **Open Source** | Yes | Yes | Community | No | No |
-| **Ops Complexity** | Low | Medium | Low | Medium | Low |
+| Feature | DuckDB | PostgreSQL | HBase Adjacency | Neo4j | TigerGraph | PuppyGraph |
+|---------|--------|------------|-----------------|-------|------------|------------|
+| **Deployment** | In-process | Server | Distributed | Server | Distributed | Engine |
+| **Query Language** | SQL/PGQ | SQL | Python/Java API | Cypher | GSQL | Gremlin/SQL |
+| **Multi-hop** | Native PGQ | Recursive CTE | App code | Native | Native | Native |
+| **Scalability** | Single node | Single node | Horizontal | Cluster | Horizontal | Horizontal |
+| **Latency (1-hop)** | 1-10ms | 1-5ms | 1-10ms | 1-5ms | 1-5ms | 10-100ms |
+| **Latency (3-hop)** | 10-100ms | 50-500ms | 10-100ms | 5-50ms | 5-50ms | 100ms-1s |
+| **Data Size** | Memory bound | Disk bound | Petabyte | Memory | Petabyte | Petabyte |
+| **HBase Integration** | None | FDW | Native | None | None | Connector |
+| **Hudi Integration** | Native | FDW | None | None | None | Native |
+| **Open Source** | Yes | Yes | Yes | Community | No | No |
+| **Ops Complexity** | Low | Medium | Medium | Low | Medium | Low |
 
 ---
 
@@ -437,7 +540,18 @@ SELECT * FROM GRAPH_TABLE (
 4. **SQL/PGQ standard** - Future-proof syntax
 5. **Prototyping friendly** - Easy to iterate
 
-### For Production (1M - 100M edges)
+### For Production with Existing HBase Infrastructure
+
+**Recommended: HBase Adjacency List (1aboveio/a1 Pattern)**
+
+**Rationale:**
+1. **Native HBase integration** - Uses existing HBase cluster
+2. **Proven pattern** - Based on 1aboveio/a1 implementation
+3. **Distributed** - Scales horizontally
+4. **Low latency** - Prefix-based scanning
+5. **Append-only** - Optimized for write-heavy workloads
+
+### For Production (1M - 100M edges, No HBase)
 
 **Recommended: Neo4j**
 
