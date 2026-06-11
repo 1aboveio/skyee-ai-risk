@@ -30,18 +30,18 @@ SCRIPTS_PATH = "/opt/airflow/dags/usr_skyee_mw/python"
 # Tables to sync
 TABLES = [
     "cust_customer_info",
-    # "cust_bank_acct_info",
-    # "cust_collections_acct",
-    # "cust_enterprise_realname_info",
-    # "cust_foreign_trade_order",
-    # "cust_foreign_trade_order_logistics",
-    # "cust_person_realname_info",
-    # "cust_realname_enterprise_ref_person",
-    # "cust_store_info",
-    # "cust_user_login_log",
-    # "pmp_coll_order",
-    # "pmp_pay_details",
-    # "pmp_pay_order",
+    "cust_bank_acct_info",
+    "cust_collections_acct",
+    "cust_enterprise_realname_info",
+    "cust_foreign_trade_order",
+    "cust_foreign_trade_order_logistics",
+    "cust_person_realname_info",
+    "cust_realname_enterprise_ref_person",
+    "cust_store_info",
+    "cust_user_login_log",
+    "pmp_coll_order",
+    "pmp_pay_details",
+    "pmp_pay_order",
 ]
 
 with DAG(
