@@ -39,9 +39,47 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 
 ---
 
-## 3. DWD Table Designs
+## 3. ISO 20022 Payment Model Reference
 
-### 3.1 dwd_customer (Customer Master)
+Based on ISO 20022 standard for financial messaging:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    ISO 20022 Payment Model                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────┐         ┌──────────────┐         ┌──────────────┐│
+│  │   DEBTOR     │         │   CREDITOR   │         │   INITIATING ││
+│  │   (Payer)    │────────▶│   (Payee)    │         │   PARTY      ││
+│  └──────────────┘         └──────────────┘         └──────────────┘│
+│         │                           │                      │       │
+│         │                           │                      │       │
+│         ▼                           ▼                      ▼       │
+│  ┌──────────────┐         ┌──────────────┐         ┌──────────────┐│
+│  │    DEBTOR    │         │   CREDITOR   │         │  INITIATING  ││
+│  │    AGENT     │         │    AGENT     │         │    PARTY     ││
+│  │ (Payer Bank) │         │ (Payee Bank) │         │   (if agent) ││
+│  └──────────────┘         └──────────────┘         └──────────────┘│
+│                                                                     │
+│  ┌──────────────┐         ┌──────────────┐                         │
+│  │   ULTIMATE   │         │   ULTIMATE   │                         │
+│  │    DEBTOR    │         │   CREDITOR   │                         │
+│  │(Original     │         │(Original     │                         │
+│  │ payer)       │         │ payee)       │                         │
+│  └──────────────┘         └──────────────┘                         │
+│                                                                     │
+│  Key Relationships:                                                 │
+│  • Debtor ≠ Ultimate Debtor → POBO (Pay On Behalf Of)              │
+│  • Creditor ≠ Ultimate Creditor → Onward Payment                   │
+│  • Initiating Party → Can be Debtor, Creditor, or Agent            │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 4. DWD Table Designs
+
+### 4.1 dwd_customer (Customer Master)
 
 **Purpose:** Consolidated customer profile with contact information and risk attributes.
 
@@ -107,7 +145,127 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 
 ---
 
-### 3.2 dwd_person (Person Identity)
+### 4.2 dwd_transaction (ISO 20022 Model)
+
+**Purpose:** Unified transaction view following ISO 20022 payment model with Debtor, Creditor, and their Agents.
+
+**Grain:** One row per payment detail (pd.ID) — the most granular level
+
+**Source Tables:** 
+- po (stg_pmp_pay_order) — order header
+- pd (stg_pmp_pay_details) — line items
+- co (stg_pmp_coll_order) — collection orders
+
+| Column | Type | Source | Description |
+|--------|------|--------|-------------|
+| **Order Header** | | | |
+| txn_id | bigint | pd.ID | Primary key (detail level) |
+| order_id | bigint | po.PAY_ORDER_ID | Payment order ID |
+| order_no | varchar(64) | po.ORDER_NO | Business order number |
+| cust_id | bigint | po.CUST_ID | Account holder (FK) |
+| order_type | varchar(10) | 'PAY' / 'COLL' | Order type |
+| txn_status | varchar(32) | pd.PAY_STATUS | Transaction status |
+| txn_time | timestamp | pd.PAYMENT_TIME | Transaction time |
+| **Amount** | | | |
+| txn_amount | decimal(15,2) | pd.PAY_TXN_AMT | Transaction amount |
+| txn_currency | varchar(10) | pd.CURRENCY_CD | Transaction currency |
+| settlement_amount | decimal(15,2) | po.SETTLE_AMT | Settlement amount |
+| settlement_currency | varchar(10) | po.SETTLE_CURR_CD | Settlement currency |
+| commission_amount | decimal(15,2) | pd.COMMISSION_AMT | Commission |
+| real_commission_amount | decimal(15,2) | pd.REAL_COMMISSION_AMT | Actual commission |
+| **Debtor (Payer)** | | | |
+| debtor_name | varchar(200) | po.NAME | Payer name |
+| debtor_mobile | varchar(50) | pd.MOBILE_NO | Payer mobile |
+| debtor_email | varchar(100) | pd.EMAIL | Payer email |
+| debtor_cert_no | varchar(100) | pd.IDENTITY_NO | Payer ID |
+| debtor_country | varchar(10) | po.COUNTRY_CD | Payer country |
+| **Ultimate Debtor (POBO - Pay On Behalf Of)** | | | |
+| is_pobo | char(1) | CASE WHEN po.SAME_NAME_PAYER_NAME IS NOT NULL THEN 'Y' ELSE 'N' END | Is POBO transaction |
+| ultimate_debtor_name | varchar(200) | po.SAME_NAME_PAYER_NAME | Actual payer name |
+| ultimate_debtor_en_name | varchar(150) | po.SAME_NAME_PAYER_EN_NAME | Actual payer English name |
+| ultimate_debtor_cert_type | varchar(100) | po.SAME_NAME_PAYER_CERT_TYPE | Actual payer cert type |
+| ultimate_debtor_cert_no | varchar(255) | po.SAME_NAME_PAYER_CERT_NO | Actual payer cert no |
+| ultimate_debtor_mobile | varchar(50) | po.SAME_NAME_PAYER_MOBILE | Actual payer mobile |
+| ultimate_debtor_address | varchar(255) | po.SAME_NAME_PAYER_ADDRESS | Actual payer address |
+| ultimate_debtor_country_code | varchar(10) | po.SAME_NAME_PAYER_COUNTRY_CODE | Actual payer country |
+| ultimate_debtor_country_name | varchar(100) | po.SAME_NAME_PAYER_COUNTRY_NAME | Actual payer country name |
+| ultimate_debtor_birthday | timestamp | po.SAME_NAME_PAYER_BIRTHDAY | Actual payer birthday |
+| ultimate_debtor_bank_acct_no | varchar(50) | po.SAME_NAME_PAYER_BANK_ACCT_NO | Actual payer bank acct |
+| ultimate_debtor_province | varchar(255) | po.SAME_NAME_PAYER_PROVINCE | Actual payer province |
+| ultimate_debtor_city | varchar(255) | po.SAME_NAME_PAYER_CITY | Actual payer city |
+| ultimate_debtor_postcode | varchar(50) | po.SAME_NAME_PAYER_POSTCODE | Actual payer postcode |
+| **Creditor (Payee)** | | | |
+| creditor_name | varchar(200) | pd.SUBJECT_NAME | Payee name |
+| creditor_mobile | varchar(50) | pd.MOBILE_NO | Payee mobile |
+| creditor_email | varchar(100) | pd.BENEFICIARY_EMAIL | Payee email |
+| creditor_cert_type | varchar(50) | pd.BENEFICIARY_IDENTIFICATION_TYPE | Payee cert type |
+| creditor_cert_no | varchar(100) | pd.BENEFICIARY_IDENTIFICATION_NO | Payee cert no |
+| creditor_address | varchar(255) | pd.COLL_ADDRESS | Payee address |
+| creditor_en_address | varchar(255) | pd.COLL_EN_ADDRESS | Payee English address |
+| creditor_country | varchar(10) | pd.COLL_COUNTRY_CD | Payee country |
+| creditor_province | varchar(255) | pd.BENEFICIARY_PROVINCE | Payee province |
+| creditor_city | varchar(255) | pd.BENEFICIARY_CITY | Payee city |
+| creditor_postcode | varchar(255) | pd.BENEFICIARY_POST_CODE | Payee postcode |
+| **Debtor Agent (Payer's Bank)** | | | |
+| debtor_agent_name | varchar(100) | pd.BANK_NAME | Payer's bank name |
+| debtor_agent_code | varchar(50) | pd.BANK_CODE | Payer's bank code |
+| debtor_agent_swift | varchar(32) | pd.SWIFT_CODE | Payer's bank SWIFT |
+| debtor_agent_bic | varchar(32) | pd.INTER_SWIFT_BIC | Payer's bank BIC |
+| debtor_agent_country | varchar(10) | pd.BANK_COUNTRY | Payer's bank country |
+| debtor_agent_branch_name | varchar(128) | pd.BANK_BRANCH_NAME | Payer's bank branch |
+| debtor_agent_branch_no | varchar(128) | pd.BANK_BRANCH_NO | Payer's bank branch no |
+| **Creditor Agent (Payee's Bank)** | | | |
+| creditor_agent_name | varchar(200) | pd.bank_acct_name | Payee's bank name |
+| creditor_agent_code | varchar(50) | pd.BANK_CODE | Payee's bank code |
+| creditor_agent_acct_no | varchar(150) | pd.BANK_ACCT_NO | Payee's bank acct |
+| creditor_agent_acct_name | varchar(200) | pd.bank_acct_name | Payee's bank acct name |
+| creditor_agent_country | varchar(10) | pd.COLL_COUNTRY_CD | Payee's bank country |
+| creditor_agent_province | varchar(128) | pd.PROVINCE | Payee's bank province |
+| creditor_agent_city | varchar(128) | pd.CITY | Payee's bank city |
+| creditor_agent_branch_name | varchar(128) | pd.BANK_BRANCH_NAME | Payee's bank branch |
+| creditor_agent_branch_no | varchar(128) | pd.BANK_BRANCH_NO | Payee's bank branch no |
+| **Initiating Party** | | | |
+| initiating_party_name | varchar(200) | po.NAME | Who initiated the payment |
+| initiating_party_type | varchar(20) | CASE WHEN po.PROXY_USER IS NOT NULL THEN 'AGENT' ELSE 'SELF' END | Self or Agent |
+| initiating_party_id | varchar(50) | po.PROXY_USER | Agent user ID |
+| **Payment Details** | | | |
+| pay_type | varchar(30) | po.PAY_TYPE | Payment type |
+| pay_method | varchar(20) | pd.PAY_METHOD | Payment method |
+| fund_purpose | varchar(200) | pd.FUND_PURPOSE | Fund purpose |
+| trade_type | varchar(50) | po.TRADE_TYPE | Trade type |
+| business_type | varchar(50) | po.BUSINESS_TYPE | Business type |
+| sub_biz_type | varchar(20) | po.SUB_BIZ_TYPE | Sub business type |
+| **Clearing & Settlement** | | | |
+| clear_status | varchar(20) | pd.CLEAR_STATUS | Clearing status |
+| clear_time | timestamp | pd.CLEAR_TIME | Clearing time |
+| clear_memo | varchar(500) | pd.clear_memo | Clearing memo |
+| clear_channel_code | varchar(20) | pd.CLEAR_CHL_CODE | Clearing channel |
+| clear_channel_name | varchar(40) | pd.CLEAR_CHL_NAME | Clearing channel name |
+| clear_channel_seq | varchar(100) | pd.CLEAR_CHL_SEQ | Clearing channel seq |
+| **Exchange** | | | |
+| is_exchange | char(1) | po.IS_EXCHANGE | Has exchange |
+| exchange_status | varchar(20) | po.EXCHANGE_STATUS | Exchange status |
+| exchange_currency | varchar(10) | po.EXCHANGE_CURR_CD | Exchange currency |
+| exchange_amount | decimal(15,2) | po.EXCHANGE_AMT | Exchange amount |
+| exchange_rate | decimal(20,8) | po.EXCHANGE_RATE | Exchange rate |
+| exchange_time | timestamp | po.EXCHANGE_TIME | Exchange time |
+| **Audit** | | | |
+| audit_status | varchar(20) | po.QUALIFIED_STATUS | Audit status |
+| audit_time | timestamp | po.QUALIFIED_TIME | Audit time |
+| audit_no | varchar(64) | po.QUALIFIED_NO | Audit number |
+| **Remarks** | | | |
+| pay_memo | varchar(255) | pd.pay_memo | Payment memo |
+| remark | varchar(100) | pd.REMARK | Remark |
+| **Record Info** | | | |
+| create_user | varchar(100) | pd.CREATE_USER | Created by |
+| create_time | timestamp | pd.CREATE_TIME | Record creation |
+| lst_upd_user | varchar(100) | pd.LST_UPD_USER | Last updated by |
+| lst_upd_time | timestamp | pd.LST_UPD_TIME | Last update |
+| dt | date | pd.CREATE_TIME | Partition column |
+
+---
+
+### 4.3 dwd_person (Person Identity)
 
 **Purpose:** Consolidated person identity information from realname verification.
 
@@ -138,7 +296,7 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 
 ---
 
-### 3.3 dwd_enterprise (Enterprise Identity)
+### 4.4 dwd_enterprise (Enterprise Identity)
 
 **Purpose:** Consolidated enterprise identity information from realname verification.
 
@@ -169,114 +327,7 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 
 ---
 
-### 3.4 dwd_transaction (Orders Unified)
-
-**Purpose:** Unified view of collection orders and payment orders with counterparty information.
-
-**Grain:** One row per order (COLL_ORDER_ID or PAY_ORDER_ID)
-
-**Source Tables:** co (stg_pmp_coll_order), po (stg_pmp_pay_order)
-
-| Column | Type | Source | Description |
-|--------|------|--------|-------------|
-| order_id | bigint | co.COLL_ORDER_ID / po.PAY_ORDER_ID | Primary key |
-| order_type | varchar(10) | 'COLL' / 'PAY' | Order type |
-| cust_id | bigint | co.CUST_ID / po.CUST_ID | Customer ID (FK) |
-| order_no | varchar(64) | co.ORDER_NO / po.ORDER_NO | Business order number |
-| order_status | varchar(32) | co.ORDER_STATUS / po.ORDER_STATUS | Current status |
-| amount | decimal(18,2) | co.COLL_AMOUNT / po.PAY_AMOUNT | Order amount |
-| currency | varchar(10) | co.CURRENCY / po.CURRENCY | Currency code |
-| payee_name | varchar(200) | co.PAYEE_NAME | Payee name (coll) |
-| payee_mobile | varchar(50) | co.PAYEE_MOBILE | Payee mobile (coll) |
-| payee_address | varchar(500) | co.PAYEE_ADDRESS | Payee address (coll) |
-| payer_name | varchar(200) | po.PAYER_NAME | Payer name (pay) |
-| payer_mobile | varchar(50) | po.PAYER_MOBILE | Payer mobile (pay) |
-| same_name_payer_mobile | varchar(50) | po.SAME_NAME_PAYER_MOBILE | Same-name payer mobile |
-| same_name_payer_name | varchar(200) | po.SAME_NAME_PAYER_NAME | Same-name payer name |
-| same_name_payer_cert_no | varchar(100) | po.SAME_NAME_PAYER_CERT_NO | Same-name payer cert |
-| order_time | timestamp | co.CREATE_TIME / po.CREATE_TIME | Order creation |
-| completed_time | timestamp | co.COMPLETED_TIME / po.COMPLETED_TIME | Completion time |
-| remark | varchar(500) | co.REMARK / po.REMARK | Order remarks |
-| create_user | varchar(100) | co.CREATE_USER / po.CREATE_USER | Created by |
-| create_time | timestamp | co.CREATE_TIME / po.CREATE_TIME | Record creation |
-| lst_upd_user | varchar(100) | co.LST_UPD_USER / po.LST_UPD_USER | Last updated by |
-| lst_upd_time | timestamp | co.LST_UPD_TIME / po.LST_UPD_TIME | Last update |
-| dt | date | co.CREATE_TIME / po.CREATE_TIME | Partition column |
-
----
-
-### 3.5 dwd_pay_detail (Payment Details)
-
-**Purpose:** Payment order line items with beneficiary and collection information.
-
-**Grain:** One row per payment detail (ID)
-
-**Source Tables:** pd (stg_pmp_pay_details)
-
-| Column | Type | Source | Description |
-|--------|------|--------|-------------|
-| id | bigint | pd.ID | Primary key |
-| pay_order_id | bigint | pd.PAY_ORDER_ID | Payment order ID (FK) |
-| cust_id | bigint | pd.CUST_ID | Customer ID (FK) |
-| detail_no | varchar(64) | pd.DETAIL_NO | Detail number |
-| amount | decimal(18,2) | pd.AMOUNT | Detail amount |
-| currency | varchar(10) | pd.CURRENCY | Currency code |
-| pay_type | varchar(32) | pd.PAY_TYPE | Payment type |
-| pay_status | varchar(32) | pd.PAY_STATUS | Payment status |
-| coll_account_no | varchar(64) | pd.COLL_ACCOUNT_NO | Collection account |
-| coll_account_name | varchar(200) | pd.COLL_ACCOUNT_NAME | Collection name |
-| coll_en_address | varchar(500) | pd.COLL_EN_ADDRESS | Collection English address |
-| coll_address | varchar(500) | pd.COLL_ADDRESS | Collection address |
-| beneficiary_name | varchar(200) | pd.BENEFICIARY_NAME | Beneficiary name |
-| beneficiary_email | varchar(100) | pd.BENEFICIARY_EMAIL | Beneficiary email |
-| beneficiary_identification_no | varchar(100) | pd.BENEFICIARY_IDENTIFICATION_NO | Beneficiary ID |
-| identity_no | varchar(100) | pd.IDENTITY_NO | Identity number |
-| email | varchar(100) | pd.EMAIL | Email |
-| mobile_no | varchar(50) | pd.MOBILE_NO | Mobile number |
-| bank_code | varchar(32) | pd.BANK_CODE | Bank code |
-| bank_name | varchar(100) | pd.BANK_NAME | Bank name |
-| create_time | timestamp | pd.CREATE_TIME | Record creation |
-| lst_upd_time | timestamp | pd.LST_UPD_TIME | Last update |
-| dt | date | pd.CREATE_TIME | Partition column |
-
----
-
-### 3.6 dwd_bank_account (Bank Accounts)
-
-**Purpose:** Consolidated bank account information with identity details.
-
-**Grain:** One row per bank account (ID)
-
-**Source Tables:** ba (stg_cust_bank_acct_info), ca (stg_cust_collections_acct)
-
-| Column | Type | Source | Description |
-|--------|------|--------|-------------|
-| id | bigint | ba.ID / ca.ID | Primary key |
-| cust_id | bigint | ba.CUST_ID / ca.CUST_ID | Customer ID (FK) |
-| acct_type | varchar(20) | 'BANK' / 'COLLECTION' | Account type |
-| bank_name | varchar(100) | ba.BANK_NAME | Bank name |
-| bank_code | varchar(32) | ba.BANK_CODE | Bank code |
-| acct_no | varchar(64) | ba.ACCT_NO / ca.ACCT_NO | Account number |
-| acct_name | varchar(200) | ba.ACCT_NAME / ca.ACCT_NAME | Account holder name |
-| acct_en_name | varchar(200) | ba.ACCT_EN_NAME | English name |
-| acct_status | varchar(32) | ba.ACCT_STATUS / ca.ACCT_STATUS | ACTIVE / FROZEN / CLOSED |
-| id_card_no | varchar(100) | ba.ID_CARD_NO | ID card number |
-| entity_identification_no | varchar(100) | ba.ENTITY_IDENTIFICATION_NO | Entity ID |
-| ref_company_cert_no | varchar(100) | ba.REF_COMPANY_CERT_NO | Related company cert |
-| phone_no | varchar(50) | ba.PHONE_NO | Phone number |
-| reserved_mobile | varchar(50) | ba.RESERVED_MOBILE | Reserved mobile |
-| entity_address | varchar(500) | ba.ENTITY_ADDRESS | Entity address |
-| entity_en_address | varchar(500) | ba.ENTITY_EN_ADDRESS | Entity English address |
-| entity_email | varchar(100) | ba.ENTITY_EMAIL | Entity email |
-| create_user | varchar(100) | ba.CREATE_USER / ca.CREATE_USER | Created by |
-| create_time | timestamp | ba.CREATE_TIME / ca.CREATE_TIME | Record creation |
-| lst_upd_user | varchar(100) | ba.LST_UPD_USER / ca.LST_UPD_USER | Last updated by |
-| lst_upd_time | timestamp | ba.LST_UPD_TIME / ca.LST_UPD_TIME | Last update |
-| dt | date | ba.CREATE_TIME / ca.CREATE_TIME | Partition column |
-
----
-
-### 3.7 dwd_store (Customer Stores)
+### 4.5 dwd_store (Customer Stores)
 
 **Purpose:** Customer store/platform information.
 
@@ -301,7 +352,7 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 
 ---
 
-### 3.8 dwd_foreign_trade_order (Foreign Trade)
+### 4.6 dwd_foreign_trade_order (Foreign Trade)
 
 **Purpose:** Foreign trade orders with logistics information.
 
@@ -331,7 +382,7 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 
 ---
 
-### 3.9 dwd_login_log (Login History)
+### 4.7 dwd_login_log (Login History)
 
 **Purpose:** Customer login history with IP and device information.
 
@@ -354,17 +405,15 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 
 ---
 
-## 4. Implementation Plan
+## 5. Implementation Plan
 
 ### Phase 1: Core Tables (Week 1)
 - [ ] `dwd_customer` - Customer master
 - [ ] `dwd_person` - Person identity
 - [ ] `dwd_enterprise` - Enterprise identity
 
-### Phase 2: Transaction Tables (Week 2)
-- [ ] `dwd_transaction` - Unified orders (coll + pay)
-- [ ] `dwd_pay_detail` - Payment details
-- [ ] `dwd_bank_account` - Bank accounts
+### Phase 2: Transaction Table (Week 2)
+- [ ] `dwd_transaction` - ISO 20022 model with POBO
 
 ### Phase 3: Supporting Tables (Week 3)
 - [ ] `dwd_store` - Customer stores
@@ -378,7 +427,7 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 
 ---
 
-## 5. Technical Specifications
+## 6. Technical Specifications
 
 ### Storage
 - **Format:** Hudi (Copy-on-Write)
@@ -390,6 +439,7 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 - **Detail-level only** - One row per business entity
 - **Denormalized** - Join related data for analysis-ready tables
 - **Cleansed** - Standardize names, handle nulls, remove duplicates
+- **ISO 20022 Compliant** - Use standard payment terminology
 
 ### Incremental Strategy
 - **Daily sync:** Use `LST_UPD_TIME` for incremental extraction
@@ -398,10 +448,10 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 
 ---
 
-## 6. Glossary
+## 7. Glossary
 
-| Term | Definition |
-|------|------------|
+| Term | ISO 20022 Definition |
+|------|---------------------|
 | STG | Staging layer - 1:1 mirror of source |
 | DWD | Data Warehouse Detail - cleansed, denormalized |
 | DWS | Data Warehouse Summary - aggregated |
@@ -409,6 +459,14 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 | Hudi | Apache Hudi - incremental data lake format |
 | Grain | The level of detail in a table (one row = one what?) |
 | Partition | Physical division of data for performance |
+| **Debtor** | Party that owes an amount of money to the (ultimate) creditor |
+| **Creditor** | Party to which an amount of money is due |
+| **Debtor Agent** | Financial institution servicing an account for the debtor |
+| **Creditor Agent** | Financial institution servicing an account for the creditor |
+| **Ultimate Debtor** | Ultimate party that owes money (when different from debtor) |
+| **Ultimate Creditor** | Ultimate party to receive money (when different from creditor) |
+| **Initiating Party** | Party initiating the payment (can be debtor, creditor, or agent) |
+| **POBO** | Pay On Behalf Of - when Ultimate Debtor ≠ Debtor |
 
 ---
 
