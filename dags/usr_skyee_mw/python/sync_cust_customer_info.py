@@ -39,7 +39,7 @@ class CustCustomerInfoEtl(MySqlEtl):
     # Keys
     id = "CUST_ID"
     ts = "LST_UPD_TIME"
-    filter_by = "dt"
+    filter_by = "CREATE_TIME"
 
     # Partition
     par_cols = ["dt"]
@@ -48,14 +48,6 @@ class CustCustomerInfoEtl(MySqlEtl):
     table_type = "hudi_table"
     hudi_mode = "insert_overwrite"
     concurrency_mode = "SINGLE_WRITER"
-
-    def extract(self, start_date: str = None, end_date: str = None):
-        """Extract from MySQL using CREATE_TIME filter."""
-        self.filter_by_bak = self.filter_by
-        self.filter_by = "CREATE_TIME"
-        df = super().extract(start_date, end_date)
-        self.filter_by = self.filter_by_bak
-        return df
 
     def transform(self, df):
         """Apply transformations before loading."""
