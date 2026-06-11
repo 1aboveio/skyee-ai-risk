@@ -59,7 +59,7 @@ with DAG(
 
     for table in TABLES:
         sync_task = SparkSubmitOperator(
-            task_id=f"sync_stg_{table}",
+            task_id=f"stg_{table}",
             application=f"{SCRIPTS_PATH}/{table}.py",
             conn_id="spark_default",
             application_args=[
