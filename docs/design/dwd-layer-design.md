@@ -173,7 +173,7 @@ Based on ISO 20022 standard for financial messaging:
 | is_exchange | char(1) | po.IS_EXCHANGE | Has currency exchange |
 | is_refund | char(1) | pd.HAS_REFUND | Has refund |
 | is_refund_commission | char(1) | pd.HAS_REFUND_COMMISSION | Has refund commission |
-| is_self_transfer | char(1) | pd.USE_SAME_NAME_PAY | Debtor = Creditor (same customer transfer) |
+| is_self_funded | char(1) | pd.USE_SAME_NAME_PAY | Debtor = Ultimate Debtor (no POBO) |
 | is_agent_initiated | char(1) | CASE WHEN po.PROXY_USER IS NOT NULL THEN 'Y' ELSE 'N' END | Initiated by agent |
 | is_high_risk | char(1) | ci.HIGH_RISK | Customer high risk flag |
 | is_sanctioned | char(1) | ci.SANCTIONED | Customer sanctioned flag |
