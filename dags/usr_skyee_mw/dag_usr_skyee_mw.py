@@ -63,7 +63,7 @@ with DAG(
             application=f"{SCRIPTS_PATH}/{table}.py",
             conn_id="spark_default",
             application_args=[
-                "--url", "{{ var.value.MYSQL_DB_URL_SECRET }}",
+                "--url", "jdbc:mysql://{{ var.value.MYSQL_DB_URL_SECRET }}",
                 "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
                 "--start-date", "{{ ds }}",
                 "--end-date", "{{ next_ds }}",
