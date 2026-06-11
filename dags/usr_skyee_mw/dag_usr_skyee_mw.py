@@ -60,7 +60,7 @@ with DAG(
     for table in TABLES:
         sync_task = SparkSubmitOperator(
             task_id=f"stg_{table}",
-            application=f"{SCRIPTS_PATH}/{table}.py",
+            application=f"{SCRIPTS_PATH}/stg_{table}.py",
             conn_id="spark_default",
             application_args=[
                 "--url", "jdbc:mysql://{{ var.value.MYSQL_DB_URL_SECRET }}",
