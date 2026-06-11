@@ -1,0 +1,490 @@
+# Graph Table Design Proposal
+
+**Author:** MiMo  
+**Date:** 2026-06-12  
+**Status:** Draft  
+**Reference:** 关联图谱高价值字段20260430.xlsx
+
+---
+
+## 1. Overview
+
+The graph table design enables relationship discovery between customers based on shared attributes. This is used for:
+- Risk propagation (if one customer is high-risk, their connections may also be)
+- Fraud detection (identifying suspicious patterns)
+- Network analysis (understanding customer clusters)
+- KYC enhancement (verifying customer relationships)
+
+---
+
+## 2. Table Designs
+
+### 2.1 dwd_graph_nodes (Customer Nodes)
+
+**Purpose:** Customer nodes in the graph
+
+**Grain:** One row per customer (CUST_ID)
+
+| Column | Type | Source | Description |
+|--------|------|--------|-------------|
+| cust_id | bigint | dwd_customer | Node ID (PK) |
+| cust_type | varchar(20) | dwd_customer | PERSONAL / COMPANY |
+| cust_name | varchar(150) | dwd_customer | Customer name |
+| en_name | varchar(255) | dwd_customer | English name |
+| risk_level | varchar(20) | dwd_customer | HIGH / MEDIUM_HIGH / MEDIUM / LOW |
+| risk_score | decimal(4,2) | dwd_customer | Numeric risk score |
+| is_sanctioned | char(1) | dwd_customer | Sanctioned flag |
+| is_high_risk | char(1) | dwd_customer | High risk flag |
+| cust_status | varchar(20) | dwd_customer | NORMAL / FROZEN / STOPPED |
+| regist_country | varchar(10) | dwd_customer | Registration country |
+| node_degree | int | Derived (COUNT from edges) | Number of connections |
+| first_seen | timestamp | MIN(create_time) | First activity |
+| last_seen | timestamp | MAX(lst_upd_time) | Last activity |
+| dt | date | Derived | Partition column |
+
+---
+
+### 2.2 dwd_graph_edges (Customer Connections)
+
+**Purpose:** Connections between customers based on shared attributes
+
+**Grain:** One row per unique connection between two customers
+
+| Column | Type | Source | Description |
+|--------|------|--------|-------------|
+| edge_id | bigint | Generated | Edge ID (PK) |
+| source_cust_id | bigint | Various | Source node (FK) |
+| target_cust_id | bigint | Various | Target node (FK) |
+| edge_type | varchar(30) | Derived | See edge types below |
+| edge_value | varchar(500) | The shared value | The actual matching value |
+| edge_source | varchar(50) | Table name | Which table created this edge |
+| confidence | decimal(3,2) | Derived | Match confidence (0-1) |
+| first_seen | timestamp | MIN(create_time) | First observed |
+| last_seen | timestamp | MAX(lst_upd_time) | Last observed |
+| record_count | int | COUNT | Number of records supporting this edge |
+| dt | date | Derived | Partition column |
+
+---
+
+## 3. Edge Types
+
+Based on the reference file (关联图谱高价值字段20260430.xlsx), the following edge types are defined:
+
+| Edge Type | Source Fields | Source Tables | Confidence | Rationale |
+|-----------|---------------|---------------|------------|-----------|
+| **SAME_PHONE** | CUST_MOBILE, CONTACT_MOBILE, MOBILE_NO, RESERVED_MOBILE, SAME_NAME_PAYER_MOBILE | ci, pd, ba, po | 0.9 | Phone numbers are unique identifiers |
+| **SAME_EMAIL** | EMAIL, ENTITY_EMAIL, BENEFICIARY_EMAIL | ci, ba, pd | 0.9 | Email addresses are unique identifiers |
+| **SAME_NAME** | NAME, EN_NAME, ACCT_NAME, BUYER_NAME, SELLER_NAME, LEGAL_PERSON_NAME | ci, ba, ft, er | 0.7 | Names can be similar without being same person |
+| **SAME_ADDRESS** | RESIDENCE_ADDRESS, CERT_ADDRESS, ENTITY_ADDRESS, COLL_ADDRESS, PAYEE_ADDRESS | pr, er, ba, co | 0.8 | Addresses can be shared by related entities |
+| **SAME_CERT_NO** | CERT_NO, ID_CARD_NO, IDENTITY_NO, ENTITY_IDENTIFICATION_NO | pr, ba, er | 0.95 | Certificate numbers are unique identifiers |
+| **SAME_STORE_URL** | STORE_URL, GOODS_STORE_URL, COMPANY_WEBSITE_URL | si, fl, er | 0.6 | Store URLs can be shared by related businesses |
+| **SAME_IP** | LOGIN_IP | ll | 0.5 | IPs can be shared (office, VPN, etc.) |
+
+---
+
+## 4. Edge Generation Logic
+
+### 4.1 SAME_PHONE Edges
+
+```sql
+-- From dwd_customer (primary mobile)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_PHONE' as edge_type,
+    a.cust_mobile as edge_value,
+    'dwd_customer' as edge_source,
+    0.9 as confidence,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM dwd_customer a
+JOIN dwd_customer b ON a.cust_mobile = b.cust_mobile AND a.cust_id < b.cust_id
+WHERE a.cust_mobile IS NOT NULL AND a.cust_mobile != '';
+
+-- From dwd_customer (contact mobile)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_PHONE' as edge_type,
+    a.contact_mobile as edge_value,
+    'dwd_customer' as edge_source,
+    0.9 as confidence,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM dwd_customer a
+JOIN dwd_customer b ON a.contact_mobile = b.contact_mobile AND a.cust_id < b.cust_id
+WHERE a.contact_mobile IS NOT NULL AND a.contact_mobile != '';
+```
+
+### 4.2 SAME_EMAIL Edges
+
+```sql
+-- From dwd_customer
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_EMAIL' as edge_type,
+    a.email as edge_value,
+    'dwd_customer' as edge_source,
+    0.9 as confidence,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM dwd_customer a
+JOIN dwd_customer b ON a.email = b.email AND a.cust_id < b.cust_id
+WHERE a.email IS NOT NULL AND a.email != '';
+```
+
+### 4.3 SAME_CERT_NO Edges
+
+```sql
+-- From dwd_person
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_CERT_NO' as edge_type,
+    a.cert_no as edge_value,
+    'dwd_person' as edge_source,
+    0.95 as confidence,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM dwd_person a
+JOIN dwd_person b ON a.cert_no = b.cert_no AND a.cust_id < b.cust_id
+WHERE a.cert_no IS NOT NULL AND a.cert_no != '';
+```
+
+### 4.4 SAME_ADDRESS Edges
+
+```sql
+-- From dwd_person (residence address)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_ADDRESS' as edge_type,
+    a.residence_address as edge_value,
+    'dwd_person' as edge_source,
+    0.8 as confidence,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM dwd_person a
+JOIN dwd_person b ON a.residence_address = b.residence_address AND a.cust_id < b.cust_id
+WHERE a.residence_address IS NOT NULL AND a.residence_address != '';
+```
+
+### 4.5 SAME_NAME Edges
+
+```sql
+-- From dwd_customer (cust_name)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_NAME' as edge_type,
+    a.cust_name as edge_value,
+    'dwd_customer' as edge_source,
+    0.7 as confidence,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM dwd_customer a
+JOIN dwd_customer b ON a.cust_name = b.cust_name AND a.cust_id < b.cust_id
+WHERE a.cust_name IS NOT NULL AND a.cust_name != '';
+```
+
+### 4.6 SAME_STORE_URL Edges
+
+```sql
+-- From dwd_store
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_STORE_URL' as edge_type,
+    a.store_url as edge_value,
+    'dwd_store' as edge_source,
+    0.6 as confidence,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM dwd_store a
+JOIN dwd_store b ON a.store_url = b.store_url AND a.cust_id < b.cust_id
+WHERE a.store_url IS NOT NULL AND a.store_url != '';
+```
+
+### 4.7 SAME_IP Edges
+
+```sql
+-- From dwd_login_log
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_IP' as edge_type,
+    a.login_ip as edge_value,
+    'dwd_login_log' as edge_source,
+    0.5 as confidence,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM dwd_login_log a
+JOIN dwd_login_log b ON a.login_ip = b.login_ip AND a.cust_id < b.cust_id
+WHERE a.login_ip IS NOT NULL AND a.login_ip != '';
+```
+
+---
+
+## 5. Graph Query Examples
+
+### 5.1 Find All Connections for a Customer
+
+```sql
+SELECT target_cust_id, edge_type, edge_value, confidence
+FROM dwd_graph_edges
+WHERE source_cust_id = 12345
+UNION ALL
+SELECT source_cust_id, edge_type, edge_value, confidence
+FROM dwd_graph_edges
+WHERE target_cust_id = 12345
+ORDER BY confidence DESC;
+```
+
+### 5.2 Find Shortest Path Between Two Customers
+
+```sql
+WITH RECURSIVE path AS (
+    SELECT source_cust_id, target_cust_id, edge_type, 
+           ARRAY[source_cust_id, target_cust_id] as visited,
+           1 as depth
+    FROM dwd_graph_edges
+    WHERE source_cust_id = 12345
+    
+    UNION ALL
+    
+    SELECT e.source_cust_id, e.target_cust_id, e.edge_type,
+           p.visited || e.target_cust_id,
+           p.depth + 1
+    FROM dwd_graph_edges e
+    JOIN path p ON e.source_cust_id = p.target_cust_id
+    WHERE e.target_cust_id != 67890
+      AND e.target_cust_id != ALL(p.visited)
+      AND p.depth < 6
+)
+SELECT * FROM path WHERE target_cust_id = 67890 LIMIT 1;
+```
+
+### 5.3 Find High-Risk Connected Customers
+
+```sql
+SELECT DISTINCT n.cust_id, n.cust_name, n.risk_level, e.edge_type, e.confidence
+FROM dwd_graph_edges e
+JOIN dwd_graph_nodes n ON (e.target_cust_id = n.cust_id OR e.source_cust_id = n.cust_id)
+WHERE (e.source_cust_id = 12345 OR e.target_cust_id = 12345)
+  AND n.risk_level IN ('HIGH', 'MEDIUM_HIGH')
+  AND n.cust_id != 12345
+ORDER BY e.confidence DESC;
+```
+
+### 5.4 Find Shared Attributes Between Two Customers
+
+```sql
+SELECT edge_type, edge_value, confidence
+FROM dwd_graph_edges
+WHERE (source_cust_id = 12345 AND target_cust_id = 67890)
+   OR (source_cust_id = 67890 AND target_cust_id = 12345)
+ORDER BY confidence DESC;
+```
+
+---
+
+## 6. Design Decisions
+
+### 6.1 Edge Direction
+
+**Decision:** Store edges as one direction only (source_cust_id < target_cust_id)
+
+**Rationale:**
+- Reduces storage by 50%
+- Simplifies deduplication
+- Queries can use UNION ALL to get bidirectional results
+
+### 6.2 Confidence Scores
+
+**Decision:** Assign confidence scores based on edge type
+
+| Edge Type | Confidence | Rationale |
+|-----------|------------|-----------|
+| SAME_CERT_NO | 0.95 | Certificate numbers are unique identifiers |
+| SAME_PHONE | 0.9 | Phone numbers are unique identifiers |
+| SAME_EMAIL | 0.9 | Email addresses are unique identifiers |
+| SAME_ADDRESS | 0.8 | Addresses can be shared by related entities |
+| SAME_NAME | 0.7 | Names can be similar without being same person |
+| SAME_STORE_URL | 0.6 | Store URLs can be shared by related businesses |
+| SAME_IP | 0.5 | IPs can be shared (office, VPN, etc.) |
+
+### 6.3 Edge Merging
+
+**Decision:** Create separate edges for each attribute match
+
+**Rationale:**
+- More granular analysis
+- Can aggregate if needed
+- Easier to debug and audit
+
+### 6.4 Temporal Tracking
+
+**Decision:** Track first_seen and last_seen timestamps
+
+**Rationale:**
+- Enables time-based analysis
+- Can identify stale edges
+- Supports audit requirements
+
+### 6.5 Edge Pruning
+
+**Decision:** Keep all edges, but mark stale ones
+
+**Rationale:**
+- Historical analysis
+- Can filter by last_seen in queries
+- Audit trail maintained
+
+---
+
+## 7. Implementation Plan
+
+### Phase 1: Table Creation (Week 1)
+- [ ] Create `dwd_graph_nodes` table
+- [ ] Create `dwd_graph_edges` table
+- [ ] Set up partitioning
+
+### Phase 2: Edge Generation (Week 2)
+- [ ] Implement SAME_PHONE edges
+- [ ] Implement SAME_EMAIL edges
+- [ ] Implement SAME_CERT_NO edges
+
+### Phase 3: Additional Edges (Week 3)
+- [ ] Implement SAME_ADDRESS edges
+- [ ] Implement SAME_NAME edges
+- [ ] Implement SAME_STORE_URL edges
+- [ ] Implement SAME_IP edges
+
+### Phase 4: Query Optimization (Week 4)
+- [ ] Create indexes on edge tables
+- [ ] Optimize recursive queries
+- [ ] Performance testing
+
+---
+
+## 8. Audit Requirements
+
+### 8.1 Data Quality Checks
+
+| Check | Description | Threshold |
+|-------|-------------|-----------|
+| Node Count | All customers should have nodes | 100% coverage |
+| Edge Count | Reasonable number of edges | > 0, < 10x node count |
+| Bidirectional Coverage | All edges should have reverse | 100% |
+| Confidence Range | Confidence should be 0-1 | 100% valid |
+| No Self-Loops | source_cust_id != target_cust_id | 0 violations |
+
+### 8.2 Edge-Specific Checks
+
+| Edge Type | Check | Threshold |
+|-----------|-------|-----------|
+| SAME_PHONE | Phone format valid | 100% valid |
+| SAME_EMAIL | Email format valid | 100% valid |
+| SAME_CERT_NO | Cert length valid | 100% valid |
+| SAME_ADDRESS | Address not empty | 100% non-empty |
+
+---
+
+## 9. Glossary
+
+| Term | Definition |
+|------|------------|
+| Node | A customer entity in the graph |
+| Edge | A relationship between two customers |
+| Edge Type | The type of shared attribute (phone, email, etc.) |
+| Edge Value | The actual shared value |
+| Confidence | How reliable the edge is (0-1) |
+| Node Degree | Number of connections a node has |
+| Cluster | A group of connected customers |
+| Path | A sequence of edges connecting two nodes |
+
+---
+
+## Appendix: Reference File Fields
+
+From 关联图谱高价值字段20260430.xlsx:
+
+| Table | Table Comment | Column | Column Comment |
+|-------|---------------|--------|----------------|
+| cust_store_info | 店铺信息 | STORE_URL | 店铺连接 |
+| pmp_pay_order | 付款订单表 | SAME_NAME_PAYER_MOBILE | 同名付款人手机号 |
+| pmp_pay_order | 付款订单表 | SAME_NAME_PAYER_NAME | 同名付款人名称 |
+| pmp_pay_order | 付款订单表 | SAME_NAME_PAYER_CERT_NO | 同名付款人证件号 |
+| pmp_pay_details | 付款明细表 | COLL_EN_ADDRESS | 收款人英文地址 |
+| pmp_pay_details | 付款明细表 | IDENTITY_NO | 证件号码 |
+| pmp_pay_details | 付款明细表 | EMAIL | 邮箱 |
+| pmp_pay_details | 付款明细表 | BENEFICIARY_IDENTIFICATION_NO | 受益人证件号码 |
+| pmp_pay_details | 付款明细表 | BENEFICIARY_EMAIL | 受益人邮箱 |
+| pmp_pay_details | 付款明细表 | MOBILE_NO | 手机号码 |
+| pmp_pay_details | 付款明细表 | COLL_ADDRESS | 收款人地址 |
+| cust_person_realname_info | 个人实名认证信息 | RESIDENCE_ADDRESS | 居住地详细地址 |
+| cust_person_realname_info | 个人实名认证信息 | CERT_NO | 证件号 |
+| cust_person_realname_info | 个人实名认证信息 | CERT_ADDRESS | 证件详细地址 |
+| cust_person_realname_info | 个人实名认证信息 | EN_NAME | 英文名称 |
+| cust_customer_info | 客户基础信息 | CUST_MOBILE | 手机号 |
+| cust_customer_info | 客户基础信息 | EMAIL | 电子邮箱 |
+| cust_customer_info | 客户基础信息 | EN_NAME | 英文名称 |
+| cust_customer_info | 客户基础信息 | NAME | 客户名称 |
+| cust_customer_info | 客户基础信息 | CONTACT_MOBILE | 联系手机号 |
+| cust_foreign_trade_order | 客户外贸订单表 | BUYER_NAME | 买方名称 |
+| cust_foreign_trade_order | 客户外贸订单表 | SELLER_NAME | 卖方名称 |
+| cust_bank_acct_info | 客户银行账号信息 | ENTITY_ADDRESS | 主体详细地址 |
+| cust_bank_acct_info | 客户银行账号信息 | REF_COMPANY_CERT_NO | 关联企业证件号 |
+| cust_bank_acct_info | 客户银行账号信息 | ACCT_NAME | 户名 |
+| cust_bank_acct_info | 客户银行账号信息 | ENTITY_ADDRESS | 详细地址 |
+| cust_bank_acct_info | 客户银行账号信息 | ID_CARD_NO | 身份证号 |
+| cust_bank_acct_info | 客户银行账号信息 | ENTITY_IDENTIFICATION_NO | 主体证件号码 |
+| cust_bank_acct_info | 客户银行账号信息 | ENTITY_EN_ADDRESS | 主体详细英文地址 |
+| cust_bank_acct_info | 客户银行账号信息 | ENTITY_EMAIL | 主体邮箱 |
+| cust_bank_acct_info | 客户银行账号信息 | PHONE_NO | 电话号码 |
+| cust_bank_acct_info | 客户银行账号信息 | ACCT_EN_NAME | 英文户名 |
+| cust_bank_acct_info | 客户银行账号信息 | RESERVED_MOBILE | 预留手机号 |
+| cust_enterprise_realname_info | 企业实名认证信息 | RESIDENCE_ADDRESS | 居住地详细地址 |
+| cust_enterprise_realname_info | 企业实名认证信息 | LEGAL_PERSON_NAME | 法人名称 |
+| cust_enterprise_realname_info | 企业实名认证信息 | COMPANY_WEBSITE_URL | 线上店铺网址 |
+| cust_enterprise_realname_info | 企业实名认证信息 | CERT_NO | 证书编号 |
+| cust_enterprise_realname_info | 企业实名认证信息 | CERT_ADDRESS | 证件所在详细地址 |
+| cust_enterprise_realname_info | 企业实名认证信息 | NAME | 客户名称 |
+| cust_enterprise_realname_info | 企业实名认证信息 | EN_NAME | 企业英文名称 |
+| pmp_coll_order | 收款订单表 | PAYEE_ADDRESS | 收款方地址 |
+| cust_collections_acct | 收款账号表 | ACCT_NAME | 户名 |
+| cust_foreign_trade_order_logistics | 外贸订单物流信息表 | GOODS_STORE_URL | 商品店铺链接 |
+| cust_user_login_log | 用户登录日志 | LOGIN_IP | LOGIN_IP |
