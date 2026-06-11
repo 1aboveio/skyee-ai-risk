@@ -59,14 +59,12 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 
 ### 3.1 dwd_customer (Customer Master)
 
-**Purpose:** Consolidated customer profile with contact information, risk attributes, and business metrics.
+**Purpose:** Consolidated customer profile with contact information and risk attributes.
 
 **Grain:** One row per customer (CUST_ID)
 
 **Source Tables:**
 - `stg_cust_customer_info` (primary)
-- `stg_cust_store_info` (store aggregation)
-- `stg_cust_user_login_log` (login aggregation)
 
 | Column | Type | Nullable | Source | Description |
 |--------|------|----------|--------|-------------|
@@ -92,7 +90,6 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 | last_risk_scan_id | bigint | YES | cust_customer_info.LAST_RISK_SCAN_ID | Last risk scan ID |
 | last_risk_scan_time | timestamp | YES | cust_customer_info.LAST_RISK_SCAN_TIME | Last scan time |
 | last_risk_scan_desc | varchar(255) | YES | cust_customer_info.LAST_RISK_SCAN_DESC | Scan result |
-| primary_prod | varchar(50) | YES | cust_customer_info.PRIMARY_PROD | Primary product |
 | business_model | varchar(50) | YES | cust_customer_info.BUSINESS_MODEL | Business model |
 | industry | varchar(100) | YES | cust_customer_info.INDUSTRY | Industry category |
 | staff_count_desc | varchar(50) | YES | cust_customer_info.STAFF_COUNT_DESC | Staff size |
@@ -118,9 +115,6 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 | reg_time | timestamp | YES | cust_customer_info.REG_TIME | Registration time |
 | first_realname_submit_time | timestamp | YES | cust_customer_info.FIRST_REALNAME_SUBMIT_TIME | First KYC submit |
 | first_realname_success_time | timestamp | YES | cust_customer_info.FIRST_REALNAME_SUCCESS_TIME | First KYC success |
-| store_count | int | NO | Derived (COUNT from stg_cust_store_info) | Number of stores |
-| last_login_time | timestamp | YES | Derived (MAX from stg_cust_user_login_log) | Last login time |
-| login_count_30d | int | NO | Derived (COUNT from stg_cust_user_login_log) | Logins in last 30 days |
 | create_user | varchar(100) | YES | cust_customer_info.CREATE_USER | Created by |
 | create_time | timestamp | YES | cust_customer_info.CREATE_TIME | Record creation |
 | lst_upd_user | varchar(100) | YES | cust_customer_info.LST_UPD_USER | Last updated by |
@@ -485,6 +479,12 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 - **Partition:** `dt` (date, derived from CREATE_TIME)
 - **Location:** `/user/hive/warehouse/usr_skyee_mw.db/dwd_*`
 
+### Design Principles
+- **No aggregations in DWD** - Aggregations belong in DWS layer
+- **Detail-level only** - One row per business entity
+- **Denormalized** - Join related data for analysis-ready tables
+- **Cleansed** - Standardize names, handle nulls, remove duplicates
+
 ### Incremental Strategy
 - **Daily sync:** Use `LST_UPD_TIME` for incremental extraction
 - **Partition overwrite:** Replace affected date partitions
@@ -534,7 +534,7 @@ The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the ST
 
 | Table | Grain | Primary Key | Key Aggregations |
 |-------|-------|-------------|------------------|
-| dwd_customer | 1 row per customer | cust_id | store_count, last_login_time, login_count_30d |
+| dwd_customer | 1 row per customer | cust_id | - |
 | dwd_person | 1 row per KYC record | id | - |
 | dwd_enterprise | 1 row per KYC record | id | - |
 | dwd_transaction | 1 row per order | order_id | - |
