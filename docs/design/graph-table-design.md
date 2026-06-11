@@ -80,6 +80,7 @@ Based on the reference file (关联图谱高价值字段20260430.xlsx), the foll
 | **SAME_STORE_URL** | STORE_URL, GOODS_STORE_URL, COMPANY_WEBSITE_URL | stg_cust_store_info, stg_cust_foreign_trade_order_logistics, stg_cust_enterprise_realname_info | 0.6 | Store URLs can be shared by related businesses |
 | **SAME_IP** | LOGIN_IP | stg_cust_user_login_log | 0.5 | IPs can be shared (office, VPN, etc.) |
 | **COUNTERPARTY** | ORDER_ID, CUST_ID, COUNTER_PARTY_ID | stg_pmp_pay_details, stg_pmp_pay_order | 0.95 | Direct transaction relationship |
+| **SIMILAR_ADDRESS** | RESIDENCE_ADDRESS, CERT_ADDRESS, ENTITY_ADDRESS, COLL_ADDRESS, PAYEE_ADDRESS | stg_cust_person_realname_info, stg_cust_enterprise_realname_info, stg_cust_bank_acct_info, stg_pmp_coll_order | 0.7 | Fuzzy address match via embedding similarity |
 
 ---
 
@@ -297,6 +298,87 @@ FROM stg_pmp_coll_order a
 WHERE a.counter_party_id IS NOT NULL 
   AND a.cust_id != a.counter_party_id
   AND a.cust_id < a.counter_party_id;
+```
+
+### 4.9 SIMILAR_ADDRESS Edges (Fuzzy Match)
+
+```sql
+-- Pre-compute address embeddings
+CREATE TABLE dwd_address_embeddings AS
+SELECT 
+    cust_id,
+    address,
+    address_type,
+    embedding  -- Vector embedding of normalized address
+FROM (
+    -- Person residence addresses
+    SELECT 
+        cust_id,
+        residence_address as address,
+        'RESIDENCE' as address_type,
+        embedding_normalize(embed(residence_address)) as embedding
+    FROM stg_cust_person_realname_info
+    WHERE residence_address IS NOT NULL AND residence_address != ''
+    
+    UNION ALL
+    
+    -- Person cert addresses
+    SELECT 
+        cust_id,
+        cert_address as address,
+        'CERT' as address_type,
+        embedding_normalize(embed(cert_address)) as embedding
+    FROM stg_cust_person_realname_info
+    WHERE cert_address IS NOT NULL AND cert_address != ''
+    
+    UNION ALL
+    
+    -- Enterprise addresses
+    SELECT 
+        cust_id,
+        residence_address as address,
+        'ENTERPRISE' as address_type,
+        embedding_normalize(embed(residence_address)) as embedding
+    FROM stg_cust_enterprise_realname_info
+    WHERE residence_address IS NOT NULL AND residence_address != ''
+    
+    UNION ALL
+    
+    -- Bank account entity addresses
+    SELECT 
+        cust_id,
+        entity_address as address,
+        'BANK_ENTITY' as address_type,
+        embedding_normalize(embed(entity_address)) as embedding
+    FROM stg_cust_bank_acct_info
+    WHERE entity_address IS NOT NULL AND entity_address != ''
+);
+
+-- Find similar addresses using cosine similarity
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SIMILAR_ADDRESS' as edge_type,
+    CONCAT(a.address, ' || ', b.address) as edge_value,
+    'address_embedding' as edge_source,
+    -- Confidence based on cosine similarity (0.7-0.95 range)
+    CASE 
+        WHEN cosine_similarity(a.embedding, b.embedding) >= 0.95 THEN 0.95
+        WHEN cosine_similarity(a.embedding, b.embedding) >= 0.90 THEN 0.90
+        WHEN cosine_similarity(a.embedding, b.embedding) >= 0.85 THEN 0.85
+        WHEN cosine_similarity(a.embedding, b.embedding) >= 0.80 THEN 0.80
+        ELSE 0.70
+    END as confidence,
+    CURRENT_TIMESTAMP as first_seen,
+    CURRENT_TIMESTAMP as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM dwd_address_embeddings a
+JOIN dwd_address_embeddings b ON a.cust_id < b.cust_id
+WHERE cosine_similarity(a.embedding, b.embedding) >= 0.80  -- Similarity threshold
+  AND a.address != b.address;  -- Exclude exact matches (already covered by SAME_ADDRESS)
 ```
 
 ---
