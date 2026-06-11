@@ -45,7 +45,7 @@ TABLES = [
 ]
 
 with DAG(
-    dag_id="sync_usr_skyee_mw",
+    dag_id="usr_skyee_mw",
     default_args=default_args,
     description="Sync MySQL usr_skyee_mw tables to Hudi",
     schedule_interval="0 2 * * *",
