@@ -173,7 +173,7 @@ Based on ISO 20022 standard for financial messaging:
 | is_exchange | char(1) | po.IS_EXCHANGE | Has currency exchange |
 | is_refund | char(1) | pd.HAS_REFUND | Has refund |
 | is_refund_commission | char(1) | pd.HAS_REFUND_COMMISSION | Has refund commission |
-| is_same_name_pay | char(1) | pd.USE_SAME_NAME_PAY | Uses same-name payer |
+| is_same_name_pay | char(1) | pd.USE_SAME_NAME_PAY | Account holder pays self via same-name flow |
 | is_agent_initiated | char(1) | CASE WHEN po.PROXY_USER IS NOT NULL THEN 'Y' ELSE 'N' END | Initiated by agent |
 | is_high_risk | char(1) | ci.HIGH_RISK | Customer high risk flag |
 | is_sanctioned | char(1) | ci.SANCTIONED | Customer sanctioned flag |
@@ -462,7 +462,84 @@ Based on ISO 20022 standard for financial messaging:
 
 ---
 
-## 7. Glossary
+## 7. Audit Requirements
+
+### 7.1 Data Quality Checks
+
+Each DWD table must pass the following quality checks before being considered production-ready:
+
+| Check Type | Description | Threshold |
+|------------|-------------|-----------|
+| **Row Count** | DWD row count should match STG source | 100% (no data loss) |
+| **Null Check** | Required fields must not be null | 0% nulls for required fields |
+| **Duplicate Check** | Primary key must be unique | 0 duplicates |
+| **Referential Integrity** | FK must exist in parent table | 100% valid references |
+| **Value Range** | Numeric fields within expected range | No outliers |
+| **Enum Validation** | Status/type fields match allowed values | 100% valid values |
+| **Freshness** | Data should be within SLA | < 24 hours old |
+
+### 7.2 Table-Specific Audit Rules
+
+#### dwd_customer
+| Rule | Description | SQL Check |
+|------|-------------|-----------|
+| CUST_ID unique | No duplicate customers | `SELECT cust_id, COUNT(*) FROM dwd_customer GROUP BY cust_id HAVING COUNT(*) > 1` |
+| CUST_TYPE valid | Only PERSONAL/COMPANY | `SELECT COUNT(*) FROM dwd_customer WHERE cust_type NOT IN ('PERSONAL', 'COMPANY')` |
+| RISK_LEVEL valid | Only HIGH/MEDIUM_HIGH/MEDIUM/LOW | `SELECT COUNT(*) FROM dwd_customer WHERE risk_level NOT IN ('HIGH', 'MEDIUM_HIGH', 'MEDIUM', 'LOW')` |
+| REG_TIME not null | All customers have registration time | `SELECT COUNT(*) FROM dwd_customer WHERE reg_time IS NULL` |
+
+#### dwd_transaction
+| Rule | Description | SQL Check |
+|------|-------------|-----------|
+| TXN_ID unique | No duplicate transactions | `SELECT txn_id, COUNT(*) FROM dwd_transaction GROUP BY txn_id HAVING COUNT(*) > 1` |
+| TXN_AMOUNT > 0 | Positive amounts | `SELECT COUNT(*) FROM dwd_transaction WHERE txn_amount <= 0` |
+| CUST_ID exists | Customer must exist | `SELECT COUNT(*) FROM dwd_transaction t LEFT JOIN dwd_customer c ON t.cust_id = c.cust_id WHERE c.cust_id IS NULL` |
+| DEBTOR_NAME not null | Payer name required | `SELECT COUNT(*) FROM dwd_transaction WHERE debtor_name IS NULL` |
+| CREDITOR_NAME not null | Payee name required | `SELECT COUNT(*) FROM dwd_transaction WHERE creditor_name IS NULL` |
+| IS_POBO logic | POBO flag matches ultimate_debtor_name | `SELECT COUNT(*) FROM dwd_transaction WHERE is_pobo = 'Y' AND ultimate_debtor_name IS NULL` |
+| IS_ONWARD logic | Onward flag matches creditor vs ultimate creditor | `SELECT COUNT(*) FROM dwd_transaction WHERE is_onward_payment = 'Y' AND creditor_name = ultimate_debtor_name` |
+
+#### dwd_person
+| Rule | Description | SQL Check |
+|------|-------------|-----------|
+| ID unique | No duplicate records | `SELECT id, COUNT(*) FROM dwd_person GROUP BY id HAVING COUNT(*) > 1` |
+| CUST_ID exists | Customer must exist | `SELECT COUNT(*) FROM dwd_person p LEFT JOIN dwd_customer c ON p.cust_id = c.cust_id WHERE c.cust_id IS NULL` |
+| CERT_NO format | Valid certificate format | `SELECT COUNT(*) FROM dwd_person WHERE cert_no IS NOT NULL AND LENGTH(cert_no) < 5` |
+
+#### dwd_enterprise
+| Rule | Description | SQL Check |
+|------|-------------|-----------|
+| ID unique | No duplicate records | `SELECT id, COUNT(*) FROM dwd_enterprise GROUP BY id HAVING COUNT(*) > 1` |
+| CUST_ID exists | Customer must exist | `SELECT COUNT(*) FROM dwd_enterprise e LEFT JOIN dwd_customer c ON e.cust_id = c.cust_id WHERE c.cust_id IS NULL` |
+| CREDIT_CODE format | Valid social credit code | `SELECT COUNT(*) FROM dwd_enterprise WHERE unified_social_credit_code IS NOT NULL AND LENGTH(unified_social_credit_code) != 18` |
+
+### 7.3 Audit Execution
+
+**Frequency:** Daily after DWD refresh
+
+**Process:**
+1. Run audit SQL checks for each table
+2. Log results to audit table: `dwd_audit_log`
+3. Alert if any check fails threshold
+4. Block downstream consumption if critical checks fail
+
+**Audit Log Table:**
+```sql
+CREATE TABLE dwd_audit_log (
+    audit_id        bigint      PRIMARY KEY,
+    table_name      varchar     NOT NULL,
+    check_name      varchar     NOT NULL,
+    check_result    varchar     NOT NULL,  -- PASS / FAIL
+    check_value     bigint,
+    threshold       bigint,
+    check_time      timestamp   NOT NULL,
+    dt              date        NOT NULL
+);
+```
+
+---
+
+## 8. Glossary
 
 | Term | ISO 20022 Definition |
 |------|---------------------|
