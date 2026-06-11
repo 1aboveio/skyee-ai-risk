@@ -1,0 +1,462 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1200">
+  <defs>
+    <style>
+      .table-box { fill: #ffffff; stroke: #333; stroke-width: 2; }
+      .table-header { fill: #4a90d9; stroke: #333; stroke-width: 1; }
+      .table-header-green { fill: #2ecc71; stroke: #333; stroke-width: 1; }
+      .table-header-orange { fill: #e67e22; stroke: #333; stroke-width: 1; }
+      .table-header-purple { fill: #9b59b6; stroke: #333; stroke-width: 1; }
+      .table-row { fill: #f8f9fa; stroke: #ddd; stroke-width: 0.5; }
+      .table-row-alt { fill: #ffffff; stroke: #ddd; stroke-width: 0.5; }
+      .header-text { fill: white; font: bold 12px sans-serif; }
+      .row-text { fill: #333; font: 11px monospace; }
+      .pk { fill: #e74c3c; font: bold 11px monospace; }
+      .fk { fill: #3498db; font: bold 11px monospace; }
+      .relation { fill: none; stroke: #666; stroke-width: 1.5; marker-end: url(#arrow); }
+      .relation-many { fill: none; stroke: #666; stroke-width: 1.5; marker-end: url(#arrow-many); }
+      .title { fill: #333; font: bold 24px sans-serif; }
+      .subtitle { fill: #666; font: 14px sans-serif; }
+      .legend-text { fill: #333; font: 12px sans-serif; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+    </marker>
+    <marker id="arrow-many" markerWidth="10" markerHeight="10" refX="10" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 M 10 5 L 0 5" fill="none" stroke="#666" stroke-width="1.5"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1600" height="1200" fill="#f5f5f5"/>
+
+  <!-- Title -->
+  <text x="800" y="40" text-anchor="middle" class="title">ER Diagram — usr_skyee_mw Staging Tables</text>
+  <text x="800" y="65" text-anchor="middle" class="subtitle">MySQL → Hudi | 13 Tables | 358,019 Total Rows</text>
+
+  <!-- Legend -->
+  <rect x="50" y="85" width="250" height="120" rx="5" fill="white" stroke="#ddd"/>
+  <text x="70" y="105" class="legend-text" font-weight="bold">Legend</text>
+  <rect x="70" y="115" width="15" height="15" fill="#4a90d9"/>
+  <text x="95" y="127" class="legend-text">Customer Domain</text>
+  <rect x="70" y="135" width="15" height="15" fill="#2ecc71"/>
+  <text x="95" y="147" class="legend-text">Identity Domain</text>
+  <rect x="70" y="155" width="15" height="15" fill="#e67e22"/>
+  <text x="95" y="167" class="legend-text">Trade Domain</text>
+  <rect x="70" y="175" width="15" height="15" fill="#9b59b6"/>
+  <text x="95" y="187" class="legend-text">Payment Domain</text>
+
+  <!-- PK/FK Legend -->
+  <rect x="320" y="85" width="200" height="80" rx="5" fill="white" stroke="#ddd"/>
+  <text x="340" y="105" class="legend-text" font-weight="bold">Notation</text>
+  <text x="340" y="125" class="pk">PK</text>
+  <text x="370" y="125" class="legend-text">Primary Key</text>
+  <text x="340" y="145" class="fk">FK</text>
+  <text x="370" y="145" class="legend-text">Foreign Key</text>
+
+  <!-- ===== CUSTOMER DOMAIN (Left) ===== -->
+  
+  <!-- stg_cust_customer_info (Center Left) -->
+  <g transform="translate(100, 250)">
+    <rect class="table-box" width="220" height="280" rx="5"/>
+    <rect class="table-header" width="220" height="30" rx="5"/>
+    <rect class="table-header" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_cust_customer_info</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK CUST_ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="row-text">CUST_TYPE</text>
+    <text x="170" y="72" class="row-text">varchar</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="row-text">CUST_NAME</text>
+    <text x="170" y="97" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">CUST_MOBILE</text>
+    <text x="170" y="122" class="row-text">varchar</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">EMAIL</text>
+    <text x="170" y="147" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="155" width="220" height="25"/>
+    <text x="10" y="172" class="row-text">CUST_STATUS</text>
+    <text x="170" y="172" class="row-text">varchar</text>
+    <rect class="table-row" y="180" width="220" height="25"/>
+    <text x="10" y="197" class="row-text">RISK_LEVEL</text>
+    <text x="170" y="197" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="205" width="220" height="25"/>
+    <text x="10" y="222" class="row-text">RISK_SCORE</text>
+    <text x="170" y="222" class="row-text">decimal</text>
+    <rect class="table-row" y="230" width="220" height="25"/>
+    <text x="10" y="247" class="row-text">REG_TIME</text>
+    <text x="170" y="247" class="row-text">timestamp</text>
+    <rect class="table-row-alt" y="255" width="220" height="25"/>
+    <text x="10" y="272" class="row-text">dt</text>
+    <text x="170" y="272" class="row-text">date</text>
+    <text x="110" y="295" text-anchor="middle" fill="#888" font-size="10">1,729 rows • 72 cols</text>
+  </g>
+
+  <!-- stg_cust_bank_acct_info -->
+  <g transform="translate(100, 570)">
+    <rect class="table-box" width="220" height="200" rx="5"/>
+    <rect class="table-header" width="220" height="30" rx="5"/>
+    <rect class="table-header" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_cust_bank_acct_info</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK CUST_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="row-text">BANK_NAME</text>
+    <text x="170" y="97" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">ACCT_NO</text>
+    <text x="170" y="122" class="row-text">varchar</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">ACCT_STATUS</text>
+    <text x="170" y="147" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="155" width="220" height="25"/>
+    <text x="10" y="172" class="row-text">dt</text>
+    <text x="170" y="172" class="row-text">date</text>
+    <text x="110" y="195" text-anchor="middle" fill="#888" font-size="10">5,346 rows • 96 cols</text>
+  </g>
+
+  <!-- stg_cust_collections_acct -->
+  <g transform="translate(100, 810)">
+    <rect class="table-box" width="220" height="175" rx="5"/>
+    <rect class="table-header" width="220" height="30" rx="5"/>
+    <rect class="table-header" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_cust_collections_acct</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK CUST_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="row-text">ACCT_NO</text>
+    <text x="170" y="97" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">ACCT_TYPE</text>
+    <text x="170" y="122" class="row-text">varchar</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">dt</text>
+    <text x="170" y="147" class="row-text">date</text>
+    <text x="110" y="170" text-anchor="middle" fill="#888" font-size="10">4,005 rows • 83 cols</text>
+  </g>
+
+  <!-- stg_cust_store_info -->
+  <g transform="translate(100, 1020)">
+    <rect class="table-box" width="220" height="175" rx="5"/>
+    <rect class="table-header" width="220" height="30" rx="5"/>
+    <rect class="table-header" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_cust_store_info</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK CUST_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="row-text">STORE_NAME</text>
+    <text x="170" y="97" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">STORE_URL</text>
+    <text x="170" y="122" class="row-text">varchar</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">dt</text>
+    <text x="170" y="147" class="row-text">date</text>
+    <text x="110" y="170" text-anchor="middle" fill="#888" font-size="10">1,210 rows • 55 cols</text>
+  </g>
+
+  <!-- ===== IDENTITY DOMAIN (Center Top) ===== -->
+  
+  <!-- stg_cust_enterprise_realname_info -->
+  <g transform="translate(450, 250)">
+    <rect class="table-box" width="220" height="200" rx="5"/>
+    <rect class="table-header-green" width="220" height="30" rx="5"/>
+    <rect class="table-header-green" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_cust_enterprise_realname_info</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK CUST_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="row-text">ENTERPRISE_NAME</text>
+    <text x="170" y="97" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">CREDIT_CODE</text>
+    <text x="170" y="122" class="row-text">varchar</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">VERIFY_STATUS</text>
+    <text x="170" y="147" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="155" width="220" height="25"/>
+    <text x="10" y="172" class="row-text">dt</text>
+    <text x="170" y="172" class="row-text">date</text>
+    <text x="110" y="195" text-anchor="middle" fill="#888" font-size="10">2,126 rows • 67 cols</text>
+  </g>
+
+  <!-- stg_cust_person_realname_info -->
+  <g transform="translate(450, 490)">
+    <rect class="table-box" width="220" height="200" rx="5"/>
+    <rect class="table-header-green" width="220" height="30" rx="5"/>
+    <rect class="table-header-green" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_cust_person_realname_info</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK CUST_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="row-text">REAL_NAME</text>
+    <text x="170" y="97" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">ID_CARD_NO</text>
+    <text x="170" y="122" class="row-text">varchar</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">VERIFY_STATUS</text>
+    <text x="170" y="147" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="155" width="220" height="25"/>
+    <text x="10" y="172" class="row-text">dt</text>
+    <text x="170" y="172" class="row-text">date</text>
+    <text x="110" y="195" text-anchor="middle" fill="#888" font-size="10">5,145 rows • 76 cols</text>
+  </g>
+
+  <!-- stg_cust_realname_enterprise_ref_person -->
+  <g transform="translate(450, 730)">
+    <rect class="table-box" width="220" height="175" rx="5"/>
+    <rect class="table-header-green" width="220" height="30" rx="5"/>
+    <rect class="table-header-green" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_cust_realname_enterprise_ref_person</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK CUST_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="fk">FK REALNAME_ID</text>
+    <text x="170" y="97" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">PERSON_TYPE</text>
+    <text x="170" y="122" class="row-text">varchar</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">dt</text>
+    <text x="170" y="147" class="row-text">date</text>
+    <text x="110" y="170" text-anchor="middle" fill="#888" font-size="10">6,496 rows • 23 cols</text>
+  </g>
+
+  <!-- stg_cust_user_login_log -->
+  <g transform="translate(450, 940)">
+    <rect class="table-box" width="220" height="175" rx="5"/>
+    <rect class="table-header" width="220" height="30" rx="5"/>
+    <rect class="table-header" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_cust_user_login_log</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK CUST_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="row-text">LOGIN_TYPE</text>
+    <text x="170" y="97" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">LOGIN_IP</text>
+    <text x="170" y="122" class="row-text">varchar</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">LOGIN_TIME</text>
+    <text x="170" y="147" class="row-text">timestamp</text>
+    <text x="110" y="170" text-anchor="middle" fill="#888" font-size="10">118,659 rows • 25 cols</text>
+  </g>
+
+  <!-- ===== TRADE DOMAIN (Right Top) ===== -->
+  
+  <!-- stg_cust_foreign_trade_order -->
+  <g transform="translate(800, 250)">
+    <rect class="table-box" width="220" height="200" rx="5"/>
+    <rect class="table-header-orange" width="220" height="30" rx="5"/>
+    <rect class="table-header-orange" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_cust_foreign_trade_order</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK CUST_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="row-text">ORDER_NO</text>
+    <text x="170" y="97" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">ORDER_AMOUNT</text>
+    <text x="170" y="122" class="row-text">decimal</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">ORDER_STATUS</text>
+    <text x="170" y="147" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="155" width="220" height="25"/>
+    <text x="10" y="172" class="row-text">dt</text>
+    <text x="170" y="172" class="row-text">date</text>
+    <text x="110" y="195" text-anchor="middle" fill="#888" font-size="10">14,270 rows • 49 cols</text>
+  </g>
+
+  <!-- stg_cust_foreign_trade_order_logistics -->
+  <g transform="translate(800, 490)">
+    <rect class="table-box" width="220" height="175" rx="5"/>
+    <rect class="table-header-orange" width="220" height="30" rx="5"/>
+    <rect class="table-header-orange" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_cust_foreign_trade_order_logistics</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK ORDER_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="row-text">LOGISTICS_NO</text>
+    <text x="170" y="97" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">LOGISTICS_STATUS</text>
+    <text x="170" y="122" class="row-text">varchar</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">dt</text>
+    <text x="170" y="147" class="row-text">date</text>
+    <text x="110" y="170" text-anchor="middle" fill="#888" font-size="10">14,270 rows • 25 cols</text>
+  </g>
+
+  <!-- ===== PAYMENT DOMAIN (Right Bottom) ===== -->
+  
+  <!-- stg_pmp_coll_order -->
+  <g transform="translate(1150, 250)">
+    <rect class="table-box" width="220" height="200" rx="5"/>
+    <rect class="table-header-purple" width="220" height="30" rx="5"/>
+    <rect class="table-header-purple" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_pmp_coll_order</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK COLL_ORDER_ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK CUST_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="row-text">ORDER_NO</text>
+    <text x="170" y="97" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">COLL_AMOUNT</text>
+    <text x="170" y="122" class="row-text">decimal</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">ORDER_STATUS</text>
+    <text x="170" y="147" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="155" width="220" height="25"/>
+    <text x="10" y="172" class="row-text">dt</text>
+    <text x="170" y="172" class="row-text">date</text>
+    <text x="110" y="195" text-anchor="middle" fill="#888" font-size="10">114,734 rows • 111 cols</text>
+  </g>
+
+  <!-- stg_pmp_pay_order -->
+  <g transform="translate(1150, 490)">
+    <rect class="table-box" width="220" height="200" rx="5"/>
+    <rect class="table-header-purple" width="220" height="30" rx="5"/>
+    <rect class="table-header-purple" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_pmp_pay_order</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK PAY_ORDER_ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK CUST_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="row-text">ORDER_NO</text>
+    <text x="170" y="97" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">PAY_AMOUNT</text>
+    <text x="170" y="122" class="row-text">decimal</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">PAY_STATUS</text>
+    <text x="170" y="147" class="row-text">varchar</text>
+    <rect class="table-row-alt" y="155" width="220" height="25"/>
+    <text x="10" y="172" class="row-text">dt</text>
+    <text x="170" y="172" class="row-text">date</text>
+    <text x="110" y="195" text-anchor="middle" fill="#888" font-size="10">33,835 rows • 138 cols</text>
+  </g>
+
+  <!-- stg_pmp_pay_details -->
+  <g transform="translate(1150, 730)">
+    <rect class="table-box" width="220" height="175" rx="5"/>
+    <rect class="table-header-purple" width="220" height="30" rx="5"/>
+    <rect class="table-header-purple" y="5" width="220" height="25"/>
+    <text x="110" y="22" text-anchor="middle" class="header-text">stg_pmp_pay_details</text>
+    <rect class="table-row" y="30" width="220" height="25"/>
+    <text x="10" y="47" class="pk">PK ID</text>
+    <text x="170" y="47" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="55" width="220" height="25"/>
+    <text x="10" y="72" class="fk">FK CUST_ID</text>
+    <text x="170" y="72" class="row-text">bigint</text>
+    <rect class="table-row" y="80" width="220" height="25"/>
+    <text x="10" y="97" class="fk">FK PAY_ORDER_ID</text>
+    <text x="170" y="97" class="row-text">bigint</text>
+    <rect class="table-row-alt" y="105" width="220" height="25"/>
+    <text x="10" y="122" class="row-text">DETAIL_NO</text>
+    <text x="170" y="122" class="row-text">varchar</text>
+    <rect class="table-row" y="130" width="220" height="25"/>
+    <text x="10" y="147" class="row-text">AMOUNT</text>
+    <text x="170" y="147" class="row-text">decimal</text>
+    <text x="110" y="170" text-anchor="middle" fill="#888" font-size="10">36,194 rows • 108 cols</text>
+  </g>
+
+  <!-- ===== RELATIONSHIPS ===== -->
+  
+  <!-- Customer to Bank Account -->
+  <path d="M 210 530 L 210 570" class="relation-many"/>
+  
+  <!-- Customer to Collections Acct -->
+  <path d="M 210 530 L 160 770 Q 150 780 160 790 L 210 810" class="relation-many"/>
+  
+  <!-- Customer to Store Info -->
+  <path d="M 210 530 L 140 990 Q 130 1000 140 1010 L 210 1020" class="relation-many"/>
+  
+  <!-- Customer to Enterprise Realname -->
+  <path d="M 320 390 L 450 390" class="relation-many"/>
+  
+  <!-- Customer to Person Realname -->
+  <path d="M 320 390 L 400 490 Q 390 500 400 510 L 450 530" class="relation-many"/>
+  
+  <!-- Customer to Ref Person -->
+  <path d="M 320 390 L 380 730 Q 370 740 380 750 L 450 770" class="relation-many"/>
+  
+  <!-- Customer to Login Log -->
+  <path d="M 320 390 L 380 940 Q 370 950 380 960 L 450 970" class="relation-many"/>
+  
+  <!-- Customer to Foreign Trade Order -->
+  <path d="M 320 390 L 700 350 Q 710 340 720 350 L 800 350" class="relation-many"/>
+  
+  <!-- Customer to Coll Order -->
+  <path d="M 320 390 L 1050 350 Q 1060 340 1070 350 L 1150 350" class="relation-many"/>
+  
+  <!-- Customer to Pay Order -->
+  <path d="M 320 390 L 1050 590 Q 1060 580 1070 590 L 1150 590" class="relation-many"/>
+  
+  <!-- Foreign Trade Order to Logistics -->
+  <path d="M 910 450 L 910 490" class="relation-many"/>
+  
+  <!-- Pay Order to Pay Details -->
+  <path d="M 1260 690 L 1260 730" class="relation-many"/>
+  
+  <!-- Enterprise Realname to Ref Person -->
+  <path d="M 560 450 L 560 730" class="relation"/>
+
+  <!-- Domain Labels -->
+  <rect x="100" y="220" width="220" height="25" rx="12" fill="#4a90d9"/>
+  <text x="210" y="237" text-anchor="middle" fill="white" font-size="12">CUSTOMER DOMAIN</text>
+  
+  <rect x="450" y="220" width="220" height="25" rx="12" fill="#2ecc71"/>
+  <text x="560" y="237" text-anchor="middle" fill="white" font-size="12">IDENTITY DOMAIN</text>
+  
+  <rect x="800" y="220" width="220" height="25" rx="12" fill="#e67e22"/>
+  <text x="910" y="237" text-anchor="middle" fill="white" font-size="12">TRADE DOMAIN</text>
+  
+  <rect x="1150" y="220" width="220" height="25" rx="12" fill="#9b59b6"/>
+  <text x="1260" y="237" text-anchor="middle" fill="white" font-size="12">PAYMENT DOMAIN</text>
+</svg>
