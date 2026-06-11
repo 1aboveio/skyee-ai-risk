@@ -62,12 +62,14 @@ def get_month_ranges_reverse(start_date: str, end_date: str):
     end = datetime.strptime(end_date, "%Y-%m-%d")
     
     ranges = []
-    current = end
+    # Start from the last day of the month containing end_date
+    current = end.replace(day=1) + relativedelta(months=1) - relativedelta(days=1)
     
-    while current > start:
-        # Last day of previous month
-        month_end = current
+    while current >= start:
+        # First day of current month
         month_start = current.replace(day=1)
+        # Last day of current month (which is current)
+        month_end = current
         
         # Don't go before start date
         if month_start < start:
@@ -75,9 +77,8 @@ def get_month_ranges_reverse(start_date: str, end_date: str):
         
         ranges.append((month_start.strftime("%Y-%m-%d"), month_end.strftime("%Y-%m-%d")))
         
-        # Move to previous month
+        # Move to last day of previous month
         current = month_start - relativedelta(days=1)
-        current = current.replace(day=1)
     
     return ranges
 
