@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Pi
+.pi
+
 # OS files
 .DS_Store
 Thumbs.db
