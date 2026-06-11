@@ -72,13 +72,14 @@ Based on the reference file (关联图谱高价值字段20260430.xlsx), the foll
 
 | Edge Type | Source Fields | Source Tables | Confidence | Rationale |
 |-----------|---------------|---------------|------------|-----------|
-| **SAME_PHONE** | CUST_MOBILE, CONTACT_MOBILE, MOBILE_NO, RESERVED_MOBILE, SAME_NAME_PAYER_MOBILE | ci, pd, ba, po | 0.9 | Phone numbers are unique identifiers |
-| **SAME_EMAIL** | EMAIL, ENTITY_EMAIL, BENEFICIARY_EMAIL | ci, ba, pd | 0.9 | Email addresses are unique identifiers |
-| **SAME_NAME** | NAME, EN_NAME, ACCT_NAME, BUYER_NAME, SELLER_NAME, LEGAL_PERSON_NAME | ci, ba, ft, er | 0.7 | Names can be similar without being same person |
-| **SAME_ADDRESS** | RESIDENCE_ADDRESS, CERT_ADDRESS, ENTITY_ADDRESS, COLL_ADDRESS, PAYEE_ADDRESS | pr, er, ba, co | 0.8 | Addresses can be shared by related entities |
-| **SAME_CERT_NO** | CERT_NO, ID_CARD_NO, IDENTITY_NO, ENTITY_IDENTIFICATION_NO | pr, ba, er | 0.95 | Certificate numbers are unique identifiers |
-| **SAME_STORE_URL** | STORE_URL, GOODS_STORE_URL, COMPANY_WEBSITE_URL | si, fl, er | 0.6 | Store URLs can be shared by related businesses |
-| **SAME_IP** | LOGIN_IP | ll | 0.5 | IPs can be shared (office, VPN, etc.) |
+| **SAME_PHONE** | CUST_MOBILE, CONTACT_MOBILE, MOBILE_NO, RESERVED_MOBILE, SAME_NAME_PAYER_MOBILE | stg_cust_customer_info, stg_pmp_pay_details, stg_cust_bank_acct_info, stg_pmp_pay_order | 0.9 | Phone numbers are unique identifiers |
+| **SAME_EMAIL** | EMAIL, ENTITY_EMAIL, BENEFICIARY_EMAIL | stg_cust_customer_info, stg_cust_bank_acct_info, stg_pmp_pay_details | 0.9 | Email addresses are unique identifiers |
+| **SAME_NAME** | NAME, EN_NAME, ACCT_NAME, BUYER_NAME, SELLER_NAME, LEGAL_PERSON_NAME | stg_cust_customer_info, stg_cust_bank_acct_info, stg_cust_foreign_trade_order, stg_cust_enterprise_realname_info | 0.7 | Names can be similar without being same person |
+| **SAME_ADDRESS** | RESIDENCE_ADDRESS, CERT_ADDRESS, ENTITY_ADDRESS, COLL_ADDRESS, PAYEE_ADDRESS | stg_cust_person_realname_info, stg_cust_enterprise_realname_info, stg_cust_bank_acct_info, stg_pmp_coll_order | 0.8 | Addresses can be shared by related entities |
+| **SAME_CERT_NO** | CERT_NO, ID_CARD_NO, IDENTITY_NO, ENTITY_IDENTIFICATION_NO | stg_cust_person_realname_info, stg_cust_bank_acct_info, stg_cust_enterprise_realname_info | 0.95 | Certificate numbers are unique identifiers |
+| **SAME_STORE_URL** | STORE_URL, GOODS_STORE_URL, COMPANY_WEBSITE_URL | stg_cust_store_info, stg_cust_foreign_trade_order_logistics, stg_cust_enterprise_realname_info | 0.6 | Store URLs can be shared by related businesses |
+| **SAME_IP** | LOGIN_IP | stg_cust_user_login_log | 0.5 | IPs can be shared (office, VPN, etc.) |
+| **COUNTERPARTY** | ORDER_ID, CUST_ID, COUNTER_PARTY_ID | stg_pmp_pay_details, stg_pmp_pay_order | 0.95 | Direct transaction relationship |
 
 ---
 
@@ -87,7 +88,7 @@ Based on the reference file (关联图谱高价值字段20260430.xlsx), the foll
 ### 4.1 SAME_PHONE Edges
 
 ```sql
--- From dwd_customer (primary mobile)
+-- From stg_cust_customer_info (primary mobile)
 INSERT INTO dwd_graph_edges
 SELECT 
     ROW_NUMBER() OVER () as edge_id,
@@ -95,17 +96,17 @@ SELECT
     b.cust_id as target_cust_id,
     'SAME_PHONE' as edge_type,
     a.cust_mobile as edge_value,
-    'dwd_customer' as edge_source,
+    'stg_cust_customer_info' as edge_source,
     0.9 as confidence,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
     CURRENT_DATE as dt
-FROM dwd_customer a
-JOIN dwd_customer b ON a.cust_mobile = b.cust_mobile AND a.cust_id < b.cust_id
+FROM stg_cust_customer_info a
+JOIN stg_cust_customer_info b ON a.cust_mobile = b.cust_mobile AND a.cust_id < b.cust_id
 WHERE a.cust_mobile IS NOT NULL AND a.cust_mobile != '';
 
--- From dwd_customer (contact mobile)
+-- From stg_cust_customer_info (contact mobile)
 INSERT INTO dwd_graph_edges
 SELECT 
     ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
@@ -113,21 +114,21 @@ SELECT
     b.cust_id as target_cust_id,
     'SAME_PHONE' as edge_type,
     a.contact_mobile as edge_value,
-    'dwd_customer' as edge_source,
+    'stg_cust_customer_info' as edge_source,
     0.9 as confidence,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
     CURRENT_DATE as dt
-FROM dwd_customer a
-JOIN dwd_customer b ON a.contact_mobile = b.contact_mobile AND a.cust_id < b.cust_id
+FROM stg_cust_customer_info a
+JOIN stg_cust_customer_info b ON a.contact_mobile = b.contact_mobile AND a.cust_id < b.cust_id
 WHERE a.contact_mobile IS NOT NULL AND a.contact_mobile != '';
 ```
 
 ### 4.2 SAME_EMAIL Edges
 
 ```sql
--- From dwd_customer
+-- From stg_cust_customer_info
 INSERT INTO dwd_graph_edges
 SELECT 
     ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
@@ -135,21 +136,21 @@ SELECT
     b.cust_id as target_cust_id,
     'SAME_EMAIL' as edge_type,
     a.email as edge_value,
-    'dwd_customer' as edge_source,
+    'stg_cust_customer_info' as edge_source,
     0.9 as confidence,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
     CURRENT_DATE as dt
-FROM dwd_customer a
-JOIN dwd_customer b ON a.email = b.email AND a.cust_id < b.cust_id
+FROM stg_cust_customer_info a
+JOIN stg_cust_customer_info b ON a.email = b.email AND a.cust_id < b.cust_id
 WHERE a.email IS NOT NULL AND a.email != '';
 ```
 
 ### 4.3 SAME_CERT_NO Edges
 
 ```sql
--- From dwd_person
+-- From stg_cust_person_realname_info
 INSERT INTO dwd_graph_edges
 SELECT 
     ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
@@ -157,21 +158,21 @@ SELECT
     b.cust_id as target_cust_id,
     'SAME_CERT_NO' as edge_type,
     a.cert_no as edge_value,
-    'dwd_person' as edge_source,
+    'stg_cust_person_realname_info' as edge_source,
     0.95 as confidence,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
     CURRENT_DATE as dt
-FROM dwd_person a
-JOIN dwd_person b ON a.cert_no = b.cert_no AND a.cust_id < b.cust_id
+FROM stg_cust_person_realname_info a
+JOIN stg_cust_person_realname_info b ON a.cert_no = b.cert_no AND a.cust_id < b.cust_id
 WHERE a.cert_no IS NOT NULL AND a.cert_no != '';
 ```
 
 ### 4.4 SAME_ADDRESS Edges
 
 ```sql
--- From dwd_person (residence address)
+-- From stg_cust_person_realname_info (residence address)
 INSERT INTO dwd_graph_edges
 SELECT 
     ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
@@ -179,21 +180,21 @@ SELECT
     b.cust_id as target_cust_id,
     'SAME_ADDRESS' as edge_type,
     a.residence_address as edge_value,
-    'dwd_person' as edge_source,
+    'stg_cust_person_realname_info' as edge_source,
     0.8 as confidence,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
     CURRENT_DATE as dt
-FROM dwd_person a
-JOIN dwd_person b ON a.residence_address = b.residence_address AND a.cust_id < b.cust_id
+FROM stg_cust_person_realname_info a
+JOIN stg_cust_person_realname_info b ON a.residence_address = b.residence_address AND a.cust_id < b.cust_id
 WHERE a.residence_address IS NOT NULL AND a.residence_address != '';
 ```
 
 ### 4.5 SAME_NAME Edges
 
 ```sql
--- From dwd_customer (cust_name)
+-- From stg_cust_customer_info (cust_name)
 INSERT INTO dwd_graph_edges
 SELECT 
     ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
@@ -201,21 +202,21 @@ SELECT
     b.cust_id as target_cust_id,
     'SAME_NAME' as edge_type,
     a.cust_name as edge_value,
-    'dwd_customer' as edge_source,
+    'stg_cust_customer_info' as edge_source,
     0.7 as confidence,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
     CURRENT_DATE as dt
-FROM dwd_customer a
-JOIN dwd_customer b ON a.cust_name = b.cust_name AND a.cust_id < b.cust_id
+FROM stg_cust_customer_info a
+JOIN stg_cust_customer_info b ON a.cust_name = b.cust_name AND a.cust_id < b.cust_id
 WHERE a.cust_name IS NOT NULL AND a.cust_name != '';
 ```
 
 ### 4.6 SAME_STORE_URL Edges
 
 ```sql
--- From dwd_store
+-- From stg_cust_store_info
 INSERT INTO dwd_graph_edges
 SELECT 
     ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
@@ -223,21 +224,21 @@ SELECT
     b.cust_id as target_cust_id,
     'SAME_STORE_URL' as edge_type,
     a.store_url as edge_value,
-    'dwd_store' as edge_source,
+    'stg_cust_store_info' as edge_source,
     0.6 as confidence,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
     CURRENT_DATE as dt
-FROM dwd_store a
-JOIN dwd_store b ON a.store_url = b.store_url AND a.cust_id < b.cust_id
+FROM stg_cust_store_info a
+JOIN stg_cust_store_info b ON a.store_url = b.store_url AND a.cust_id < b.cust_id
 WHERE a.store_url IS NOT NULL AND a.store_url != '';
 ```
 
 ### 4.7 SAME_IP Edges
 
 ```sql
--- From dwd_login_log
+-- From stg_cust_user_login_log
 INSERT INTO dwd_graph_edges
 SELECT 
     ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
@@ -245,15 +246,57 @@ SELECT
     b.cust_id as target_cust_id,
     'SAME_IP' as edge_type,
     a.login_ip as edge_value,
-    'dwd_login_log' as edge_source,
+    'stg_cust_user_login_log' as edge_source,
     0.5 as confidence,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
     CURRENT_DATE as dt
-FROM dwd_login_log a
-JOIN dwd_login_log b ON a.login_ip = b.login_ip AND a.cust_id < b.cust_id
+FROM stg_cust_user_login_log a
+JOIN stg_cust_user_login_log b ON a.login_ip = b.login_ip AND a.cust_id < b.cust_id
 WHERE a.login_ip IS NOT NULL AND a.login_ip != '';
+```
+
+### 4.8 COUNTERPARTY Edges
+
+```sql
+-- From stg_pmp_pay_details (payment counterparty)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    a.counter_party_id as target_cust_id,
+    'COUNTERPARTY' as edge_type,
+    CAST(a.pay_order_id AS VARCHAR) as edge_value,
+    'stg_pmp_pay_details' as edge_source,
+    0.95 as confidence,
+    a.create_time as first_seen,
+    a.lst_upd_time as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_pmp_pay_details a
+WHERE a.counter_party_id IS NOT NULL 
+  AND a.cust_id != a.counter_party_id
+  AND a.cust_id < a.counter_party_id;
+
+-- From stg_pmp_coll_order (collection counterparty)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    a.counter_party_id as target_cust_id,
+    'COUNTERPARTY' as edge_type,
+    CAST(a.coll_order_id AS VARCHAR) as edge_value,
+    'stg_pmp_coll_order' as edge_source,
+    0.95 as confidence,
+    a.create_time as first_seen,
+    a.lst_upd_time as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_pmp_coll_order a
+WHERE a.counter_party_id IS NOT NULL 
+  AND a.cust_id != a.counter_party_id
+  AND a.cust_id < a.counter_party_id;
 ```
 
 ---
