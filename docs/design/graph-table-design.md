@@ -76,7 +76,7 @@ Based on the reference file (关联图谱高价值字段20260430.xlsx), the foll
 | **SAME_EMAIL** | EMAIL, ENTITY_EMAIL, BENEFICIARY_EMAIL | stg_cust_customer_info, stg_cust_bank_acct_info, stg_pmp_pay_details | 0.9 | Email addresses are unique identifiers |
 | **SAME_NAME** | NAME, EN_NAME, ACCT_NAME, BUYER_NAME, SELLER_NAME, LEGAL_PERSON_NAME | stg_cust_customer_info, stg_cust_bank_acct_info, stg_cust_foreign_trade_order, stg_cust_enterprise_realname_info | 0.7 | Names can be similar without being same person |
 | **SAME_ADDRESS** | RESIDENCE_ADDRESS, CERT_ADDRESS, ENTITY_ADDRESS, COLL_ADDRESS, PAYEE_ADDRESS | stg_cust_person_realname_info, stg_cust_enterprise_realname_info, stg_cust_bank_acct_info, stg_pmp_coll_order | 0.8 | Addresses can be shared by related entities |
-| **SAME_CERT_NO** | CERT_NO, ID_CARD_NO, IDENTITY_NO, ENTITY_IDENTIFICATION_NO | stg_cust_person_realname_info, stg_cust_bank_acct_info, stg_cust_enterprise_realname_info | 0.95 | Certificate numbers are unique identifiers |
+| **SAME_ID_NO** | CERT_NO, ID_CARD_NO, IDENTITY_NO, ENTITY_IDENTIFICATION_NO | stg_cust_person_realname_info, stg_cust_bank_acct_info, stg_cust_enterprise_realname_info | 0.95 | Certificate numbers are unique identifiers |
 | **SAME_STORE_URL** | STORE_URL, GOODS_STORE_URL, COMPANY_WEBSITE_URL | stg_cust_store_info, stg_cust_foreign_trade_order_logistics, stg_cust_enterprise_realname_info | 0.6 | Store URLs can be shared by related businesses |
 | **SAME_IP** | LOGIN_IP | stg_cust_user_login_log | 0.5 | IPs can be shared (office, VPN, etc.) |
 | **COUNTERPARTY** | ORDER_ID, CUST_ID, COUNTER_PARTY_ID | stg_pmp_pay_details, stg_pmp_pay_order | 0.95 | Direct transaction relationship |
@@ -148,17 +148,17 @@ JOIN stg_cust_customer_info b ON a.email = b.email AND a.cust_id < b.cust_id
 WHERE a.email IS NOT NULL AND a.email != '';
 ```
 
-### 4.3 SAME_CERT_NO Edges
+### 4.3 SAME_ID_NO Edges
 
 ```sql
--- From stg_cust_person_realname_info
+-- From stg_cust_person_realname_info (ID_CARD)
 INSERT INTO dwd_graph_edges
 SELECT 
     ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
     a.cust_id as source_cust_id,
     b.cust_id as target_cust_id,
-    'SAME_CERT_NO' as edge_type,
-    a.cert_no as edge_value,
+    'SAME_ID_NO' as edge_type,
+    CONCAT(a.cert_type, '=', a.cert_no) as edge_value,
     'stg_cust_person_realname_info' as edge_source,
     0.95 as confidence,
     MIN(a.create_time, b.create_time) as first_seen,
@@ -166,8 +166,9 @@ SELECT
     1 as record_count,
     CURRENT_DATE as dt
 FROM stg_cust_person_realname_info a
-JOIN stg_cust_person_realname_info b ON a.cert_no = b.cert_no AND a.cust_id < b.cust_id
-WHERE a.cert_no IS NOT NULL AND a.cert_no != '';
+JOIN stg_cust_person_realname_info b ON a.cert_no = b.cert_no AND a.cert_type = b.cert_type AND a.cust_id < b.cust_id
+WHERE a.cert_no IS NOT NULL AND a.cert_no != ''
+  AND a.cert_type IN ('ID_CARD', 'PASSPORT');  -- Only match same cert type
 ```
 
 ### 4.4 SAME_ADDRESS Edges
