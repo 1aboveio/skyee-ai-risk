@@ -40,7 +40,7 @@ class CustCustomerInfoEtl(MySqlEtl):
     filter_by = "LST_UPD_TIME"
 
     # Partition
-    par_cols = ["LST_UPD_DATE"]
+    par_cols = ["dt"]
 
     # Hudi settings
     table_type = "hudi_table"
@@ -49,7 +49,7 @@ class CustCustomerInfoEtl(MySqlEtl):
 
     def transform(self, df):
         """Apply transformations before loading."""
-        return df.withColumn("LST_UPD_DATE", col("LST_UPD_TIME").cast("date"))
+        return df.withColumn("dt", col("CREATE_TIME").cast("date"))
 
 
 if __name__ == "__main__":
