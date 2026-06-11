@@ -70,17 +70,17 @@ The graph table design enables relationship discovery between customers based on
 
 Based on the reference file (关联图谱高价值字段20260430.xlsx), the following edge types are defined:
 
-| Edge Type | Source Fields | Source Tables | Confidence | Rationale |
-|-----------|---------------|---------------|------------|-----------|
-| **SAME_PHONE** | CUST_MOBILE, CONTACT_MOBILE, MOBILE_NO, RESERVED_MOBILE, SAME_NAME_PAYER_MOBILE | stg_cust_customer_info, stg_pmp_pay_details, stg_cust_bank_acct_info, stg_pmp_pay_order | 0.9 | Phone numbers are unique identifiers |
-| **SAME_EMAIL** | EMAIL, ENTITY_EMAIL, BENEFICIARY_EMAIL | stg_cust_customer_info, stg_cust_bank_acct_info, stg_pmp_pay_details | 0.9 | Email addresses are unique identifiers |
-| **SAME_NAME** | NAME, EN_NAME, ACCT_NAME, BUYER_NAME, SELLER_NAME, LEGAL_PERSON_NAME | stg_cust_customer_info, stg_cust_bank_acct_info, stg_cust_foreign_trade_order, stg_cust_enterprise_realname_info | 0.7 | Names can be similar without being same person |
-| **SAME_ADDRESS** | RESIDENCE_ADDRESS, CERT_ADDRESS, ENTITY_ADDRESS, COLL_ADDRESS, PAYEE_ADDRESS | stg_cust_person_realname_info, stg_cust_enterprise_realname_info, stg_cust_bank_acct_info, stg_pmp_coll_order | 0.8 | Addresses can be shared by related entities |
-| **SAME_ID_NO** | CERT_NO, ID_CARD_NO, IDENTITY_NO, ENTITY_IDENTIFICATION_NO | stg_cust_person_realname_info, stg_cust_bank_acct_info, stg_cust_enterprise_realname_info | 0.95 | Certificate numbers are unique identifiers |
-| **SAME_STORE_URL** | STORE_URL, GOODS_STORE_URL, COMPANY_WEBSITE_URL | stg_cust_store_info, stg_cust_foreign_trade_order_logistics, stg_cust_enterprise_realname_info | 0.6 | Store URLs can be shared by related businesses |
-| **SAME_IP** | LOGIN_IP | stg_cust_user_login_log | 0.5 | IPs can be shared (office, VPN, etc.) |
-| **COUNTERPARTY** | ORDER_ID, CUST_ID, COUNTER_PARTY_ID | stg_pmp_pay_details, stg_pmp_pay_order | 0.95 | Direct transaction relationship |
-| **SIMILAR_ADDRESS** | RESIDENCE_ADDRESS, CERT_ADDRESS, ENTITY_ADDRESS, COLL_ADDRESS, PAYEE_ADDRESS | stg_cust_person_realname_info, stg_cust_enterprise_realname_info, stg_cust_bank_acct_info, stg_pmp_coll_order | 0.7 | Fuzzy address match via embedding similarity |
+| Edge Type | Source Fields | Source Tables | Edge Value Format | Confidence | Rationale |
+|-----------|---------------|---------------|-------------------|------------|-----------|
+| **SAME_PHONE** | CUST_MOBILE, CONTACT_MOBILE, MOBILE_NO, RESERVED_MOBILE, SAME_NAME_PAYER_MOBILE | stg_cust_customer_info, stg_pmp_pay_details, stg_cust_bank_acct_info, stg_pmp_pay_order | `+8613812345678` (E.164 format) | 0.9 | Phone numbers are unique identifiers |
+| **SAME_EMAIL** | EMAIL, ENTITY_EMAIL, BENEFICIARY_EMAIL | stg_cust_customer_info, stg_cust_bank_acct_info, stg_pmp_pay_details | `user@example.com` | 0.9 | Email addresses are unique identifiers |
+| **SAME_NAME** | NAME, EN_NAME, ACCT_NAME, BUYER_NAME, SELLER_NAME, LEGAL_PERSON_NAME | stg_cust_customer_info, stg_cust_bank_acct_info, stg_cust_foreign_trade_order, stg_cust_enterprise_realname_info | `张三` or `ABC COMPANY LTD` | 0.7 | Names can be similar without being same person |
+| **SAME_ADDRESS** | RESIDENCE_ADDRESS, CERT_ADDRESS, ENTITY_ADDRESS, COLL_ADDRESS, PAYEE_ADDRESS | stg_cust_person_realname_info, stg_cust_enterprise_realname_info, stg_cust_bank_acct_info, stg_pmp_coll_order | `北京市朝阳区xxx路xxx号` | 0.8 | Addresses can be shared by related entities |
+| **SAME_ID_NO** | CERT_NO, ID_CARD_NO, IDENTITY_NO, ENTITY_IDENTIFICATION_NO | stg_cust_person_realname_info, stg_cust_bank_acct_info, stg_cust_enterprise_realname_info | `ID_CARD=110101199001011234` or `PASSPORT=E12345678` | 0.95 | Certificate numbers are unique identifiers |
+| **SAME_STORE_URL** | STORE_URL, GOODS_STORE_URL, COMPANY_WEBSITE_URL | stg_cust_store_info, stg_cust_foreign_trade_order_logistics, stg_cust_enterprise_realname_info | `https://www.example.com/store` | 0.6 | Store URLs can be shared by related businesses |
+| **SAME_IP** | LOGIN_IP | stg_cust_user_login_log | `192.168.1.1` | 0.5 | IPs can be shared (office, VPN, etc.) |
+| **COUNTERPARTY** | ORDER_ID, CUST_ID, COUNTER_PARTY_ID | stg_pmp_pay_details, stg_pmp_coll_order | `ORDER_ID=12345678` | 0.95 | Direct transaction relationship |
+| **SIMILAR_ADDRESS** | RESIDENCE_ADDRESS, CERT_ADDRESS, ENTITY_ADDRESS, COLL_ADDRESS, PAYEE_ADDRESS | stg_cust_person_realname_info, stg_cust_enterprise_realname_info, stg_cust_bank_acct_info, stg_pmp_coll_order | `北京市朝阳区xxx路xxx号 \|\| 北京市朝阳区xxx路xxx号` (source \|\| target) | 0.7-0.95 | Fuzzy address match via embedding similarity |
 
 ---
 
