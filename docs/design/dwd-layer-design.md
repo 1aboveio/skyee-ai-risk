@@ -179,6 +179,7 @@ Based on ISO 20022 standard for financial messaging:
 | is_sanctioned | char(1) | ci.SANCTIONED | Customer sanctioned flag |
 | is_declared | char(1) | po.NEED_DECLEAR | Needs declaration |
 | is_cross_border_purchase | char(1) | po.IS_CROSS_BORDER_PURCHASE | Cross-border purchase |
+| is_onward_payment | char(1) | CASE WHEN pd.BENEFICIARY_NAME != pd.SUBJECT_NAME THEN 'Y' ELSE 'N' END | Creditor ≠ Ultimate Creditor |
 | **Amount** | | | |
 | txn_amount | decimal(15,2) | pd.PAY_TXN_AMT | Transaction amount |
 | txn_currency | varchar(10) | pd.CURRENCY_CD | Transaction currency |
