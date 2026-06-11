@@ -44,7 +44,7 @@ class CustCustomerInfoEtl(MySqlEtl):
 
     # Hudi settings
     table_type = "hudi_table"
-    hudi_mode = "upsert"
+    hudi_mode = "insert_overwrite"
     concurrency_mode = "SINGLE_WRITER"
 
     def transform(self, df):
