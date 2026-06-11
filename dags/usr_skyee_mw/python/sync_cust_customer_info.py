@@ -1,15 +1,15 @@
 """
-Sync cust_customer_info from MySQL to Hudi.
+Sync cust_customer_info from MySQL to Hudi via Spark Connect.
 
 Usage:
-    spark-submit --master yarn sync_cust_customer_info.py --url <mysql_jdbc_url> [options]
+    python sync_cust_customer_info.py --url <mysql_jdbc_url> --spark-remote <spark_connect_url> [options]
 
 Options:
     --url           MySQL JDBC URL (required)
+    --spark-remote  Spark Connect server URL (required)
     --start-date    Start date for incremental sync (YYYY-MM-DD)
     --end-date      End date for incremental sync (YYYY-MM-DD)
     --bulk/--per-day  Bulk or per-day processing (default: bulk)
-    --hudi-mode     Hudi write operation (default: upsert)
 """
 
 import sys
@@ -18,8 +18,10 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils.etl import MySqlEtl
-from pyspark.sql.types import *
-from pyspark.sql.functions import *
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+from typing_extensions import Annotated
+import typer
 
 
 class CustCustomerInfoEtl(MySqlEtl):
@@ -37,7 +39,7 @@ class CustCustomerInfoEtl(MySqlEtl):
     # Keys
     id = "CUST_ID"
     ts = "LST_UPD_TIME"
-    filter_by = "LST_UPD_TIME"
+    filter_by = "dt"
 
     # Partition
     par_cols = ["dt"]
@@ -47,10 +49,41 @@ class CustCustomerInfoEtl(MySqlEtl):
     hudi_mode = "insert_overwrite"
     concurrency_mode = "SINGLE_WRITER"
 
+    def extract(self, start_date: str = None, end_date: str = None):
+        """Extract from MySQL using CREATE_TIME filter."""
+        self.filter_by_bak = self.filter_by
+        self.filter_by = "CREATE_TIME"
+        df = super().extract(start_date, end_date)
+        self.filter_by = self.filter_by_bak
+        return df
+
     def transform(self, df):
         """Apply transformations before loading."""
         return df.withColumn("dt", col("CREATE_TIME").cast("date"))
 
 
+def main(
+    url: Annotated[str, typer.Option("--url")],
+    spark_remote: Annotated[str, typer.Option("--spark-remote")],
+    start_date: Annotated[str, typer.Option("--start-date")] = None,
+    end_date: Annotated[str, typer.Option("--end-date")] = None,
+    bulk: Annotated[bool, typer.Option("--bulk/--per-day")] = True,
+):
+    # Init Spark Connect session
+    spark = SparkSession.builder.remote(spark_remote).getOrCreate()
+
+    # Run ETL
+    etl = CustCustomerInfoEtl(
+        url=url,
+        start_date=start_date,
+        end_date=end_date,
+        bulk=bulk,
+    )
+    etl.spark = spark
+    etl()
+
+    spark.stop()
+
+
 if __name__ == "__main__":
-    CustCustomerInfoEtl.run_from_cli()
+    typer.run(main)
