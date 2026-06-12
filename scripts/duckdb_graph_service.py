@@ -126,6 +126,7 @@ def neighbors(cust_id: int, limit: int = Query(50, ge=1, le=500)):
             n.risk_level,
             n.is_high_risk,
             n.is_sanctioned,
+            n.current_balance,
             COALESCE(d.node_degree, 0) AS node_degree,
             e.edge_type,
             e.edge_source,
@@ -164,6 +165,7 @@ def high_risk(cust_id: int, limit: int = Query(50, ge=1, le=500)):
             n.risk_level,
             n.is_high_risk,
             n.is_sanctioned,
+            n.current_balance,
             e.edge_type,
             e.strength,
             e.edge_value

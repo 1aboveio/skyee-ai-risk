@@ -24,13 +24,19 @@ spark-sql -e "
 INSERT OVERWRITE DIRECTORY '${HDFS_EXPORT_DIR}/nodes'
 USING parquet
 SELECT
-  cust_id, cust_type, cust_name, en_name, risk_level, risk_score,
-  sanctioned AS is_sanctioned, high_risk AS is_high_risk,
-  cust_status, regist_country,
-  create_time AS first_seen,
-  lst_upd_time AS last_seen,
-  CAST(create_time AS DATE) AS dt
-FROM usr_skyee_mw.stg_cust_customer_info
+  ci.cust_id, ci.cust_type, ci.cust_name, ci.en_name, ci.risk_level, ci.risk_score,
+  ci.sanctioned AS is_sanctioned, ci.high_risk AS is_high_risk,
+  ci.cust_status, ci.regist_country,
+  bal.current_balance,
+  ci.create_time AS first_seen,
+  ci.lst_upd_time AS last_seen,
+  CAST(ci.create_time AS DATE) AS dt
+FROM usr_skyee_mw.stg_cust_customer_info ci
+LEFT JOIN (
+  SELECT cust_id, SUM(peg_balance) AS current_balance
+  FROM usr_skyee_mw.stg_cust_collections_acct
+  GROUP BY cust_id
+) bal ON bal.cust_id = ci.cust_id
 "
 
 spark-sql -e "

@@ -9,6 +9,7 @@ export const graphNodeSchema = z.object({
   isHighRisk: z.boolean(),
   isSanctioned: z.boolean(),
   nodeDegree: z.number().int().nonnegative(),
+  currentBalance: z.number().nullable(),
 });
 
 export const graphEdgeSchema = z.object({

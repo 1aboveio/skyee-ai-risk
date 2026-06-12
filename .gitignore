@@ -30,3 +30,6 @@ venv/
 
 # Logs
 *.log
+
+# Local Spark/Hive metastore artifacts
+metastore_db/

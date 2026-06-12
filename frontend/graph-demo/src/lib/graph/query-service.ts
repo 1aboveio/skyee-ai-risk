@@ -8,6 +8,7 @@ type ServiceNeighbor = {
   is_high_risk?: string | boolean | null;
   is_sanctioned?: string | boolean | null;
   node_degree?: number | null;
+  current_balance?: number | string | null;
   edge_id?: number | string | null;
   source_cust_id?: number | string | null;
   target_cust_id?: number | string | null;
@@ -84,6 +85,14 @@ function strength(value: string | null | undefined): GraphEdge["strength"] {
   return value === "Weak" ? "Weak" : "Strong";
 }
 
+function decimalNumber(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 async function serviceGet<T>(baseUrl: string, path: string): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, { cache: "no-store" });
   if (!response.ok) {
@@ -117,6 +126,7 @@ function normalizeServiceResult(
     isHighRisk: false,
     isSanctioned: false,
     nodeDegree: degree?.node_degree ?? filtered.length,
+    currentBalance: null,
   };
 
   const nodes: GraphNode[] = [
@@ -130,6 +140,7 @@ function normalizeServiceResult(
         isHighRisk: toBoolean(item.is_high_risk) || highRiskIds.has(custId),
         isSanctioned: toBoolean(item.is_sanctioned),
         nodeDegree: item.node_degree ?? 0,
+        currentBalance: decimalNumber(item.current_balance),
       };
     }),
   ];

@@ -20,6 +20,7 @@ const result: GraphSearchResult = {
       isHighRisk: false,
       isSanctioned: false,
       nodeDegree: 5,
+      currentBalance: 125430.25,
     },
     {
       custId: "1000834",
@@ -28,6 +29,7 @@ const result: GraphSearchResult = {
       isHighRisk: true,
       isSanctioned: false,
       nodeDegree: 7,
+      currentBalance: 3200,
     },
     {
       custId: "1001410",
@@ -36,6 +38,7 @@ const result: GraphSearchResult = {
       isHighRisk: true,
       isSanctioned: false,
       nodeDegree: 4,
+      currentBalance: 0,
     },
     {
       custId: "1002097",
@@ -44,6 +47,7 @@ const result: GraphSearchResult = {
       isHighRisk: false,
       isSanctioned: false,
       nodeDegree: 3,
+      currentBalance: 8450.12,
     },
     {
       custId: "1003772",
@@ -52,6 +56,7 @@ const result: GraphSearchResult = {
       isHighRisk: true,
       isSanctioned: true,
       nodeDegree: 6,
+      currentBalance: null,
     },
     {
       custId: "1004188",
@@ -60,6 +65,7 @@ const result: GraphSearchResult = {
       isHighRisk: false,
       isSanctioned: false,
       nodeDegree: 2,
+      currentBalance: 912.4,
     },
   ],
   edges: [

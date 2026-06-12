@@ -137,7 +137,7 @@ The system platform that carries case intake, case pool, workflow, task queue, s
 _Avoid_: Agent engineering platform, business AI workbench
 
 **Risk Graph**:
-The internal-trigger capability that detects relationships among customers, accounts, transactions, channels, blacklists, historical risk records, and associated bad actors, then turns graph hits into standardized case intake events. It can also be consumed as evidence during deep investigation.
+The internal-trigger capability that detects relationships among merchants, accounts, transactions, channels, blacklists, historical risk records, and associated bad actors, then turns graph hits into standardized case intake events. It can also be consumed as evidence during deep investigation.
 _Avoid_: Dashboard, post-case-pool workflow state
 
 **Association Analysis**:
@@ -149,16 +149,16 @@ A Risk Graph analysis mode that examines directional transaction counterparty re
 _Avoid_: Association analysis, shared-attribute matching
 
 **Graph Party**:
-An entity that can appear as a node in the Risk Graph. A graph party may be a known customer or a transaction counterparty that has not been resolved to a customer.
-_Avoid_: Customer when the party is not known to be a customer
+An entity that can appear as a node in the Risk Graph. A graph party may be a known merchant or a transaction counterparty that has not been resolved to a merchant.
+_Avoid_: Merchant when the party is not known to be a merchant
 
-**Customer Party**:
-A graph party resolved to a known customer record.
+**Merchant Party**:
+A graph party resolved to a known merchant record.
 _Avoid_: Counterparty party, unresolved party
 
 **Counterparty Party**:
-A graph party observed in transaction activity but not necessarily resolved to a known customer record.
-_Avoid_: Customer party, shared-attribute match
+A graph party observed in transaction activity but not necessarily resolved to a known merchant record.
+_Avoid_: Merchant party, shared-attribute match
 
 **Shared-Attribute Relationship**:
 A relationship inferred because two parties share an identifying or descriptive attribute, such as a phone number, email, identity document, address, store URL, or login IP. It is evidence of association, not direct transactional activity.

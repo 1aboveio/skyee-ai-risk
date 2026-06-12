@@ -1,7 +1,29 @@
+import { GRAPH_SESSION_COOKIE, parseSessionValue } from "@/lib/auth/identity-session";
 import { graphSearchRequestSchema } from "@/lib/graph/schema";
 import { GraphServiceError, searchCustomerGraph } from "@/lib/graph/query-service";
 
 export async function GET(request: Request): Promise<Response> {
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  const sessionCookie = cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${GRAPH_SESSION_COOKIE}=`))
+    ?.slice(GRAPH_SESSION_COOKIE.length + 1);
+  const session = parseSessionValue(
+    sessionCookie ? decodeURIComponent(sessionCookie) : undefined
+  );
+  if (!session) {
+    return Response.json(
+      {
+        error: {
+          code: "UNAUTHENTICATED",
+          message: "Sign in with Identity before searching the graph.",
+        },
+      },
+      { status: 401 }
+    );
+  }
+
   const url = new URL(request.url);
   const parsed = graphSearchRequestSchema.safeParse(
     Object.fromEntries(url.searchParams.entries())

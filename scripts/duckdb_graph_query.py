@@ -98,6 +98,7 @@ def create_schema(con: duckdb.DuckDBPyConnection, replace: bool):
             is_high_risk VARCHAR,
             cust_status VARCHAR,
             regist_country VARCHAR,
+            current_balance DECIMAL(18, 2),
             first_seen TIMESTAMP,
             last_seen TIMESTAMP,
             dt DATE
@@ -175,7 +176,7 @@ def load_from_presto(
 
         df = pd.DataFrame(rows, columns=columns)
         con.register("_graph_batch", df)
-        con.execute(f"INSERT INTO {target} SELECT * FROM _graph_batch")
+        con.execute(f"INSERT INTO {target} ({quoted_cols}) SELECT * FROM _graph_batch")
         con.unregister("_graph_batch")
         loaded += len(df)
         typer.echo(f"{target}: loaded {loaded} rows", err=True)
@@ -421,7 +422,7 @@ def sync_parquet(
         SELECT
             cust_id, cust_type, cust_name, en_name, risk_level, risk_score,
             is_sanctioned, is_high_risk, cust_status, regist_country,
-            first_seen, last_seen, dt
+            current_balance, first_seen, last_seen, dt
         FROM read_parquet(?)
         """,
         [nodes_path],
