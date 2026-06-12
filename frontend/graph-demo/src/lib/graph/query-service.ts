@@ -24,6 +24,11 @@ type ServiceHighRisk = {
   cust_id: number | string;
 };
 
+type ServiceDegree = {
+  cust_id: number | string;
+  node_degree?: number | null;
+};
+
 type ServiceErrorDetail =
   | string
   | {
@@ -97,7 +102,8 @@ async function serviceGet<T>(baseUrl: string, path: string): Promise<T> {
 function normalizeServiceResult(
   input: GraphSearchRequest,
   neighbors: ServiceNeighbor[],
-  highRisk: ServiceHighRisk[]
+  highRisk: ServiceHighRisk[],
+  degree: ServiceDegree | null
 ): GraphSearchResult {
   const highRiskIds = new Set(highRisk.map((node) => String(node.cust_id)));
   const filtered = input.includeWeak
@@ -110,7 +116,7 @@ function normalizeServiceResult(
     riskLevel: "UNKNOWN",
     isHighRisk: false,
     isSanctioned: false,
-    nodeDegree: filtered.length,
+    nodeDegree: degree?.node_degree ?? filtered.length,
   };
 
   const nodes: GraphNode[] = [
@@ -173,7 +179,7 @@ export async function searchCustomerGraph(
   }
 
   const params = new URLSearchParams({ limit: String(input.limit) });
-  const [neighbors, highRisk] = await Promise.all([
+  const [neighbors, highRisk, degree] = await Promise.all([
     serviceGet<ServiceNeighbor[]>(
       baseUrl,
       `/neighbors/${encodeURIComponent(input.custId)}?${params.toString()}`
@@ -182,6 +188,10 @@ export async function searchCustomerGraph(
       baseUrl,
       `/high-risk/${encodeURIComponent(input.custId)}?${params.toString()}`
     ),
+    serviceGet<ServiceDegree>(
+      baseUrl,
+      `/degree/${encodeURIComponent(input.custId)}`
+    ),
   ]);
-  return normalizeServiceResult(input, neighbors, highRisk);
+  return normalizeServiceResult(input, neighbors, highRisk, degree);
 }

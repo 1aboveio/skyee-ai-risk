@@ -98,6 +98,11 @@ def stats():
     }
 
 
+@app.get("/degree/{cust_id}")
+def degree(cust_id: int):
+    return {"cust_id": cust_id, "node_degree": node_degree(cust_id)}
+
+
 @app.get("/neighbors/{cust_id}")
 def neighbors(cust_id: int, limit: int = Query(50, ge=1, le=500)):
     assert_expandable(cust_id)

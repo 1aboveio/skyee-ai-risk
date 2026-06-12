@@ -9,6 +9,12 @@ REPO_DIR="${REPO_DIR:-/data/home/jonas.gu/projects/skyee-ai-risk}"
 BASE_DIR="${BASE_DIR:-${REPO_DIR}}"
 HDFS_EXPORT_DIR="${HDFS_EXPORT_DIR:-/tmp/skyee_graph_duckdb_snapshot}"
 DB_PATH="${DB_PATH:-${BASE_DIR}/data/skyee_graph.duckdb}"
+BUILD_INDEXES="${BUILD_INDEXES:-0}"
+
+INDEX_ARGS=(--no-build-indexes)
+if [[ "${BUILD_INDEXES}" == "1" || "${BUILD_INDEXES}" == "true" ]]; then
+  INDEX_ARGS=(--build-indexes)
+fi
 
 mkdir -p "${BASE_DIR}/data"
 rm -rf "${BASE_DIR}/snapshot"
@@ -46,4 +52,5 @@ hdfs dfs -get "${HDFS_EXPORT_DIR}" "${BASE_DIR}/snapshot"
     --nodes-path "${BASE_DIR}/snapshot/nodes/*.parquet" \
     --edges-path "${BASE_DIR}/snapshot/edges/*.parquet" \
     --db-path "${DB_PATH}" \
-    --replace
+    --replace \
+    "${INDEX_ARGS[@]}"
