@@ -206,11 +206,30 @@ class DwdGraphEdgesEtl(Etl):
             ),
         )
         event_ts = coalesce(col("first_seen"), col("last_seen"))
-        return (
+        edges = (
             edges.withColumn("dt", event_ts.cast("date"))
             .withColumn(
                 "edge_month",
                 when(event_ts.isNull(), lit("unknown")).otherwise(date_format(event_ts, "yyyy-MM")),
+            )
+            .withColumn("record_count", col("record_count").cast("int"))
+        )
+        return (
+            edges.groupBy(
+                "edge_id",
+                "source_cust_id",
+                "target_cust_id",
+                "edge_type",
+                "edge_value",
+                "edge_source",
+                "strength",
+                "dt",
+                "edge_month",
+            )
+            .agg(
+                spark_min("first_seen").alias("first_seen"),
+                spark_max("last_seen").alias("last_seen"),
+                spark_sum("record_count").cast("int").alias("record_count"),
             )
             .select(
             "edge_id",
