@@ -140,6 +140,58 @@ _Avoid_: Agent engineering platform, business AI workbench
 The internal-trigger capability that detects relationships among customers, accounts, transactions, channels, blacklists, historical risk records, and associated bad actors, then turns graph hits into standardized case intake events. It can also be consumed as evidence during deep investigation.
 _Avoid_: Dashboard, post-case-pool workflow state
 
+**Association Analysis**:
+A Risk Graph analysis mode that examines shared-attribute relationships to find related parties, likely common control, or risk propagation paths.
+_Avoid_: Transaction flow analysis, payment tracing
+
+**Transaction Flow Analysis**:
+A Risk Graph analysis mode that examines directional transaction counterparty relationships to reconstruct money movement, payout fanout, collection fan-in, or circular flow.
+_Avoid_: Association analysis, shared-attribute matching
+
+**Graph Party**:
+An entity that can appear as a node in the Risk Graph. A graph party may be a known customer or a transaction counterparty that has not been resolved to a customer.
+_Avoid_: Customer when the party is not known to be a customer
+
+**Customer Party**:
+A graph party resolved to a known customer record.
+_Avoid_: Counterparty party, unresolved party
+
+**Counterparty Party**:
+A graph party observed in transaction activity but not necessarily resolved to a known customer record.
+_Avoid_: Customer party, shared-attribute match
+
+**Shared-Attribute Relationship**:
+A relationship inferred because two parties share an identifying or descriptive attribute, such as a phone number, email, identity document, address, store URL, or login IP. It is evidence of association, not direct transactional activity.
+_Avoid_: Transaction counterparty, payment edge
+
+**Transaction Counterparty Relationship**:
+A directional relationship from the initiating customer or account to the transaction counterparty observed in payment or collection activity. It represents transaction flow evidence and should not be treated as the same kind of association as a shared-attribute relationship.
+_Avoid_: Shared-attribute relationship, undirected counterparty match, generic customer connection
+
+**Aggregated Transaction Relationship**:
+A transaction counterparty relationship summarized between two graph parties across one or more transaction events. It is the default relationship used for Transaction Flow Analysis views and traversal.
+_Avoid_: Raw transaction event, shared-attribute relationship
+
+**Debtor Party**:
+The party whose account or customer relationship directly initiates a payment. In POBO activity, the debtor party may service the payment without being the ultimate source of funds.
+_Avoid_: Ultimate debtor party, beneficiary party
+
+**Ultimate Debtor Party**:
+The party on whose behalf a payment is made when the direct debtor differs from the actual payer. It is the source side of the money-flow relationship for POBO activity.
+_Avoid_: Debtor party, servicing party
+
+**Beneficiary Party**:
+The party receiving funds or value in a transaction flow.
+_Avoid_: Counterparty when the receiving role is known, debtor party
+
+**Servicing Party**:
+The customer or account relationship that facilitates a transaction on behalf of another party. In POBO activity, the servicing party is retained as transaction context but is not the default source node of the money-flow edge.
+_Avoid_: Ultimate debtor party, beneficiary party
+
+**POBO**:
+Pay On Behalf Of activity where the ultimate debtor differs from the direct debtor or servicing party.
+_Avoid_: Same-name payment as a graph direction, ordinary outbound payment
+
 **Dashboard**:
 The Business AI Workbench view for monitoring case volume, source distribution, queue backlog, SLA, risk distribution, investigation productivity, disposition results, RFI response progress, and feedback closure.
 _Avoid_: Workflow state engine, final decision authority
