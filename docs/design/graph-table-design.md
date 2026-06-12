@@ -47,11 +47,11 @@ canonical edge snapshot.
 
 ---
 
-### 2.2 dwd_graph_edges (Customer Connections)
+### 2.2 dwd_graph_edges (Customer Association Connections)
 
-**Purpose:** Connections between customers based on shared attributes
+**Purpose:** Association connections between customers based on shared attributes
 
-**Grain:** One row per unique connection between two customers
+**Grain:** One row per unique shared-attribute connection between two customers
 
 | Column | Type | Source | Description |
 |--------|------|--------|-------------|
@@ -111,7 +111,7 @@ Backfill writes this table with partition overwrite. The canonical
 
 ## 3. Edge Types
 
-Based on the reference file (关联图谱高价值字段20260430.xlsx), the following edge types are defined:
+Based on the reference file (关联图谱高价值字段20260430.xlsx), the following association edge types are defined:
 
 | Edge Type | Source (Alias.Field) | Edge Value Format | Strength | Rationale |
 |-----------|---------------------|-------------------|----------|-----------|
@@ -123,8 +123,9 @@ Based on the reference file (关联图谱高价值字段20260430.xlsx), the foll
 | **SAME_ID_NO** | pr.CERT_NO, ba.ID_CARD_NO, pd.IDENTITY_NO, er.CERT_NO | `ID_CARD=110101199001011234` or `PASSPORT=E12345678` | Strong | Certificate numbers are unique identifiers |
 | **SAME_STORE_URL** | si.STORE_URL, fl.GOODS_STORE_URL, er.COMPANY_WEBSITE_URL | `https://www.example.com/store` | Weak | Store URLs can be shared by related businesses |
 | **SAME_IP** | ll.LOGIN_IP | `192.168.1.1` | Weak | IPs can be shared (office, VPN, etc.) |
-| **COUNTERPARTY** | pd.PAY_ORDER_ID, pd.CUST_ID, pd.COUNTER_PARTY_ID, co.COLL_ORDER_ID, co.CUST_ID, co.COUNTER_PARTY_ID | `PAY:ORDER_ID=12345678:DEBTOR` or `COLL:ORDER_ID=87654321:CREDITOR` | Strong | Direct transaction relationship with side |
 | **SIMILAR_ADDRESS** | pr.RESIDENCE_ADDRESS, pr.CERT_ADDRESS, ba.ENTITY_ADDRESS, co.PAYEE_ADDRESS | `北京市朝阳区xxx路xxx号 \|\| 北京市朝阳区xxx路xxx号` (source \|\| target) | Strong | Fuzzy address match via embedding similarity |
+
+Transaction counterparty relationships are directional transaction-flow evidence and are intentionally excluded from `dwd_graph_edges`.
 
 ---
 
@@ -303,30 +304,7 @@ JOIN stg_cust_user_login_log b ON a.login_ip = b.login_ip AND a.cust_id < b.cust
 WHERE a.login_ip IS NOT NULL AND a.login_ip != '';
 ```
 
-### 4.8 COUNTERPARTY Edges
-
-```sql
--- From stg_pmp_pay_details (payment counterparty)
-INSERT INTO dwd_graph_edges
-SELECT 
-    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
-    a.cust_id as source_cust_id,
-    a.counter_party_id as target_cust_id,
-    'COUNTERPARTY' as edge_type,
-    CAST(a.pay_order_id AS VARCHAR) as edge_value,
-    'stg_pmp_pay_details' as edge_source,
-    'Strong' as strength,
-    a.create_time as first_seen,
-    a.lst_upd_time as last_seen,
-    1 as record_count,
-    CURRENT_DATE as dt
-FROM stg_pmp_pay_details a
-WHERE a.counter_party_id IS NOT NULL 
-  AND a.cust_id != a.counter_party_id
-  AND a.cust_id < a.counter_party_id;
-```
-
-### 4.9 SIMILAR_ADDRESS Edges (Fuzzy Match)
+### 4.8 SIMILAR_ADDRESS Edges (Fuzzy Match)
 
 ```sql
 -- Pre-compute address embeddings
@@ -491,7 +469,6 @@ ORDER BY CASE strength WHEN 'Strong' THEN 0 ELSE 1 END;
 | SAME_EMAIL | Strong | Email addresses are unique identifiers |
 | SAME_ADDRESS | Strong | Addresses can be shared by related entities |
 | SAME_ENTITY_NAME | Strong | Entity names are unique identifiers |
-| COUNTERPARTY | Strong | Direct transaction relationship |
 | SAME_PERSON_NAME | Weak | Person names can be similar without being same person |
 | SAME_STORE_URL | Weak | Store URLs can be shared by related businesses |
 | SAME_IP | Weak | IPs can be shared (office, VPN, etc.) |

@@ -34,6 +34,7 @@ SELECT
   edge_id, source_cust_id, target_cust_id, edge_type, edge_value,
   edge_source, strength, first_seen, last_seen, record_count, dt
 FROM usr_skyee_mw.dwd_graph_edges
+WHERE edge_type <> 'COUNTERPARTY'
 "
 
 hdfs dfs -get "${HDFS_EXPORT_DIR}" "${BASE_DIR}/snapshot"

@@ -4,7 +4,7 @@ The job intentionally processes one graph attribute at a time. Some source
 tables contain millions of rows, so each attribute is normalized, deduped by
 customer/key, hot-key filtered, paired, and written before the next attribute.
 
-Two tables are maintained:
+Two association graph tables are maintained:
   * dwd_graph_edge_monthly: idempotent monthly edge evidence, partitioned by
     edge_type, edge_source, edge_field, and observed_month for reverse backfill
     overwrite without clobbering other specs.
@@ -12,7 +12,7 @@ Two tables are maintained:
     first_seen can move backward without moving the Hudi record partition.
 
 Usage:
-    python dwd_graph_edges.py --spark-remote <spark_connect_url> [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--bulk/--per-day] [--max-degree 100]
+    python dwd_graph_edges.py --spark-remote <spark_connect_url> [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--bulk/--per-day] [--max-degree 100] [--snapshot-hudi-mode upsert]
 """
 
 import sys
@@ -416,48 +416,9 @@ class DwdGraphEdgesEtl(Etl):
                 update_expr=update_expr,
             )
 
-        self._process_counterparty()
-
     def transform(self, df: DataFrame) -> DataFrame:
         """Not used — process() handles batching directly."""
         raise NotImplementedError("Use process() which batches by spec.")
-
-    def _process_counterparty(self):
-        """COUNTERPARTY edges — direct extraction from pay_details."""
-        logger.info("Processing COUNTERPARTY/stg_pmp_pay_details")
-        base = self.src_pay.filter(
-            col("counter_party_id").isNotNull()
-            & col("cust_id").isNotNull()
-            & (col("cust_id") != col("counter_party_id"))
-        )
-        counterparty_change_time = coalesce(col("create_time"), col("lst_upd_time"))
-        if self.start_date:
-            base = base.filter(counterparty_change_time >= self.start_date)
-            if self.end_date:
-                base = base.filter(counterparty_change_time < self.end_date)
-
-        edges = base.select(
-            least(col("cust_id"), col("counter_party_id")).cast("long").alias("source_cust_id"),
-            greatest(col("cust_id"), col("counter_party_id")).cast("long").alias("target_cust_id"),
-            concat(
-                lit("PAY:ORDER_ID="),
-                col("pay_order_id").cast("string"),
-                lit(":CUST_ID="),
-                col("cust_id").cast("string"),
-                lit(":COUNTER_PARTY_ID="),
-                col("counter_party_id").cast("string"),
-            ).alias("edge_value"),
-            col("create_time").alias("first_seen"),
-            col("lst_upd_time").alias("last_seen"),
-            counterparty_change_time.alias("observed_time"),
-            lit("COUNTERPARTY").alias("edge_type"),
-            lit("stg_pmp_pay_details").alias("edge_source"),
-            lit("Strong").alias("strength"),
-            lit(1).cast("int").alias("record_count"),
-        )
-        edges = self._finish_monthly_edges(edges, "counter_party_id")
-        self.load(edges)
-        logger.info("Done COUNTERPARTY/stg_pmp_pay_details")
 
 
 class DwdGraphEdgesSnapshotEtl(Etl):
@@ -480,6 +441,7 @@ class DwdGraphEdgesSnapshotEtl(Etl):
         return self.spark.table(f"{self.src_db}.{self.src_tbl}")
 
     def transform(self, df: DataFrame) -> DataFrame:
+        df = df.filter(col("edge_type") != "COUNTERPARTY")
         edges = (
             df.groupBy(
                 "edge_id",
@@ -521,6 +483,7 @@ def main(
     end_date: Annotated[str, typer.Option("--end-date")] = None,
     bulk: Annotated[bool, typer.Option("--bulk/--per-day")] = True,
     max_degree: Annotated[int, typer.Option("--max-degree")] = MAX_DEGREE,
+    snapshot_hudi_mode: Annotated[str, typer.Option("--snapshot-hudi-mode")] = "upsert",
 ):
     from pyspark.sql import SparkSession
 
@@ -534,7 +497,12 @@ def main(
     etl.spark = spark
     etl()
 
-    snapshot = DwdGraphEdgesSnapshotEtl(start_date=start_date, end_date=end_date, bulk=bulk)
+    snapshot = DwdGraphEdgesSnapshotEtl(
+        start_date=start_date,
+        end_date=end_date,
+        bulk=bulk,
+        hudi_mode_override=snapshot_hudi_mode,
+    )
     snapshot.spark = spark
     snapshot()
     spark.stop()
