@@ -127,6 +127,8 @@ def neighbors(cust_id: int, limit: int = Query(50, ge=1, le=500)):
             n.is_high_risk,
             n.is_sanctioned,
             n.current_balance,
+            n.confirmed_risk_status,
+            n.confirmed_risk_type,
             COALESCE(d.node_degree, 0) AS node_degree,
             e.edge_type,
             e.edge_source,
@@ -166,6 +168,8 @@ def high_risk(cust_id: int, limit: int = Query(50, ge=1, le=500)):
             n.is_high_risk,
             n.is_sanctioned,
             n.current_balance,
+            n.confirmed_risk_status,
+            n.confirmed_risk_type,
             e.edge_type,
             e.strength,
             e.edge_value
@@ -193,6 +197,58 @@ def shared(source_cust_id: int, target_cust_id: int, limit: int = Query(50, ge=1
         LIMIT ?
         """,
         [low, high, limit],
+    )
+
+
+@app.get("/confirmed-risk/{cust_id}")
+def confirmed_risk(cust_id: int):
+    """Check if a customer is in the Confirmed Risk Registry."""
+    rows = query(
+        """
+        SELECT 
+            n.cust_id,
+            n.cust_name,
+            n.cust_type,
+            n.confirmed_risk_status,
+            n.confirmed_risk_type,
+            r.source_file,
+            r.source_label,
+            r.source_bad_type,
+            r.ingested_at
+        FROM graph_nodes n
+        LEFT JOIN confirmed_risk_registry r ON n.cust_id = r.subject_id
+        WHERE n.cust_id = ? AND n.confirmed_risk_status IS NOT NULL
+        """,
+        [cust_id],
+    )
+    if not rows:
+        return {
+            "cust_id": cust_id,
+            "confirmed_risk_status": None,
+            "message": "Customer not found in Confirmed Risk Registry",
+        }
+    return rows[0]
+
+
+@app.get("/confirmed-risk")
+def list_confirmed_risk(limit: int = Query(100, ge=1, le=1000)):
+    """List all customers in the Confirmed Risk Registry."""
+    return query(
+        """
+        SELECT 
+            n.cust_id,
+            n.cust_name,
+            n.cust_type,
+            n.confirmed_risk_status,
+            n.confirmed_risk_type,
+            r.source_file,
+            r.source_bad_type
+        FROM graph_nodes n
+        JOIN confirmed_risk_registry r ON n.cust_id = r.subject_id
+        ORDER BY n.cust_id
+        LIMIT ?
+        """,
+        [limit],
     )
 
 

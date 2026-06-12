@@ -99,9 +99,24 @@ def create_schema(con: duckdb.DuckDBPyConnection, replace: bool):
             cust_status VARCHAR,
             regist_country VARCHAR,
             current_balance DECIMAL(18, 2),
+            confirmed_risk_status VARCHAR,
+            confirmed_risk_type VARCHAR,
             first_seen TIMESTAMP,
             last_seen TIMESTAMP,
             dt DATE
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS confirmed_risk_registry (
+            subject_id BIGINT,
+            confirmed_risk_type VARCHAR,
+            confirmed_risk_status VARCHAR,
+            source_file VARCHAR,
+            source_label VARCHAR,
+            source_bad_type VARCHAR,
+            ingested_at TIMESTAMP
         )
         """
     )
@@ -150,6 +165,42 @@ def refresh_node_degrees(con: duckdb.DuckDBPyConnection):
         """
     )
     con.execute("CREATE INDEX IF NOT EXISTS idx_graph_node_degrees_cust_id ON graph_node_degrees(cust_id)")
+
+
+def load_risk_registry(con: duckdb.DuckDBPyConnection, registry_path: str):
+    """Load Confirmed Risk Registry from CSV and update graph nodes."""
+    import pandas as pd
+    from pathlib import Path
+    
+    if not Path(registry_path).exists():
+        typer.echo(f"Registry file not found: {registry_path}", err=True)
+        return
+    
+    # Load registry CSV
+    df = pd.read_csv(registry_path)
+    registry_records = df[['subject_id', 'confirmed_risk_type', 'confirmed_risk_status', 
+                           'source_file', 'source_label', 'source_bad_type', 'ingested_at']]
+    
+    # Insert into registry table
+    con.execute("DELETE FROM confirmed_risk_registry")
+    con.register("_registry_batch", registry_records)
+    con.execute("""
+        INSERT INTO confirmed_risk_registry 
+        SELECT * FROM _registry_batch
+    """)
+    con.unregister("_registry_batch")
+    
+    # Update graph nodes with confirmed risk status
+    con.execute("""
+        UPDATE graph_nodes 
+        SET 
+            confirmed_risk_status = r.confirmed_risk_status,
+            confirmed_risk_type = r.confirmed_risk_type
+        FROM confirmed_risk_registry r
+        WHERE graph_nodes.cust_id = r.subject_id
+    """)
+    
+    typer.echo(f"Loaded {len(registry_records)} registry entries", err=True)
 
 
 def load_from_presto(
@@ -206,6 +257,7 @@ def sync(
     batch_size: int = typer.Option(50000, "--batch-size"),
     replace: bool = typer.Option(True, "--replace/--append"),
     build_indexes: bool = typer.Option(True, "--build-indexes/--no-build-indexes"),
+    registry_path: Optional[str] = typer.Option(None, "--registry-path"),
 ):
     """Copy graph tables from Presto/Hudi into a local DuckDB file."""
     con = duckdb_connection(db_path)
@@ -220,6 +272,11 @@ def sync(
 
     load_from_presto(con, "dwd_graph_nodes", NODE_COLUMNS, None, batch_size)
     load_from_presto(con, "dwd_graph_edges", EDGE_COLUMNS, edge_where, batch_size)
+    
+    # Load Confirmed Risk Registry if path provided
+    if registry_path:
+        load_risk_registry(con, registry_path)
+    
     typer.echo("refreshing node degrees", err=True)
     refresh_node_degrees(con)
     if build_indexes:
@@ -231,7 +288,8 @@ def sync(
         """
         SELECT
             (SELECT COUNT(*) FROM graph_nodes) AS node_count,
-            (SELECT COUNT(*) FROM graph_edges) AS edge_count
+            (SELECT COUNT(*) FROM graph_edges) AS edge_count,
+            (SELECT COUNT(*) FROM confirmed_risk_registry) AS registry_count
         """,
     )
     echo_rows(counts)
