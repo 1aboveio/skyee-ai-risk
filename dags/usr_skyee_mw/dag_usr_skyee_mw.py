@@ -56,6 +56,7 @@ with DAG(
 
     start = EmptyOperator(task_id="start")
     end = EmptyOperator(task_id="end")
+    stg_tasks = []
 
     for table in TABLES:
         sync_task = SparkSubmitOperator(
@@ -72,4 +73,32 @@ with DAG(
             verbose=True,
         )
 
-        start >> sync_task >> end
+        start >> sync_task
+        stg_tasks.append(sync_task)
+
+    graph_edges = SparkSubmitOperator(
+        task_id="dwd_graph_edges",
+        application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
+        conn_id="spark_default",
+        application_args=[
+            "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
+            "--start-date", "{{ ds }}",
+            "--end-date", "{{ next_ds }}",
+            "--bulk",
+            "--max-degree", "100",
+        ],
+        verbose=True,
+    )
+
+    graph_nodes = SparkSubmitOperator(
+        task_id="dwd_graph_nodes",
+        application=f"{SCRIPTS_PATH}/dwd_graph_nodes.py",
+        conn_id="spark_default",
+        application_args=[
+            "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
+            "--bulk",
+        ],
+        verbose=True,
+    )
+
+    stg_tasks >> graph_edges >> graph_nodes >> end
