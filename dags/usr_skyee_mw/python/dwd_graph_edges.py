@@ -433,9 +433,9 @@ class DwdGraphEdgesSnapshotEtl(Etl):
     dst_db = "usr_skyee_mw"
     dst_tbl = "dwd_graph_edges"
     id = "edge_id"
-    ts = "etl_ts"
+    ts = "last_seen"
     filter_by = None
-    par_cols = ["edge_type"]
+    par_cols = ["edge_type", "edge_month"]
     path = "/user/hive/warehouse/usr_skyee_mw.db/dwd_graph_edges"
     table_type = "hudi_table"
     hudi_mode = "upsert"
@@ -465,6 +465,8 @@ class DwdGraphEdgesSnapshotEtl(Etl):
         event_ts = coalesce(col("first_seen"), col("last_seen"))
         return edges.withColumn("dt", event_ts.cast("date")).withColumn(
             "etl_ts", current_timestamp()
+        ).withColumn(
+            "edge_month", date_format(col("last_seen"), "yyyy-MM")
         ).select(
             "edge_id",
             "source_cust_id",
@@ -478,6 +480,7 @@ class DwdGraphEdgesSnapshotEtl(Etl):
             "dt",
             "etl_ts",
             "edge_type",
+            "edge_month",
         )
 
 
