@@ -117,8 +117,9 @@ Based on the reference file (关联图谱高价值字段20260430.xlsx), the foll
 |-----------|---------------------|-------------------|----------|-----------|
 | **SAME_PHONE** | ci.CUST_MOBILE, ci.CONTACT_MOBILE, pd.MOBILE_NO, ba.RESERVED_MOBILE, po.SAME_NAME_PAYER_MOBILE | `+8613812345678` (E.164 format) | Strong | Phone numbers are unique identifiers |
 | **SAME_EMAIL** | ci.EMAIL, ba.ENTITY_EMAIL, pd.BENEFICIARY_EMAIL | `user@example.com` | Strong | Email addresses are unique identifiers |
-| **SAME_ENTITY_NAME** | ci.NAME (COMPANY), ci.EN_NAME (COMPANY), ba.ACCT_NAME, ft.BUYER_NAME, ft.SELLER_NAME, er.LEGAL_PERSON_NAME, er.ENTERPRISE_NAME | `ABC COMPANY LTD` | Strong | Entity names are unique identifiers |
-| **SAME_PERSON_NAME** | ci.NAME (PERSONAL), ci.EN_NAME (PERSONAL), pr.NAME, pr.EN_NAME | `张三` | Weak | Person names can be similar without being same person |
+| **SAME_BUSINESS_NAME** | ci.NAME (COMPANY), ci.EN_NAME (COMPANY), ba.ACCT_NAME, er.ENTERPRISE_NAME, er.EN_NAME | `ABC COMPANY LTD` | Strong | Business names are identifiers for company, merchant, or sole-proprietor subjects (per ADR-0002) |
+| **SAME_PERSON_NAME** | ci.NAME (PERSONAL), ci.EN_NAME (PERSONAL), pr.NAME, pr.EN_NAME, er.LEGAL_PERSON_NAME | `张三` | Weak | Person names can be similar without being same person |
+| **SAME_TRADE_PARTY_NAME** | ft.BUYER_NAME, ft.SELLER_NAME | `ABC COMPANY LTD` | Weak | Trade-party names belong to transaction context, not default shared-attribute association (per ADR-0002) |
 | **SAME_ADDRESS** | pr.RESIDENCE_ADDRESS, pr.CERT_ADDRESS, ba.ENTITY_ADDRESS, co.PAYEE_ADDRESS | `北京市朝阳区xxx路xxx号` | Strong | Addresses can be shared by related entities |
 | **SAME_ID_NO** | pr.CERT_NO, ba.ID_CARD_NO, pd.IDENTITY_NO, er.CERT_NO | `ID_CARD=110101199001011234` or `PASSPORT=E12345678` | Strong | Certificate numbers are unique identifiers |
 | **SAME_STORE_URL** | si.STORE_URL, fl.GOODS_STORE_URL, er.COMPANY_WEBSITE_URL | `https://www.example.com/store` | Weak | Store URLs can be shared by related businesses |
@@ -238,16 +239,134 @@ JOIN stg_cust_person_realname_info b ON a.residence_address = b.residence_addres
 WHERE a.residence_address IS NOT NULL AND a.residence_address != '';
 ```
 
-### 4.5 SAME_NAME Edges
+### 4.5 SAME_BUSINESS_NAME Edges
+
+Per ADR-0002, business-name edges use `SAME_BUSINESS_NAME` instead of `SAME_ENTITY_NAME`. This edge type covers company, merchant, and sole-proprietor business names only. Legal-person names use `SAME_PERSON_NAME`, and buyer/seller names use `SAME_TRADE_PARTY_NAME`.
 
 ```sql
--- From stg_cust_customer_info (cust_name)
+-- From stg_cust_customer_info (company customer names)
 INSERT INTO dwd_graph_edges
 SELECT 
     ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
     a.cust_id as source_cust_id,
     b.cust_id as target_cust_id,
-    'SAME_NAME' as edge_type,
+    'SAME_BUSINESS_NAME' as edge_type,
+    a.cust_name as edge_value,
+    'stg_cust_customer_info' as edge_source,
+    'Strong' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_customer_info a
+JOIN stg_cust_customer_info b ON a.cust_name = b.cust_name AND a.cust_id < b.cust_id
+WHERE a.cust_name IS NOT NULL AND a.cust_name != ''
+  AND a.cust_type = 'COMPANY';  -- Business names only
+
+-- From stg_cust_customer_info (company English names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_BUSINESS_NAME' as edge_type,
+    a.en_name as edge_value,
+    'stg_cust_customer_info' as edge_source,
+    'Strong' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_customer_info a
+JOIN stg_cust_customer_info b ON a.en_name = b.en_name AND a.cust_id < b.cust_id
+WHERE a.en_name IS NOT NULL AND a.en_name != ''
+  AND a.cust_type = 'COMPANY';  -- Business names only
+
+-- From stg_cust_bank_acct_info (account holder names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_BUSINESS_NAME' as edge_type,
+    a.acct_name as edge_value,
+    'stg_cust_bank_acct_info' as edge_source,
+    'Strong' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_bank_acct_info a
+JOIN stg_cust_bank_acct_info b ON a.acct_name = b.acct_name AND a.cust_id < b.cust_id
+WHERE a.acct_name IS NOT NULL AND a.acct_name != '';
+
+-- From stg_cust_enterprise_realname_info (enterprise names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_BUSINESS_NAME' as edge_type,
+    a.enterprise_name as edge_value,
+    'stg_cust_enterprise_realname_info' as edge_source,
+    'Strong' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_enterprise_realname_info a
+JOIN stg_cust_enterprise_realname_info b ON a.enterprise_name = b.enterprise_name AND a.cust_id < b.cust_id
+WHERE a.enterprise_name IS NOT NULL AND a.enterprise_name != '';
+
+-- From stg_cust_enterprise_realname_info (enterprise English names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_BUSINESS_NAME' as edge_type,
+    a.en_name as edge_value,
+    'stg_cust_enterprise_realname_info' as edge_source,
+    'Strong' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_enterprise_realname_info a
+JOIN stg_cust_enterprise_realname_info b ON a.en_name = b.en_name AND a.cust_id < b.cust_id
+WHERE a.en_name IS NOT NULL AND a.en_name != '';
+```
+
+### 4.6 SAME_PERSON_NAME Edges
+
+Person-name edges cover legal-person names and personal customer names.
+
+```sql
+-- From stg_cust_enterprise_realname_info (legal person names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_PERSON_NAME' as edge_type,
+    a.legal_person_name as edge_value,
+    'stg_cust_enterprise_realname_info' as edge_source,
+    'Weak' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_enterprise_realname_info a
+JOIN stg_cust_enterprise_realname_info b ON a.legal_person_name = b.legal_person_name AND a.cust_id < b.cust_id
+WHERE a.legal_person_name IS NOT NULL AND a.legal_person_name != '';
+
+-- From stg_cust_customer_info (personal customer names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_PERSON_NAME' as edge_type,
     a.cust_name as edge_value,
     'stg_cust_customer_info' as edge_source,
     'Weak' as strength,
@@ -257,10 +376,53 @@ SELECT
     CURRENT_DATE as dt
 FROM stg_cust_customer_info a
 JOIN stg_cust_customer_info b ON a.cust_name = b.cust_name AND a.cust_id < b.cust_id
-WHERE a.cust_name IS NOT NULL AND a.cust_name != '';
+WHERE a.cust_name IS NOT NULL AND a.cust_name != ''
+  AND a.cust_type = 'PERSONAL';  -- Person names only
 ```
 
-### 4.6 SAME_STORE_URL Edges
+### 4.7 SAME_TRADE_PARTY_NAME Edges
+
+Trade-party names (buyer/seller) belong to transaction context per ADR-0002.
+
+```sql
+-- From stg_cust_foreign_trade_order (buyer names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_TRADE_PARTY_NAME' as edge_type,
+    a.buyer_name as edge_value,
+    'stg_cust_foreign_trade_order' as edge_source,
+    'Weak' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_foreign_trade_order a
+JOIN stg_cust_foreign_trade_order b ON a.buyer_name = b.buyer_name AND a.cust_id < b.cust_id
+WHERE a.buyer_name IS NOT NULL AND a.buyer_name != '';
+
+-- From stg_cust_foreign_trade_order (seller names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_TRADE_PARTY_NAME' as edge_type,
+    a.seller_name as edge_value,
+    'stg_cust_foreign_trade_order' as edge_source,
+    'Weak' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_foreign_trade_order a
+JOIN stg_cust_foreign_trade_order b ON a.seller_name = b.seller_name AND a.cust_id < b.cust_id
+WHERE a.seller_name IS NOT NULL AND a.seller_name != '';
+```
+
+### 4.8 SAME_STORE_URL Edges
 
 ```sql
 -- From stg_cust_store_info
@@ -282,7 +444,7 @@ JOIN stg_cust_store_info b ON a.store_url = b.store_url AND a.cust_id < b.cust_i
 WHERE a.store_url IS NOT NULL AND a.store_url != '';
 ```
 
-### 4.7 SAME_IP Edges
+### 4.9 SAME_IP Edges
 
 ```sql
 -- From stg_cust_user_login_log
@@ -304,7 +466,7 @@ JOIN stg_cust_user_login_log b ON a.login_ip = b.login_ip AND a.cust_id < b.cust
 WHERE a.login_ip IS NOT NULL AND a.login_ip != '';
 ```
 
-### 4.8 SIMILAR_ADDRESS Edges (Fuzzy Match)
+### 4.10 SIMILAR_ADDRESS Edges (Fuzzy Match)
 
 ```sql
 -- Pre-compute address embeddings
@@ -468,8 +630,9 @@ ORDER BY CASE strength WHEN 'Strong' THEN 0 ELSE 1 END;
 | SAME_PHONE | Strong | Phone numbers are unique identifiers |
 | SAME_EMAIL | Strong | Email addresses are unique identifiers |
 | SAME_ADDRESS | Strong | Addresses can be shared by related entities |
-| SAME_ENTITY_NAME | Strong | Entity names are unique identifiers |
+| SAME_BUSINESS_NAME | Strong | Business names are identifiers for company, merchant, or sole-proprietor subjects (per ADR-0002) |
 | SAME_PERSON_NAME | Weak | Person names can be similar without being same person |
+| SAME_TRADE_PARTY_NAME | Weak | Trade-party names belong to transaction context, not default shared-attribute association (per ADR-0002) |
 | SAME_STORE_URL | Weak | Store URLs can be shared by related businesses |
 | SAME_IP | Weak | IPs can be shared (office, VPN, etc.) |
 
@@ -516,7 +679,7 @@ ORDER BY CASE strength WHEN 'Strong' THEN 0 ELSE 1 END;
 
 ### Phase 3: Additional Edges (Week 3)
 - [x] Implement SAME_ADDRESS edges
-- [x] Implement SAME_NAME edges
+- [x] Implement SAME_BUSINESS_NAME, SAME_PERSON_NAME, and SAME_TRADE_PARTY_NAME edges
 - [x] Implement SAME_STORE_URL edges
 - [x] Implement SAME_IP edges
 

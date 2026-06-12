@@ -92,6 +92,34 @@ _Avoid_: Single page, single skill
 An observed fact, pattern, rule hit, report, or anomaly that supports suspicion within a risk case.
 _Avoid_: Intake source, risk type
 
+**Confirmed Risk Registry**:
+A curated registry of confirmed risk entries for business subjects such as customers, companies, accounts, contact points, or other future risk subjects. It is used as confirmed risk material for investigation, validation, evaluation, and future monitoring use cases, not as a live operational blacklist by itself.
+_Avoid_: Ground truth dataset, blacklist, risk signal feed, evidence feature store
+
+**Confirmed Risk Entry**:
+A confirmed risk statement attached to a business subject, such as a customer being a bad customer. It records what is known to be true about the subject for reference use.
+_Avoid_: Risk signal, model score, inferred label
+
+**Risk Subject**:
+A business subject that can receive a confirmed risk entry, such as a customer, company, account, phone, email, or IP.
+_Avoid_: Entity, graph node, transaction counterparty
+
+**Company**:
+A resolved business subject representing a company with a stable customer or identity record.
+_Avoid_: Company name
+
+**Company Name**:
+A name string that may identify, alias, or resemble a company but is not itself a resolved company subject.
+_Avoid_: Company
+
+**Business Name Relationship**:
+A shared-attribute relationship inferred because two subjects share a company, merchant, sole-proprietor, or other business-name string. It is evidence of possible association, not proof that the subjects are the same business.
+_Avoid_: Same company, same entity, entity name relationship
+
+**Bad Customer**:
+A customer that has been confirmed as bad in the Confirmed Risk Registry.
+_Avoid_: Suspected customer, high-risk neighbor, rule hit
+
 **Investigation**:
 The work of collecting, connecting, and interpreting evidence for a risk case before a disposition outcome is confirmed.
 _Avoid_: Disposition, rule execution

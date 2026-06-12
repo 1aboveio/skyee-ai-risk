@@ -1,0 +1,19 @@
+{
+  "total_records": 192,
+  "unique_subject_ids": 192,
+  "duplicates_removed": 0,
+  "missing_subject_ids": [],
+  "source_lineage": {
+    "坏人特征库名单_截止20260605.xlsx": 189,
+    "欺诈客户特征（3个代码）.xlsx": 3
+  },
+  "customer_type_distribution": {
+    "未知": 132,
+    "欺诈客户": 35,
+    "银行拉黑": 20,
+    "外部风险，雅虎乐天，未透露详情": 2,
+    "侵权": 1,
+    "外部风险，COD，未透露详情": 1,
+    "欺诈客户；银行拉黑": 1
+  }
+}
