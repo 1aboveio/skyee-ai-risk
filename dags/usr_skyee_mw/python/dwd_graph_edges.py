@@ -1,8 +1,15 @@
-"""Generate dwd_graph_edges from STG tables.
+"""Generate graph edge evidence and canonical edges from STG tables.
 
 The job intentionally processes one graph attribute at a time. Some source
 tables contain millions of rows, so each attribute is normalized, deduped by
 customer/key, hot-key filtered, paired, and written before the next attribute.
+
+Two tables are maintained:
+  * dwd_graph_edge_monthly: idempotent monthly edge evidence, partitioned by
+    edge_type, edge_source, edge_field, and observed_month for reverse backfill
+    overwrite without clobbering other specs.
+  * dwd_graph_edges: canonical edge snapshot, partitioned only by edge_type so
+    first_seen can move backward without moving the Hudi record partition.
 
 Usage:
     python dwd_graph_edges.py --spark-remote <spark_connect_url> [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--bulk/--per-day] [--max-degree 100]
@@ -21,6 +28,7 @@ from pyspark.sql.functions import (
     concat,
     concat_ws,
     countDistinct,
+    current_timestamp,
     date_format,
     first,
     greatest,
@@ -49,18 +57,18 @@ MAX_DEGREE = int(os.getenv("GRAPH_MAX_DEGREE", "100"))
 
 
 class DwdGraphEdgesEtl(Etl):
-    """Connections between customers based on shared attributes."""
+    """Monthly edge evidence from shared customer attributes."""
 
     src_db = None
     src_tbl = None
     dst_db = "usr_skyee_mw"
-    dst_tbl = "dwd_graph_edges"
-    id = "edge_id"
-    ts = "last_seen"
-    par_cols = ["edge_type", "edge_month"]
-    path = "/user/hive/warehouse/usr_skyee_mw.db/dwd_graph_edges"
+    dst_tbl = "dwd_graph_edge_monthly"
+    id = "edge_month_id"
+    ts = "etl_ts"
+    par_cols = ["edge_type", "edge_source", "edge_field", "observed_month"]
+    path = "/user/hive/warehouse/usr_skyee_mw.db/dwd_graph_edge_monthly"
     table_type = "hudi_table"
-    hudi_mode = "upsert"
+    hudi_mode = "insert_overwrite"
     concurrency_mode = "SINGLE_WRITER"
 
     def __init__(self, *args, max_degree: int = MAX_DEGREE, **kwargs):
@@ -152,6 +160,9 @@ class DwdGraphEdgesEtl(Etl):
                 spark_min("create_time").alias("create_time"),
                 spark_max("create_time").alias("_latest_create_time"),
                 spark_max("lst_upd_time").alias("lst_upd_time"),
+                spark_max(coalesce(col("create_time"), col("lst_upd_time"))).alias(
+                    "_change_time"
+                ),
                 spark_sum(lit(1)).cast("int").alias("_record_count"),
             )
         )
@@ -172,6 +183,10 @@ class DwdGraphEdgesEtl(Etl):
             col("a.edge_value"),
             least(col("a.create_time"), col("b.create_time")).alias("first_seen"),
             greatest(col("a.lst_upd_time"), col("b.lst_upd_time")).alias("last_seen"),
+            greatest(
+                col("a._change_time"),
+                col("b._change_time"),
+            ).alias("observed_time"),
             lit(edge_type).alias("edge_type"),
             lit(edge_source).alias("edge_source"),
             lit(strength).alias("strength"),
@@ -186,15 +201,15 @@ class DwdGraphEdgesEtl(Etl):
             return df_a.alias("a").join(df_b.alias("b"), on=join_cond, how="inner").select(*select_cols)
 
         if self.start_date:
-            new = attrs.filter(col("_latest_create_time") >= self.start_date)
+            new = attrs.filter(col("_change_time") >= self.start_date)
             if self.end_date:
-                new = new.filter(col("_latest_create_time") < self.end_date)
-            old = attrs.filter(col("_latest_create_time") < self.start_date)
+                new = new.filter(col("_change_time") < self.end_date)
+            old = attrs.filter(col("_change_time") < self.start_date)
             return _build(new, attrs).unionByName(_build(old, new))
         else:
             return _build(attrs, attrs)
 
-    def _finish_edges(self, edges: DataFrame) -> DataFrame:
+    def _finish_monthly_edges(self, edges: DataFrame, edge_field: str) -> DataFrame:
         edges = edges.withColumn(
             "edge_id",
             xxhash64(
@@ -209,8 +224,15 @@ class DwdGraphEdgesEtl(Etl):
             edges
             .withColumn("record_count", col("record_count").cast("int"))
         )
+        observed_ts = coalesce(col("observed_time"), col("first_seen"), col("last_seen"))
         edges = (
-            edges.groupBy(
+            edges.withColumn(
+                "observed_month",
+                when(observed_ts.isNull(), lit("unknown")).otherwise(
+                    date_format(observed_ts, "yyyy-MM")
+                ),
+            )
+            .groupBy(
                 "edge_id",
                 "source_cust_id",
                 "target_cust_id",
@@ -218,33 +240,45 @@ class DwdGraphEdgesEtl(Etl):
                 "edge_value",
                 "edge_source",
                 "strength",
+                "observed_month",
             )
             .agg(
                 spark_min("first_seen").alias("first_seen"),
                 spark_max("last_seen").alias("last_seen"),
                 spark_sum("record_count").cast("int").alias("record_count"),
+                spark_min(observed_ts).alias("_observed_time"),
             )
         )
-        event_ts = coalesce(col("first_seen"), col("last_seen"))
+        event_ts = coalesce(col("_observed_time"), col("first_seen"), col("last_seen"))
         return (
             edges.withColumn("dt", event_ts.cast("date"))
+            .withColumn("etl_ts", current_timestamp())
+            .withColumn("edge_field", lit(edge_field))
             .withColumn(
-                "edge_month",
-                when(event_ts.isNull(), lit("unknown")).otherwise(date_format(event_ts, "yyyy-MM")),
+                "edge_month_id",
+                xxhash64(
+                    col("edge_id").cast("string"),
+                    col("edge_source"),
+                    col("edge_field"),
+                    col("observed_month"),
+                ),
             )
             .select(
-            "edge_id",
-            "source_cust_id",
-            "target_cust_id",
-            "edge_value",
-            "edge_source",
-            "strength",
-            "first_seen",
-            "last_seen",
-            "record_count",
-            "dt",
-            "edge_type",
-            "edge_month",
+                "edge_month_id",
+                "edge_id",
+                "source_cust_id",
+                "target_cust_id",
+                "edge_value",
+                "edge_source",
+                "strength",
+                "first_seen",
+                "last_seen",
+                "record_count",
+                "dt",
+                "etl_ts",
+                "edge_type",
+                "edge_field",
+                "observed_month",
             )
         )
 
@@ -279,7 +313,7 @@ class DwdGraphEdgesEtl(Etl):
         attrs = self._filter_hot_keys(attrs, self.max_degree)
 
         edges = self._generate_pairs(attrs, edge_type, edge_source, strength)
-        edges = self._finish_edges(edges)
+        edges = self._finish_monthly_edges(edges, src_label)
         self.load(edges)
         logger.info("Done %s/%s/%s", edge_type, edge_source, src_label)
 
@@ -396,10 +430,11 @@ class DwdGraphEdgesEtl(Etl):
             & col("cust_id").isNotNull()
             & (col("cust_id") != col("counter_party_id"))
         )
+        counterparty_change_time = coalesce(col("create_time"), col("lst_upd_time"))
         if self.start_date:
-            base = base.filter(col("create_time") >= self.start_date)
+            base = base.filter(counterparty_change_time >= self.start_date)
             if self.end_date:
-                base = base.filter(col("create_time") < self.end_date)
+                base = base.filter(counterparty_change_time < self.end_date)
 
         edges = base.select(
             least(col("cust_id"), col("counter_party_id")).cast("long").alias("source_cust_id"),
@@ -414,14 +449,70 @@ class DwdGraphEdgesEtl(Etl):
             ).alias("edge_value"),
             col("create_time").alias("first_seen"),
             col("lst_upd_time").alias("last_seen"),
+            counterparty_change_time.alias("observed_time"),
             lit("COUNTERPARTY").alias("edge_type"),
             lit("stg_pmp_pay_details").alias("edge_source"),
             lit("Strong").alias("strength"),
             lit(1).cast("int").alias("record_count"),
         )
-        edges = self._finish_edges(edges)
+        edges = self._finish_monthly_edges(edges, "counter_party_id")
         self.load(edges)
         logger.info("Done COUNTERPARTY/stg_pmp_pay_details")
+
+
+class DwdGraphEdgesSnapshotEtl(Etl):
+    """Canonical graph edge snapshot aggregated from monthly evidence."""
+
+    src_db = "usr_skyee_mw"
+    src_tbl = "dwd_graph_edge_monthly"
+    dst_db = "usr_skyee_mw"
+    dst_tbl = "dwd_graph_edges"
+    id = "edge_id"
+    ts = "etl_ts"
+    filter_by = None
+    par_cols = ["edge_type"]
+    path = "/user/hive/warehouse/usr_skyee_mw.db/dwd_graph_edges"
+    table_type = "hudi_table"
+    hudi_mode = "upsert"
+    concurrency_mode = "SINGLE_WRITER"
+
+    def extract(self, start_date: str = None, end_date: str = None) -> DataFrame:
+        return self.spark.table(f"{self.src_db}.{self.src_tbl}")
+
+    def transform(self, df: DataFrame) -> DataFrame:
+        edges = (
+            df.groupBy(
+                "edge_id",
+                "source_cust_id",
+                "target_cust_id",
+                "edge_type",
+                "edge_value",
+                "edge_source",
+                "strength",
+            )
+            .agg(
+                spark_min("first_seen").alias("first_seen"),
+                spark_max("last_seen").alias("last_seen"),
+                spark_sum("record_count").cast("int").alias("record_count"),
+            )
+        )
+        event_ts = coalesce(col("first_seen"), col("last_seen"))
+        return edges.withColumn("dt", event_ts.cast("date")).withColumn(
+            "etl_ts", current_timestamp()
+        ).select(
+            "edge_id",
+            "source_cust_id",
+            "target_cust_id",
+            "edge_value",
+            "edge_source",
+            "strength",
+            "first_seen",
+            "last_seen",
+            "record_count",
+            "dt",
+            "etl_ts",
+            "edge_type",
+        )
 
 
 def main(
@@ -442,6 +533,10 @@ def main(
     )
     etl.spark = spark
     etl()
+
+    snapshot = DwdGraphEdgesSnapshotEtl(start_date=start_date, end_date=end_date, bulk=bulk)
+    snapshot.spark = spark
+    snapshot()
     spark.stop()
 
 

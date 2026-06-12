@@ -29,7 +29,7 @@ INSERT OVERWRITE DIRECTORY '${HDFS_EXPORT_DIR}/edges'
 USING parquet
 SELECT
   edge_id, source_cust_id, target_cust_id, edge_type, edge_value,
-  edge_source, strength, first_seen, last_seen, record_count, dt, edge_month
+  edge_source, strength, first_seen, last_seen, record_count, dt
 FROM usr_skyee_mw.dwd_graph_edges
 "
 

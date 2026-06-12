@@ -55,7 +55,6 @@ EDGE_COLUMNS = [
     "last_seen",
     "record_count",
     "dt",
-    "edge_month",
 ]
 
 app = typer.Typer(help="DuckDB graph materialization and query helpers.")
@@ -117,8 +116,7 @@ def create_schema(con: duckdb.DuckDBPyConnection, replace: bool):
             first_seen TIMESTAMP,
             last_seen TIMESTAMP,
             record_count INTEGER,
-            dt DATE,
-            edge_month VARCHAR
+            dt DATE
         )
         """
     )
@@ -426,7 +424,7 @@ def sync_parquet(
         INSERT INTO graph_edges
         SELECT
             edge_id, source_cust_id, target_cust_id, edge_type, edge_value,
-            edge_source, strength, first_seen, last_seen, record_count, dt, edge_month
+            edge_source, strength, first_seen, last_seen, record_count, dt
         FROM read_parquet(?)
         """,
         [edges_path],
