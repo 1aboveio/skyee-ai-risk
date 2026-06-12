@@ -30,6 +30,7 @@ from pyspark.sql.functions import (
     regexp_replace,
     trim,
     upper,
+    when,
     xxhash64,
     min as spark_min,
     max as spark_max,
