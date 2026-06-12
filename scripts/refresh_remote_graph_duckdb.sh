@@ -19,9 +19,12 @@ INSERT OVERWRITE DIRECTORY '${HDFS_EXPORT_DIR}/nodes'
 USING parquet
 SELECT
   cust_id, cust_type, cust_name, en_name, risk_level, risk_score,
-  is_sanctioned, is_high_risk, cust_status, regist_country,
-  first_seen, last_seen, dt
-FROM usr_skyee_mw.dwd_graph_nodes
+  sanctioned AS is_sanctioned, high_risk AS is_high_risk,
+  cust_status, regist_country,
+  create_time AS first_seen,
+  lst_upd_time AS last_seen,
+  CAST(create_time AS DATE) AS dt
+FROM usr_skyee_mw.stg_cust_customer_info
 "
 
 spark-sql -e "

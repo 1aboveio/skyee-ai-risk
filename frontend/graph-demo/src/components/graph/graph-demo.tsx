@@ -80,15 +80,39 @@ function displayName(node: GraphNode): string {
   return node.custName ?? `Customer ${node.custId}`;
 }
 
+function compactId(value: string): string {
+  if (value.length <= 10) {
+    return value;
+  }
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
 async function fetchGraph(custId: string, includeWeak: boolean): Promise<GraphSearchResult> {
   const params = new URLSearchParams({
     custId,
     includeWeak: String(includeWeak),
-    limit: "50",
+    limit: "15",
   });
   const response = await fetch(`/api/graph/search?${params.toString()}`);
   if (!response.ok) {
-    throw new Error(`Search failed with status ${response.status}`);
+    try {
+      const body = (await response.json()) as {
+        error?: { message?: string; detail?: { node_degree?: number; max_degree?: number } };
+      };
+      const degree = body.error?.detail?.node_degree;
+      const maxDegree = body.error?.detail?.max_degree;
+      if (degree && maxDegree) {
+        throw new Error(
+          `${body.error?.message ?? "Graph query blocked"} Degree ${degree.toLocaleString()} exceeds interactive limit ${maxDegree.toLocaleString()}.`
+        );
+      }
+      throw new Error(body.error?.message ?? `Search failed with status ${response.status}`);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Search failed with status ${response.status}`);
+    }
   }
   return (await response.json()) as GraphSearchResult;
 }
@@ -188,7 +212,7 @@ function CustomerSearch({
                 size="sm"
                 onClick={() => onCustIdChange(id)}
               >
-                {id}
+                {compactId(id)}
               </Button>
             ))}
           </div>
@@ -203,7 +227,7 @@ function GraphCanvas({ result }: { result: GraphSearchResult }) {
   const height = 440;
   const center = { x: width / 2, y: height / 2 };
   const neighbors = result.nodes.filter((node) => node.custId !== result.custId);
-  const radius = Math.min(width, height) * 0.34;
+  const radius = Math.min(width, height) * 0.36;
   const positions = new Map<string, { x: number; y: number }>();
   positions.set(result.custId, center);
   neighbors.forEach((node, index) => {
@@ -257,13 +281,13 @@ function GraphCanvas({ result }: { result: GraphSearchResult }) {
               : isCenter
                 ? "var(--primary)"
                 : "var(--secondary)";
-          const labelY = point.y + (isCenter ? 66 : 48);
           return (
             <g key={node.custId}>
+              <title>{`${node.custId} ${displayName(node)} ${node.riskLevel}`}</title>
               <circle
                 cx={point.x}
                 cy={point.y}
-                r={isCenter ? 34 : 27}
+                r={isCenter ? 34 : 25}
                 fill={fill}
                 stroke="var(--background)"
                 strokeWidth="5"
@@ -278,22 +302,6 @@ function GraphCanvas({ result }: { result: GraphSearchResult }) {
                 )}
               >
                 {node.custId.slice(-4)}
-              </text>
-              <text
-                x={point.x}
-                y={labelY}
-                textAnchor="middle"
-                className="fill-foreground text-[12px] font-medium"
-              >
-                {displayName(node).slice(0, 24)}
-              </text>
-              <text
-                x={point.x}
-                y={labelY + 16}
-                textAnchor="middle"
-                className="fill-muted-foreground text-[11px]"
-              >
-                {node.riskLevel}
               </text>
             </g>
           );

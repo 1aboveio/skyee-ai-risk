@@ -24,11 +24,46 @@ type ServiceHighRisk = {
   cust_id: number | string;
 };
 
+type ServiceErrorDetail =
+  | string
+  | {
+      code?: string;
+      message?: string;
+      cust_id?: number | string;
+      node_degree?: number;
+      max_degree?: number;
+    };
+
+export class GraphServiceError extends Error {
+  status: number;
+  detail: ServiceErrorDetail | null;
+
+  constructor(status: number, detail: ServiceErrorDetail | null) {
+    const message =
+      typeof detail === "object" && detail?.message
+        ? detail.message
+        : `Graph query service returned ${status}`;
+    super(message);
+    this.name = "GraphServiceError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 function toBoolean(value: ServiceNeighbor["is_high_risk"]): boolean {
   return value === true || value === "Y" || value === "true" || value === "1";
 }
 
 function riskLevel(value: string | null | undefined): GraphNode["riskLevel"] {
+  if (value === "HIGH_RISK") {
+    return "HIGH";
+  }
+  if (value === "MEDIUM_RISK") {
+    return "MEDIUM";
+  }
+  if (value === "LOW_RISK") {
+    return "LOW";
+  }
   if (
     value === "HIGH" ||
     value === "MEDIUM_HIGH" ||
@@ -47,7 +82,14 @@ function strength(value: string | null | undefined): GraphEdge["strength"] {
 async function serviceGet<T>(baseUrl: string, path: string): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, { cache: "no-store" });
   if (!response.ok) {
-    throw new Error(`Graph query service returned ${response.status}`);
+    let detail: ServiceErrorDetail | null = null;
+    try {
+      const body = (await response.json()) as { detail?: ServiceErrorDetail };
+      detail = body.detail ?? null;
+    } catch {
+      detail = null;
+    }
+    throw new GraphServiceError(response.status, detail);
   }
   return (await response.json()) as T;
 }
@@ -130,21 +172,16 @@ export async function searchCustomerGraph(
     return getMockGraph(input.custId, input.includeWeak);
   }
 
-  try {
-    const params = new URLSearchParams({ limit: String(input.limit) });
-    const [neighbors, highRisk] = await Promise.all([
-      serviceGet<ServiceNeighbor[]>(
-        baseUrl,
-        `/neighbors/${encodeURIComponent(input.custId)}?${params.toString()}`
-      ),
-      serviceGet<ServiceHighRisk[]>(
-        baseUrl,
-        `/high-risk/${encodeURIComponent(input.custId)}?${params.toString()}`
-      ),
-    ]);
-    return normalizeServiceResult(input, neighbors, highRisk);
-  } catch (error) {
-    console.error(error);
-    return getMockGraph(input.custId, input.includeWeak);
-  }
+  const params = new URLSearchParams({ limit: String(input.limit) });
+  const [neighbors, highRisk] = await Promise.all([
+    serviceGet<ServiceNeighbor[]>(
+      baseUrl,
+      `/neighbors/${encodeURIComponent(input.custId)}?${params.toString()}`
+    ),
+    serviceGet<ServiceHighRisk[]>(
+      baseUrl,
+      `/high-risk/${encodeURIComponent(input.custId)}?${params.toString()}`
+    ),
+  ]);
+  return normalizeServiceResult(input, neighbors, highRisk);
 }

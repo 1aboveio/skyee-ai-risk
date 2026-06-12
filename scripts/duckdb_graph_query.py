@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Optional
 
 import duckdb
-import prestodb
 import typer
 
 
@@ -61,6 +60,8 @@ app = typer.Typer(help="DuckDB graph materialization and query helpers.")
 
 
 def presto_connection():
+    import prestodb
+
     return prestodb.dbapi.connect(
         host=PRESTO_HOST,
         port=PRESTO_PORT,
@@ -203,6 +204,7 @@ def sync(
     end_date: Optional[str] = typer.Option(None, "--end-date"),
     batch_size: int = typer.Option(50000, "--batch-size"),
     replace: bool = typer.Option(True, "--replace/--append"),
+    build_indexes: bool = typer.Option(True, "--build-indexes/--no-build-indexes"),
 ):
     """Copy graph tables from Presto/Hudi into a local DuckDB file."""
     con = duckdb_connection(db_path)
@@ -217,8 +219,11 @@ def sync(
 
     load_from_presto(con, "dwd_graph_nodes", NODE_COLUMNS, None, batch_size)
     load_from_presto(con, "dwd_graph_edges", EDGE_COLUMNS, edge_where, batch_size)
+    typer.echo("refreshing node degrees", err=True)
     refresh_node_degrees(con)
-    create_indexes(con)
+    if build_indexes:
+        typer.echo("creating lookup indexes", err=True)
+        create_indexes(con)
 
     counts = rows_as_dicts(
         con,
@@ -404,10 +409,12 @@ def sync_parquet(
     edges_path: str = typer.Option(..., "--edges-path"),
     db_path: str = typer.Option(DEFAULT_DB_PATH, "--db-path"),
     replace: bool = typer.Option(True, "--replace/--append"),
+    build_indexes: bool = typer.Option(True, "--build-indexes/--no-build-indexes"),
 ):
     """Build the local DuckDB graph database from local Parquet snapshots."""
     con = duckdb_connection(db_path)
     create_schema(con, replace=replace)
+    typer.echo("loading graph_nodes from parquet", err=True)
     con.execute(
         """
         INSERT INTO graph_nodes
@@ -419,6 +426,7 @@ def sync_parquet(
         """,
         [nodes_path],
     )
+    typer.echo("loading graph_edges from parquet", err=True)
     con.execute(
         """
         INSERT INTO graph_edges
@@ -429,8 +437,11 @@ def sync_parquet(
         """,
         [edges_path],
     )
+    typer.echo("refreshing node degrees", err=True)
     refresh_node_degrees(con)
-    create_indexes(con)
+    if build_indexes:
+        typer.echo("creating lookup indexes", err=True)
+        create_indexes(con)
     counts = rows_as_dicts(
         con,
         """

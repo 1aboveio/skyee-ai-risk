@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Query
 
 DEFAULT_DB_PATH = "data/skyee_graph.duckdb"
 GRAPH_DUCKDB_PATH = os.getenv("GRAPH_DUCKDB_PATH", DEFAULT_DB_PATH)
+GRAPH_MAX_QUERY_DEGREE = int(os.getenv("GRAPH_MAX_QUERY_DEGREE", "1000"))
 
 app = FastAPI(title="Skyee Customer Graph Query Service")
 
@@ -35,9 +36,45 @@ def query(sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         con.close()
 
 
+def node_degree(cust_id: int) -> int:
+    rows = query(
+        """
+        SELECT COALESCE(node_degree, 0) AS node_degree
+        FROM graph_node_degrees
+        WHERE cust_id = ?
+        """,
+        [cust_id],
+    )
+    if not rows:
+        return 0
+    return int(rows[0]["node_degree"] or 0)
+
+
+def assert_expandable(cust_id: int) -> int:
+    degree = node_degree(cust_id)
+    if degree > GRAPH_MAX_QUERY_DEGREE:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "NODE_DEGREE_TOO_HIGH",
+                "message": (
+                    "Customer has too many graph neighbors for interactive expansion."
+                ),
+                "cust_id": cust_id,
+                "node_degree": degree,
+                "max_degree": GRAPH_MAX_QUERY_DEGREE,
+            },
+        )
+    return degree
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "db_path": GRAPH_DUCKDB_PATH}
+    return {
+        "status": "ok",
+        "db_path": GRAPH_DUCKDB_PATH,
+        "max_query_degree": GRAPH_MAX_QUERY_DEGREE,
+    }
 
 
 @app.get("/stats")
@@ -63,6 +100,7 @@ def stats():
 
 @app.get("/neighbors/{cust_id}")
 def neighbors(cust_id: int, limit: int = Query(50, ge=1, le=500)):
+    assert_expandable(cust_id)
     return query(
         """
         WITH incident_edges AS (
@@ -76,16 +114,24 @@ def neighbors(cust_id: int, limit: int = Query(50, ge=1, le=500)):
         )
         SELECT
             e.neighbor_cust_id,
+            e.edge_id,
+            e.source_cust_id,
+            e.target_cust_id,
             n.cust_name,
             n.risk_level,
             n.is_high_risk,
+            n.is_sanctioned,
+            COALESCE(d.node_degree, 0) AS node_degree,
             e.edge_type,
+            e.edge_source,
             e.strength,
             e.edge_value,
             e.record_count,
+            e.first_seen,
             e.last_seen
         FROM incident_edges e
         LEFT JOIN graph_nodes n ON n.cust_id = e.neighbor_cust_id
+        LEFT JOIN graph_node_degrees d ON d.cust_id = e.neighbor_cust_id
         ORDER BY CASE e.strength WHEN 'Strong' THEN 0 ELSE 1 END, e.last_seen DESC
         LIMIT ?
         """,
@@ -95,6 +141,7 @@ def neighbors(cust_id: int, limit: int = Query(50, ge=1, le=500)):
 
 @app.get("/high-risk/{cust_id}")
 def high_risk(cust_id: int, limit: int = Query(50, ge=1, le=500)):
+    assert_expandable(cust_id)
     return query(
         """
         WITH incident_edges AS (
@@ -149,6 +196,8 @@ def path(
     max_depth: int = Query(4, ge=1, le=6),
     limit: int = Query(10, ge=1, le=100),
 ):
+    assert_expandable(source_cust_id)
+    assert_expandable(target_cust_id)
     return query(
         """
         WITH RECURSIVE undirected AS (

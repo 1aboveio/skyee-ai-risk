@@ -1,12 +1,12 @@
 import type { GraphSearchResult } from "./schema";
 
 export const demoCustomers = [
-  "1000321",
-  "1000834",
-  "1001410",
-  "1002097",
-  "1003772",
-  "1004188",
+  "1017587943291126",
+  "1149050613598822408",
+  "1256596782700343303",
+  "101192",
+  "642677",
+  "1017492268421111",
 ];
 
 const result: GraphSearchResult = {
