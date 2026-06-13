@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -52,7 +52,7 @@ export function ReviewHistory({ custId, initialSnapshots }: ReviewHistoryProps) 
   const [error, setError] = useState<string | null>(null);
 
   // Fetch both snapshots and decisions
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -75,7 +75,7 @@ export function ReviewHistory({ custId, initialSnapshots }: ReviewHistoryProps) 
     } finally {
       setLoading(false);
     }
-  };
+  }, [custId]);
 
   // Fetch on mount if no initial data
   useEffect(() => {
@@ -97,8 +97,7 @@ export function ReviewHistory({ custId, initialSnapshots }: ReviewHistoryProps) 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [custId, initialSnapshots]);
+  }, [custId, initialSnapshots, fetchData]);
 
   // Refresh when a snapshot or decision is made
   useEffect(() => {
@@ -114,8 +113,7 @@ export function ReviewHistory({ custId, initialSnapshots }: ReviewHistoryProps) 
       window.removeEventListener("snapshot-saved", handleRefresh);
       window.removeEventListener("decision-made", handleRefresh);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [custId]);
+  }, [custId, fetchData]);
 
   // Combine and sort items
   const items: HistoryItem[] = [

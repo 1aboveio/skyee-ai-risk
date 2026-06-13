@@ -1,8 +1,7 @@
 import {
-  GRAPH_SESSION_COOKIE,
-  parseSessionValue,
-  type GraphIdentitySession,
-} from "@/lib/auth/identity-session";
+  getSessionFromRequest,
+  unauthorizedResponse,
+} from "@/lib/auth/get-session-from-request";
 import {
   getOrCreateReviewSession,
   saveSnapshot,
@@ -20,32 +19,13 @@ const decisionRequestSchema = z.object({
   evidenceData: z.record(z.string(), z.unknown()).optional(),
 });
 
-function getSessionFromRequest(request: Request): GraphIdentitySession | null {
-  const cookieHeader = request.headers.get("cookie") ?? "";
-  const sessionCookie = cookieHeader
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${GRAPH_SESSION_COOKIE}=`))
-    ?.slice(GRAPH_SESSION_COOKIE.length + 1);
-  return parseSessionValue(
-    sessionCookie ? decodeURIComponent(sessionCookie) : undefined
-  );
-}
-
-function unauthorized(message: string) {
-  return Response.json(
-    { error: { code: "UNAUTHENTICATED", message } },
-    { status: 401 }
-  );
-}
-
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ custId: string }> }
 ): Promise<Response> {
   const session = getSessionFromRequest(request);
   if (!session) {
-    return unauthorized(
+    return unauthorizedResponse(
       "Sign in with Identity before submitting decisions."
     );
   }
@@ -144,7 +124,7 @@ export async function GET(
 ): Promise<Response> {
   const session = getSessionFromRequest(request);
   if (!session) {
-    return unauthorized(
+    return unauthorizedResponse(
       "Sign in with Identity before viewing decisions."
     );
   }
