@@ -64,7 +64,6 @@ class Etl(ABC):
     path = None
     repartition = []
     precombine_fallbacks = {"LST_UPD_TIME": "CREATE_TIME"}
-    precombine_field = "dw_precombine_time"
     url: str = None
     concurrency_mode: Literal["SINGLE_WRITER", "OPTIMISTIC_CONCURRENCY_CONTROL"] = (
         "SINGLE_WRITER"
@@ -224,18 +223,13 @@ class Etl(ABC):
             )
             operation = "bulk_insert"
 
-        hudi_precombine_field = self.ts
         fallback_field = self.precombine_fallbacks.get(self.ts)
         if fallback_field and self.ts in df.columns and fallback_field in df.columns:
             logger.info(
-                f"Using {self.ts} with fallback to {fallback_field} "
-                f"as Hudi precombine field {self.precombine_field}"
+                f"Filling null {self.ts} values from {fallback_field} "
+                "before Hudi write"
             )
-            hudi_precombine_field = self.precombine_field
-            df = df.withColumn(
-                hudi_precombine_field,
-                coalesce(col(self.ts), col(fallback_field)),
-            )
+            df = df.withColumn(self.ts, coalesce(col(self.ts), col(fallback_field)))
 
         hudi_options = {
             "hoodie.table.name": f"{self.dst_db}.{self.dst_tbl}",
@@ -243,7 +237,7 @@ class Etl(ABC):
             "hoodie.datasource.write.recordkey.field": self.id,
             "hoodie.datasource.write.partitionpath.field": ",".join(self.par_cols),
             "hoodie.datasource.write.keygenerator.class": "org.apache.hudi.keygen.ComplexKeyGenerator",
-            "hoodie.datasource.write.precombine.field": hudi_precombine_field,
+            "hoodie.datasource.write.precombine.field": self.ts,
             "hoodie.datasource.write.operation": f"{operation}",
             "hoodie.datasource.write.reconcile.schema": True,
             "hoodie.schema.on.read.enable": True,
