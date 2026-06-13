@@ -73,6 +73,43 @@ export async function getReviewHistory(custId: string) {
   return sessions;
 }
 
+export async function saveDecision(
+  sessionId: string,
+  decisionType: string,
+  note: string,
+  snapshotId?: string
+) {
+  return prisma.reviewDecision.create({
+    data: {
+      sessionId,
+      decisionType,
+      note,
+      snapshotId: snapshotId ?? null,
+    },
+  });
+}
+
+export async function getCustomerDecisions(custId: string) {
+  const sessions = await prisma.reviewSession.findMany({
+    where: { custId },
+    include: {
+      decisions: {
+        orderBy: { createdAt: "desc" },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return sessions.flatMap((s) =>
+    s.decisions.map((d) => ({
+      ...d,
+      sessionId: s.id,
+      contextType: s.contextType,
+      reviewerEmail: s.reviewerEmail,
+    }))
+  );
+}
+
 export async function getSessionSnapshots(sessionId: string) {
   return prisma.reviewSnapshot.findMany({
     where: { sessionId },

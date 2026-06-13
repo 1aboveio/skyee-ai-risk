@@ -4,6 +4,8 @@ import { getReviewHistory } from "@/lib/review/store";
 import { WorkbenchPanel } from "@/components/review/workbench-panel";
 import { ReviewHistory } from "@/components/review/review-history";
 import { SaveSnapshotButton } from "@/components/review/save-snapshot-button";
+import { DecisionPanel } from "@/components/review/decision-panel";
+import { getReviewContext } from "@/lib/review/context";
 import { CustomerSearchInput } from "@/components/review/customer-search-input";
 import { CustomerProfilePanel } from "@/components/review/customer-profile-panel";
 import { RiskSignalsPanel } from "@/components/review/risk-signals-panel";
@@ -40,6 +42,10 @@ export default async function ReviewWorkbenchPage({
   }
 
   const activeSession = reviewHistory?.find((s) => s.status === "ACTIVE");
+
+  // Review context: use session context type or default to AD_HOC
+  const reviewContextType = activeSession?.contextType ?? "AD_HOC";
+  const reviewContext = getReviewContext(reviewContextType);
 
   // Flatten snapshots for initial data (serialize Dates to strings)
   const initialSnapshots = reviewHistory
@@ -122,6 +128,13 @@ export default async function ReviewWorkbenchPage({
         </div>
         <SaveSnapshotButton custId={custId} evidenceData={currentEvidence} />
       </div>
+
+      {/* Decision Panel - shown below header for all review contexts */}
+      <DecisionPanel
+        custId={custId}
+        reviewContext={reviewContext}
+        evidenceData={currentEvidence}
+      />
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
