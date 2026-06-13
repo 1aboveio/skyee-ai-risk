@@ -240,6 +240,9 @@ Identity selection rule:
 | **Amount** | | | |
 | txn_amount | decimal(15,2) | pd.PAY_TXN_AMT | Transaction amount |
 | txn_currency | varchar(10) | pd.CURRENCY_CD | Transaction currency |
+| txn_amount_cny | decimal(20,6) | pd.PAY_TXN_AMT_CNY / co.COLL_TXN_CNY_AMT | Source-provided CNY amount |
+| use_amount | decimal(20,6) | COALESCE(txn_amount_cny, txn_amount * fx_rate) | Risk-ready CNY amount |
+| fx_rate | decimal(20,8) | dim.dim_forex | Transaction-currency-to-CNY rate by transaction date |
 | settlement_amount | decimal(15,2) | po.SETTLE_AMT | Settlement amount |
 | settlement_currency | varchar(10) | po.SETTLE_CURR_CD | Settlement currency |
 | commission_amount | decimal(15,2) | pd.COMMISSION_AMT | Commission |

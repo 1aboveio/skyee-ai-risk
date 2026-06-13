@@ -17,6 +17,7 @@ from pyspark.sql.functions import (
     concat,
     greatest,
     lit,
+    to_date,
     trim,
     when,
 )
@@ -63,7 +64,7 @@ class DwdTransactionEtl(Etl):
         self.src_pay_order = self.spark.table(f"{db}.stg_pmp_pay_order")
         self.src_pay_details = self.spark.table(f"{db}.stg_pmp_pay_details")
         self.src_coll_order = self.spark.table(f"{db}.stg_pmp_coll_order")
-        return self._pay_rows().unionByName(self._collection_rows())
+        return self._with_forex(self._pay_rows().unionByName(self._collection_rows()))
 
     @staticmethod
     def _is_active(alias: str) -> Column:
@@ -94,6 +95,69 @@ class DwdTransactionEtl(Etl):
     @classmethod
     def _flag(cls, condition: Column) -> Column:
         return when(condition, lit("Y")).otherwise(lit("N"))
+
+    def _with_forex(self, df: DataFrame) -> DataFrame:
+        """Add transaction-currency-to-CNY FX rate and risk-ready CNY amount."""
+        forex = (
+            self.spark.table("dim.dim_forex")
+            .filter(col("from") == lit("USD"))
+            .select(
+                col("date").cast("date").alias("__fx_date"),
+                col("to").alias("__fx_currency"),
+                col("exchange_rate")
+                .cast(DecimalType(20, 8))
+                .alias("__usd_to_currency_rate"),
+            )
+        )
+        currency_fx = (
+            forex.select(
+                col("__fx_date").alias("__currency_fx_date"),
+                col("__fx_currency").alias("__currency_fx_currency"),
+                col("__usd_to_currency_rate"),
+            )
+            .alias("currency_fx")
+        )
+        cny_fx = (
+            forex.filter(col("__fx_currency") == lit("CNY"))
+            .select(
+                col("__fx_date").alias("__cny_fx_date"),
+                col("__usd_to_currency_rate").alias("__usd_to_cny_rate"),
+            )
+            .alias("cny_fx")
+        )
+
+        df_with_date = df.withColumn("__fx_date", coalesce(to_date(col("txn_time")), col("dt")))
+        joined = (
+            df_with_date.join(
+                currency_fx,
+                (col("__fx_date") == col("currency_fx.__currency_fx_date"))
+                & (col("txn_currency") == col("currency_fx.__currency_fx_currency")),
+                "left",
+            )
+            .join(cny_fx, col("__fx_date") == col("cny_fx.__cny_fx_date"), "left")
+        )
+
+        fx_rate = (
+            when(col("txn_currency") == lit("CNY"), lit(1))
+            .when(col("__usd_to_currency_rate").isNull(), lit(None))
+            .otherwise(col("__usd_to_cny_rate") / col("__usd_to_currency_rate"))
+            .cast(DecimalType(20, 8))
+        )
+
+        enriched = joined.withColumn("fx_rate", fx_rate).withColumn(
+            "use_amount",
+            coalesce(
+                col("txn_amount_cny"),
+                (col("txn_amount") * col("fx_rate")).cast(DecimalType(20, 6)),
+            ).cast(DecimalType(20, 6)),
+        )
+
+        ordered_columns = []
+        for name in df.columns:
+            ordered_columns.append(name)
+            if name == "txn_amount_cny":
+                ordered_columns.extend(["use_amount", "fx_rate"])
+        return enriched.select(*ordered_columns)
 
     def _pay_rows(self) -> DataFrame:
         po = self.src_pay_order.alias("po")
