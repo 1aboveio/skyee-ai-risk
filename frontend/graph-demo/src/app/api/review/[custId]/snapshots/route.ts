@@ -4,7 +4,7 @@ import { z } from "zod/v4";
 
 const snapshotRequestSchema = z.object({
   note: z.string().optional(),
-  evidenceData: z.record(z.unknown()),
+  evidenceData: z.record(z.string(), z.unknown()),
 });
 
 export async function POST(

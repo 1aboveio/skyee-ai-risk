@@ -75,11 +75,9 @@ export function SaveSnapshotButton({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Save className="mr-2 h-4 w-4" />
-          Save Snapshot
-        </Button>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>
+        <Save className="mr-2 h-4 w-4" />
+        Save Snapshot
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
@@ -96,7 +94,7 @@ export function SaveSnapshotButton({
               id="note"
               placeholder="Add context about this snapshot..."
               value={note}
-              onChange={(e) => setNote(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value)}
               rows={3}
             />
           </div>

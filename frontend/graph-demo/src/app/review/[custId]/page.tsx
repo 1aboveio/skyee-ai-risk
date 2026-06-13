@@ -21,7 +21,7 @@ export default async function ReviewWorkbenchPage({
   const { custId } = await params;
 
   // Fetch review history
-  let reviewHistory;
+  let reviewHistory: Awaited<ReturnType<typeof getReviewHistory>> | undefined;
   let historyError: string | null = null;
   try {
     reviewHistory = await getReviewHistory(custId);

@@ -38,13 +38,19 @@ export async function saveSnapshot(
   evidenceData: Record<string, unknown>,
   fxRatesUsed?: Record<string, unknown>
 ) {
+  // Cast to Prisma-compatible JSON types
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const jsonData: any = evidenceData;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fxData: any = fxRatesUsed ?? undefined;
+
   return prisma.reviewSnapshot.create({
     data: {
       sessionId,
       snapshotType,
       note,
-      evidenceData,
-      fxRatesUsed: fxRatesUsed ?? undefined,
+      evidenceData: jsonData,
+      fxRatesUsed: fxData,
     },
   });
 }
