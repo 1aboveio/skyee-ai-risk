@@ -90,6 +90,30 @@ with DAG(
         verbose=True,
     )
 
+    dwd_customer = SparkSubmitOperator(
+        task_id="dwd_customer",
+        application=f"{SCRIPTS_PATH}/dwd_customer.py",
+        conn_id="spark_default",
+        application_args=[
+            "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
+            "--bulk",
+        ],
+        verbose=True,
+    )
+
+    dwd_transaction = SparkSubmitOperator(
+        task_id="dwd_transaction",
+        application=f"{SCRIPTS_PATH}/dwd_transaction.py",
+        conn_id="spark_default",
+        application_args=[
+            "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
+            "--start-date", "{{ ds }}",
+            "--end-date", "{{ next_ds }}",
+            "--bulk",
+        ],
+        verbose=True,
+    )
+
     graph_nodes = SparkSubmitOperator(
         task_id="dwd_graph_nodes",
         application=f"{SCRIPTS_PATH}/dwd_graph_nodes.py",
@@ -101,4 +125,6 @@ with DAG(
         verbose=True,
     )
 
-    stg_tasks >> graph_edges >> graph_nodes >> end
+    stg_tasks >> graph_edges >> graph_nodes
+    stg_tasks >> dwd_customer >> dwd_transaction
+    [graph_nodes, dwd_transaction] >> end
