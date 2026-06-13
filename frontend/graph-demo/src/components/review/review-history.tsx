@@ -7,35 +7,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Clock, FileText, CheckCircle, XCircle } from "lucide-react";
 
-interface ReviewSnapshot {
+interface ReviewItem {
   id: string;
   sessionId: string;
-  snapshotType: string;
+  type: "snapshot" | "decision";
+  snapshotType?: string;
+  decisionType?: string;
   note: string | null;
   createdAt: string;
   contextType: string;
   reviewerEmail: string;
-}
-
-interface ReviewDecision {
-  id: string;
-  sessionId: string;
-  decisionType: string;
-  note: string;
-  createdAt: string;
-}
-
-interface ReviewSession {
-  id: string;
-  custId: string;
-  contextType: string;
-  reviewerId: string;
-  reviewerEmail: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  snapshots: ReviewSnapshot[];
-  decisions: ReviewDecision[];
 }
 
 interface ReviewHistoryProps {
@@ -43,7 +24,7 @@ interface ReviewHistoryProps {
 }
 
 export function ReviewHistory({ custId }: ReviewHistoryProps) {
-  const [sessions, setSessions] = useState<ReviewSession[]>([]);
+  const [items, setItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,29 +39,32 @@ export function ReviewHistory({ custId }: ReviewHistoryProps) {
           throw new Error("Failed to fetch review history");
         }
 
-        const snapshots = await response.json();
+        const snapshots = (await response.json()) as Array<{
+          id: string;
+          sessionId: string;
+          snapshotType: string;
+          note: string | null;
+          createdAt: string;
+          contextType: string;
+          reviewerEmail: string;
+        }>;
 
-        // Group snapshots by sessionId to reconstruct sessions
-        const sessionMap = new Map<string, ReviewSession>();
-        for (const snapshot of snapshots) {
-          if (!sessionMap.has(snapshot.sessionId)) {
-            sessionMap.set(snapshot.sessionId, {
-              id: snapshot.sessionId,
-              custId,
-              contextType: snapshot.contextType,
-              reviewerId: "",
-              reviewerEmail: snapshot.reviewerEmail,
-              status: "ACTIVE",
-              createdAt: snapshot.createdAt,
-              updatedAt: snapshot.createdAt,
-              snapshots: [],
-              decisions: [],
-            });
-          }
-          sessionMap.get(snapshot.sessionId)!.snapshots.push(snapshot);
-        }
+        const mapped: ReviewItem[] = snapshots.map((s) => ({
+          id: s.id,
+          sessionId: s.sessionId,
+          type: "snapshot",
+          snapshotType: s.snapshotType,
+          note: s.note,
+          createdAt: s.createdAt,
+          contextType: s.contextType,
+          reviewerEmail: s.reviewerEmail,
+        }));
 
-        setSessions(Array.from(sessionMap.values()));
+        mapped.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+        setItems(mapped);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
@@ -111,7 +95,7 @@ export function ReviewHistory({ custId }: ReviewHistoryProps) {
     );
   }
 
-  if (sessions.length === 0) {
+  if (items.length === 0) {
     return (
       <Alert>
         <FileText className="h-4 w-4" />
@@ -123,36 +107,9 @@ export function ReviewHistory({ custId }: ReviewHistoryProps) {
     );
   }
 
-  // Flatten all items for display
-  const allItems = sessions.flatMap((session) => [
-    ...session.snapshots.map((snapshot) => ({
-      id: snapshot.id,
-      type: "snapshot" as const,
-      snapshotType: snapshot.snapshotType,
-      note: snapshot.note,
-      createdAt: snapshot.createdAt,
-      contextType: session.contextType,
-      reviewerEmail: session.reviewerEmail,
-    })),
-    ...session.decisions.map((decision) => ({
-      id: decision.id,
-      type: "decision" as const,
-      decisionType: decision.decisionType,
-      note: decision.note,
-      createdAt: decision.createdAt,
-      contextType: session.contextType,
-      reviewerEmail: session.reviewerEmail,
-    })),
-  ]);
-
-  // Sort by createdAt descending
-  allItems.sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-
   return (
     <div className="space-y-3">
-      {allItems.map((item) => (
+      {items.map((item) => (
         <Card key={item.id} className="p-3">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">

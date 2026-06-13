@@ -1,5 +1,9 @@
-import { GRAPH_SESSION_COOKIE, parseSessionValue } from "@/lib/auth/identity-session";
-import { getOrCreateReviewSession, saveSnapshot } from "@/lib/review/store";
+import {
+  GRAPH_SESSION_COOKIE,
+  parseSessionValue,
+  type GraphIdentitySession,
+} from "@/lib/auth/identity-session";
+import { getOrCreateReviewSession, getReviewHistory, saveSnapshot } from "@/lib/review/store";
 import { z } from "zod/v4";
 
 const snapshotRequestSchema = z.object({
@@ -7,46 +11,42 @@ const snapshotRequestSchema = z.object({
   evidenceData: z.record(z.string(), z.unknown()),
 });
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ custId: string }> }
-): Promise<Response> {
-  // Auth check
+function getSessionFromRequest(request: Request): GraphIdentitySession | null {
   const cookieHeader = request.headers.get("cookie") ?? "";
   const sessionCookie = cookieHeader
     .split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${GRAPH_SESSION_COOKIE}=`))
     ?.slice(GRAPH_SESSION_COOKIE.length + 1);
-  const session = parseSessionValue(
+  return parseSessionValue(
     sessionCookie ? decodeURIComponent(sessionCookie) : undefined
   );
+}
+
+function unauthorized(message: string) {
+  return Response.json(
+    { error: { code: "UNAUTHENTICATED", message } },
+    { status: 401 }
+  );
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ custId: string }> }
+): Promise<Response> {
+  const session = getSessionFromRequest(request);
   if (!session) {
-    return Response.json(
-      {
-        error: {
-          code: "UNAUTHENTICATED",
-          message: "Sign in with Identity before saving snapshots.",
-        },
-      },
-      { status: 401 }
-    );
+    return unauthorized("Sign in with Identity before saving snapshots.");
   }
 
   const { custId } = await params;
 
-  // Parse and validate request body
   let body: unknown;
   try {
     body = await request.json();
   } catch {
     return Response.json(
-      {
-        error: {
-          code: "INVALID_JSON",
-          message: "Request body must be valid JSON.",
-        },
-      },
+      { error: { code: "INVALID_JSON", message: "Request body must be valid JSON." } },
       { status: 400 }
     );
   }
@@ -66,7 +66,6 @@ export async function POST(
   }
 
   try {
-    // Get or create review session
     const reviewSession = await getOrCreateReviewSession(
       custId,
       "AD_HOC",
@@ -74,7 +73,6 @@ export async function POST(
       session.user.email
     );
 
-    // Save snapshot
     const snapshot = await saveSnapshot(
       reviewSession.id,
       "SNAPSHOT_ONLY",
@@ -86,12 +84,7 @@ export async function POST(
   } catch (error) {
     console.error("Failed to save snapshot:", error);
     return Response.json(
-      {
-        error: {
-          code: "INTERNAL_ERROR",
-          message: "Failed to save snapshot.",
-        },
-      },
+      { error: { code: "INTERNAL_ERROR", message: "Failed to save snapshot." } },
       { status: 500 }
     );
   }
@@ -101,47 +94,25 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ custId: string }> }
 ): Promise<Response> {
-  // Auth check
-  const cookieHeader = request.headers.get("cookie") ?? "";
-  const sessionCookie = cookieHeader
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${GRAPH_SESSION_COOKIE}=`))
-    ?.slice(GRAPH_SESSION_COOKIE.length + 1);
-  const session = parseSessionValue(
-    sessionCookie ? decodeURIComponent(sessionCookie) : undefined
-  );
+  const session = getSessionFromRequest(request);
   if (!session) {
-    return Response.json(
-      {
-        error: {
-          code: "UNAUTHENTICATED",
-          message: "Sign in with Identity before viewing snapshots.",
-        },
-      },
-      { status: 401 }
-    );
+    return unauthorized("Sign in with Identity before viewing snapshots.");
   }
 
   const { custId } = await params;
 
   try {
-    // Get all sessions for this customer to find snapshots
-    const history = await import("@/lib/review/store").then((m) =>
-      m.getReviewHistory(custId)
-    );
+    const history = await getReviewHistory(custId);
 
-    // Flatten all snapshots from all sessions
-    const snapshots = history.flatMap((session) =>
-      session.snapshots.map((snapshot) => ({
+    const snapshots = history.flatMap((s) =>
+      s.snapshots.map((snapshot) => ({
         ...snapshot,
-        sessionId: session.id,
-        contextType: session.contextType,
-        reviewerEmail: session.reviewerEmail,
+        sessionId: s.id,
+        contextType: s.contextType,
+        reviewerEmail: s.reviewerEmail,
       }))
     );
 
-    // Sort by createdAt descending
     snapshots.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -150,12 +121,7 @@ export async function GET(
   } catch (error) {
     console.error("Failed to fetch snapshots:", error);
     return Response.json(
-      {
-        error: {
-          code: "INTERNAL_ERROR",
-          message: "Failed to fetch snapshots.",
-        },
-      },
+      { error: { code: "INTERNAL_ERROR", message: "Failed to fetch snapshots." } },
       { status: 500 }
     );
   }
