@@ -48,7 +48,7 @@ with DAG(
     start_date=datetime(2015, 9, 1),
     catchup=True,
     max_active_runs=1,
-    max_active_tasks=1,
+    max_active_tasks=2,
     tags=["backfill", "usr_skyee_mw"],
 ):
 
