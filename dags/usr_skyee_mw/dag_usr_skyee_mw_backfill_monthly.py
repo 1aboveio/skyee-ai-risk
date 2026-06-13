@@ -4,7 +4,7 @@ Airflow DAG: Backfill large stg_* tables monthly.
 Schedule: @monthly from 2016-09-01
 Catchup: enabled
 
-Tables: pmp_coll_order, cust_user_login_log
+Tables: pmp_coll_order, cust_user_login_log, pmp_pay_details, pmp_pay_order
 
 Variables:
     MYSQL_DB_URL_SECRET - MySQL JDBC URL with credentials
@@ -14,7 +14,10 @@ Variables:
 from datetime import datetime, timedelta
 
 from airflow import DAG
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from airflow.operators.empty import EmptyOperator
+
+SCRIPTS_PATH = "/opt/airflow/dags/usr_skyee_mw/python"
 
 default_args = {
     "owner": "data-team",
@@ -41,6 +44,21 @@ with DAG(
     start = EmptyOperator(task_id="start")
     end = EmptyOperator(task_id="end")
 
-    tasks = [EmptyOperator(task_id=f"stg_{t}") for t in TABLES]
+    tasks = [
+        SparkSubmitOperator(
+            task_id=f"stg_{table}",
+            application=f"{SCRIPTS_PATH}/stg_{table}.py",
+            conn_id="spark_default",
+            application_args=[
+                "--url", "jdbc:mysql://{{ var.value.MYSQL_DB_URL_SECRET }}",
+                "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
+                "--start-date", "{{ ds }}",
+                "--end-date", "{{ next_ds }}",
+                "--bulk",
+            ],
+            verbose=True,
+        )
+        for table in TABLES
+    ]
 
     start >> tasks >> end
