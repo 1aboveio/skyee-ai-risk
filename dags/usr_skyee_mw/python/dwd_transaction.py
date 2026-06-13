@@ -36,6 +36,10 @@ class DwdTransactionEtl(Etl):
     rows come from collection order. This is intentionally not a source-table
     replica: it gives payment and collection activity one shared transaction
     shape for risk, investigation, and transaction-flow graph use cases.
+
+    Incremental windows are based on the source STG create partition (`dt`),
+    not update time. That keeps each backfill window responsible for stable
+    output partitions.
     """
 
     src_db = None
@@ -48,7 +52,7 @@ class DwdTransactionEtl(Etl):
     par_cols = ["dt"]
     path = "/user/hive/warehouse/usr_skyee_mw.db/dwd_transaction"
     table_type = "hudi_table"
-    hudi_mode = "upsert"
+    hudi_mode = "insert_overwrite"
     concurrency_mode = "SINGLE_WRITER"
 
     def extract(self, start_date: str = None, end_date: str = None) -> DataFrame:
@@ -68,12 +72,15 @@ class DwdTransactionEtl(Etl):
         )
 
     @staticmethod
-    def _changed(expr: Column, start_date: str = None, end_date: str = None) -> Column:
+    def _in_date_window(
+        expr: Column, start_date: str = None, end_date: str = None
+    ) -> Column:
+        date_expr = expr.cast("date")
         cond = lit(True)
         if start_date:
-            cond = cond & (expr >= lit(start_date).cast("timestamp"))
+            cond = cond & (date_expr >= lit(start_date).cast("date"))
         if end_date:
-            cond = cond & (expr < lit(end_date).cast("timestamp"))
+            cond = cond & (date_expr < lit(end_date).cast("date"))
         return cond
 
     @staticmethod
@@ -92,35 +99,10 @@ class DwdTransactionEtl(Etl):
         po = self.src_pay_order.alias("po")
         pd = self.src_pay_details.alias("pd")
 
-        pay_change_time = coalesce(
-            col("pd.lst_upd_time"),
-            col("pd.create_time"),
-            col("po.lst_upd_time"),
-            col("po.create_time"),
-        )
-        order_change_time = coalesce(col("po.lst_upd_time"), col("po.create_time"))
-
-        changed_orders = po.filter(
-            self._is_active("po")
-            & self._changed(order_change_time, self.start_date, self.end_date)
-        ).select(col("po.pay_order_id").alias("_changed_pay_order_id"))
-
-        changed_details = pd.filter(
-            self._is_active("pd")
-            & self._changed(
-                coalesce(col("pd.lst_upd_time"), col("pd.create_time")),
-                self.start_date,
-                self.end_date,
-            )
-        ).select(col("pd.pay_order_id").alias("_changed_pay_order_id"))
-
         if self.start_date or self.end_date:
-            changed_order_ids = changed_orders.unionByName(changed_details).distinct()
-            pd = pd.join(
-                changed_order_ids,
-                col("pd.pay_order_id") == col("_changed_pay_order_id"),
-                "inner",
-            ).drop("_changed_pay_order_id")
+            pd = pd.filter(
+                self._in_date_window(col("pd.dt"), self.start_date, self.end_date)
+            )
 
         joined = pd.join(
             po,
@@ -259,14 +241,15 @@ class DwdTransactionEtl(Etl):
                 coalesce(col("po.lst_upd_time"), col("po.create_time")),
             ).alias("lst_upd_time"),
             col("pd.delete_flag").alias("delete_flag"),
-            txn_time.cast("date").alias("dt"),
+            col("pd.dt").cast("date").alias("dt"),
         )
 
     def _collection_rows(self) -> DataFrame:
         co = self.src_coll_order.alias("co")
-        change_time = coalesce(col("co.lst_upd_time"), col("co.create_time"))
         if self.start_date or self.end_date:
-            co = co.filter(self._changed(change_time, self.start_date, self.end_date))
+            co = co.filter(
+                self._in_date_window(col("co.dt"), self.start_date, self.end_date)
+            )
 
         co = co.filter(self._is_active("co"))
         txn_time = coalesce(
@@ -387,7 +370,7 @@ class DwdTransactionEtl(Etl):
             col("co.lst_upd_user").alias("lst_upd_user"),
             coalesce(col("co.lst_upd_time"), col("co.create_time")).alias("lst_upd_time"),
             col("co.delete_flag").alias("delete_flag"),
-            txn_time.cast("date").alias("dt"),
+            col("co.dt").cast("date").alias("dt"),
         )
 
     def transform(self, df: DataFrame) -> DataFrame:
