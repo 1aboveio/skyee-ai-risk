@@ -156,6 +156,30 @@ _Avoid_: Delivery scope tier, scope category, module type, technical layer
 The business-facing workspace where operators, reviewers, risk managers, and strategy teams use AI to investigate cases, review evidence, confirm recommendations, and provide feedback.
 _Avoid_: Agent engineering platform, skill management console
 
+**Customer Risk Review Workbench**:
+The generic human workbench where a reviewer examines customer-level evidence during prescreening, workflow review, second-round review, or ad hoc review. It can support final Accept or Reject decisions when used inside workflow-controlled Human Review, but it does not replace workflow ownership of state transition, permissions, or audit.
+_Avoid_: AI final decision, workflow state engine, single-stage review page
+
+**Review Evidence Package**:
+A reviewable package of customer-level evidence shown in the Customer Risk Review Workbench and reusable as input to AI investigation. It organizes known facts, risk signals, graph associations, transaction patterns, confirmed-risk matches, evidence gaps, and reasoning context without becoming the final decision.
+_Avoid_: Final disposition, page state, raw data dump
+
+**Review Evidence Snapshot**:
+An immutable record of the Review Evidence Package as it was shown when a reviewer made or confirmed a review decision. It supports audit, later explanation, and comparison against evidence that may change after the review.
+_Avoid_: Live evidence package, reviewer note, workflow state
+
+**Review Store**:
+The application-owned relational store for Customer Risk Review Workbench data, such as review sessions, reviewer decisions, notes, snapshots, cached evidence summaries, and audit-supporting metadata.
+_Avoid_: Source evidence database, warehouse, risk source of truth
+
+**Source Evidence Database**:
+The live operational relational database used by server-side application code to retrieve latest customer and transaction evidence for review. It is evidence source material, not the workbench's decision store.
+_Avoid_: Review store, browser-accessible database, AI memory
+
+**Forex Rate Service**:
+A server-side service that resolves foreign exchange rates and normalizes transaction amounts for review evidence. It records the rate, source date, and conversion context used for each normalized amount so review snapshots remain explainable.
+_Avoid_: Frontend currency conversion, hardcoded exchange-rate table, reviewer-entered rate
+
 **Agent Engineering Platform**:
 The technical platform for building and governing AI agent capabilities, including Coordinator, Executor, Connector, AgentSpec, Skills, Evaluation, permissions, release governance, and monitoring.
 _Avoid_: Business AI workbench, case workflow system

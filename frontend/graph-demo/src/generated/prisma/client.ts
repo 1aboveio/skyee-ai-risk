@@ -46,3 +46,23 @@ export { Prisma }
  * 
  */
 export type DemoSearch = Prisma.DemoSearchModel
+/**
+ * Model ReviewSession
+ * 
+ */
+export type ReviewSession = Prisma.ReviewSessionModel
+/**
+ * Model ReviewSnapshot
+ * 
+ */
+export type ReviewSnapshot = Prisma.ReviewSnapshotModel
+/**
+ * Model ReviewDecision
+ * 
+ */
+export type ReviewDecision = Prisma.ReviewDecisionModel
+/**
+ * Model FxRate
+ * 
+ */
+export type FxRate = Prisma.FxRateModel

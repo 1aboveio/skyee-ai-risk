@@ -51,7 +51,11 @@ export const AnyNull = runtime.AnyNull
 
 
 export const ModelName = {
-  DemoSearch: 'DemoSearch'
+  DemoSearch: 'DemoSearch',
+  ReviewSession: 'ReviewSession',
+  ReviewSnapshot: 'ReviewSnapshot',
+  ReviewDecision: 'ReviewDecision',
+  FxRate: 'FxRate'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -80,12 +84,79 @@ export const DemoSearchScalarFieldEnum = {
 export type DemoSearchScalarFieldEnum = (typeof DemoSearchScalarFieldEnum)[keyof typeof DemoSearchScalarFieldEnum]
 
 
+export const ReviewSessionScalarFieldEnum = {
+  id: 'id',
+  custId: 'custId',
+  contextType: 'contextType',
+  reviewerId: 'reviewerId',
+  reviewerEmail: 'reviewerEmail',
+  status: 'status',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ReviewSessionScalarFieldEnum = (typeof ReviewSessionScalarFieldEnum)[keyof typeof ReviewSessionScalarFieldEnum]
+
+
+export const ReviewSnapshotScalarFieldEnum = {
+  id: 'id',
+  sessionId: 'sessionId',
+  snapshotType: 'snapshotType',
+  note: 'note',
+  evidenceData: 'evidenceData',
+  fxRatesUsed: 'fxRatesUsed',
+  createdAt: 'createdAt'
+} as const
+
+export type ReviewSnapshotScalarFieldEnum = (typeof ReviewSnapshotScalarFieldEnum)[keyof typeof ReviewSnapshotScalarFieldEnum]
+
+
+export const ReviewDecisionScalarFieldEnum = {
+  id: 'id',
+  sessionId: 'sessionId',
+  decisionType: 'decisionType',
+  note: 'note',
+  snapshotId: 'snapshotId',
+  createdAt: 'createdAt'
+} as const
+
+export type ReviewDecisionScalarFieldEnum = (typeof ReviewDecisionScalarFieldEnum)[keyof typeof ReviewDecisionScalarFieldEnum]
+
+
+export const FxRateScalarFieldEnum = {
+  id: 'id',
+  baseCurrency: 'baseCurrency',
+  quoteCurrency: 'quoteCurrency',
+  rate: 'rate',
+  rateDate: 'rateDate',
+  source: 'source',
+  createdAt: 'createdAt'
+} as const
+
+export type FxRateScalarFieldEnum = (typeof FxRateScalarFieldEnum)[keyof typeof FxRateScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
 } as const
 
 export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
+
+
+export const JsonNullValueInput = {
+  JsonNull: JsonNull
+} as const
+
+export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
+
+
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
 export const QueryMode = {
@@ -102,4 +173,13 @@ export const NullsOrder = {
 } as const
 
 export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
+
+
+export const JsonNullValueFilter = {
+  DbNull: DbNull,
+  JsonNull: JsonNull,
+  AnyNull: AnyNull
+} as const
+
+export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
 

@@ -9,4 +9,8 @@
  * 🟢 You can import this file directly.
  */
 export type * from './models/DemoSearch'
+export type * from './models/ReviewSession'
+export type * from './models/ReviewSnapshot'
+export type * from './models/ReviewDecision'
+export type * from './models/FxRate'
 export type * from './commonInputTypes'
