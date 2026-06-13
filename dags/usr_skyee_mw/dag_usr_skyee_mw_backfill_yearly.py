@@ -71,15 +71,4 @@ with DAG(
         for table in TABLES
     ]
 
-    dwd_customer = SparkSubmitOperator(
-        task_id="dwd_customer",
-        name="usr_skyee_mw.backfill.yearly.dwd.customer.{{ ds }}",
-        application=f"{SCRIPTS_PATH}/dwd_customer.py",
-        conn_id="spark_default",
-        application_args=[
-            "--bulk",
-        ],
-        verbose=True,
-    )
-
-    start >> tasks >> dwd_customer >> end
+    start >> tasks >> end
