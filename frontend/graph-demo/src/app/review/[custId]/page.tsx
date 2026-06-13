@@ -5,6 +5,7 @@ import { WorkbenchPanel } from "@/components/review/workbench-panel";
 import { ReviewHistory } from "@/components/review/review-history";
 import { SaveSnapshotButton } from "@/components/review/save-snapshot-button";
 import { CustomerSearchInput } from "@/components/review/customer-search-input";
+import { RiskGraphPanel } from "@/components/review/risk-graph-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, User } from "lucide-react";
@@ -127,13 +128,7 @@ export default async function ReviewWorkbenchPage({
             <div />
           </WorkbenchPanel>
 
-          <WorkbenchPanel
-            title="Risk Graph"
-            empty
-            emptyMessage="Risk graph associations will be displayed here."
-          >
-            <div />
-          </WorkbenchPanel>
+          <RiskGraphPanel custId={custId} />
         </div>
 
         {/* Review History - Right side */}
