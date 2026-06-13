@@ -26,7 +26,6 @@ export interface Transaction {
 
 export interface TransactionSummary {
   totalCount: number;
-  totalAmount: number;
   currencyBreakdown: Record<string, { count: number; amount: number }>;
   dateRange: { earliest: string | null; latest: string | null };
   directionBreakdown: { inbound: number; outbound: number };
@@ -51,18 +50,6 @@ interface PayOrderRow extends mysql.RowDataPacket {
   PAYMENT_STATUS: string | null;
   PAYMENT_TIME: Date | string | null;
   NAME: string | null;
-  CREATE_TIME: Date | string;
-}
-
-interface PayDetailsRow extends mysql.RowDataPacket {
-  ID: string;
-  PAY_ORDER_ID: string;
-  CUST_ID: string;
-  PAY_TXN_AMT: number | string | null;
-  CURRENCY_CD: string | null;
-  PAYMENT_TIME: Date | string | null;
-  SUBJECT_NAME: string | null;
-  BANK_NAME: string | null;
   CREATE_TIME: Date | string;
 }
 
@@ -94,6 +81,29 @@ function toNumber(value: number | string | null | undefined): number {
   return isNaN(parsed) ? 0 : parsed;
 }
 
+interface CursorPayload {
+  createTime: string;
+  id: string;
+}
+
+function encodeCursor(createTime: string, id: string): string {
+  const payload: CursorPayload = { createTime, id };
+  return Buffer.from(JSON.stringify(payload)).toString("base64url");
+}
+
+function decodeCursor(cursor: string): CursorPayload | null {
+  try {
+    const json = Buffer.from(cursor, "base64url").toString("utf-8");
+    const parsed = JSON.parse(json) as CursorPayload;
+    if (typeof parsed.createTime === "string" && typeof parsed.id === "string") {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -108,19 +118,15 @@ export async function getTransactionSummary(
     throw new Error("Customer ID too long.");
   }
 
-  // Fetch all transactions for summary (server-side only)
-  const [payOrders, payDetails, collOrders] = await Promise.all([
+  // Fetch transactions using authoritative tables only:
+  // - pmp_pay_order for outbound (header level)
+  // - pmp_coll_order for inbound
+  // No pmp_pay_details — those are line items and would double-count.
+  const [payOrders, collOrders] = await Promise.all([
     query<PayOrderRow[]>(
       `SELECT PAY_ORDER_ID, CUST_ID, ORDER_NO, SETTLE_AMT, SETTLE_CURR_CD,
               PAYMENT_STATUS, PAYMENT_TIME, NAME, CREATE_TIME
        FROM pmp_pay_order
-       WHERE CUST_ID = ?`,
-      [custId]
-    ),
-    query<PayDetailsRow[]>(
-      `SELECT ID, PAY_ORDER_ID, CUST_ID, PAY_TXN_AMT, CURRENCY_CD,
-              PAYMENT_TIME, SUBJECT_NAME, BANK_NAME, CREATE_TIME
-       FROM pmp_pay_details
        WHERE CUST_ID = ?`,
       [custId]
     ),
@@ -135,7 +141,6 @@ export async function getTransactionSummary(
 
   const currencyBreakdown: Record<string, { count: number; amount: number }> = {};
   let totalCount = 0;
-  let totalAmount = 0;
   let inbound = 0;
   let outbound = 0;
   let earliest: string | null = null;
@@ -148,29 +153,6 @@ export async function getTransactionSummary(
     const createTime = formatDate(row.CREATE_TIME) ?? "";
 
     totalCount++;
-    totalAmount += amount;
-    outbound++;
-
-    if (!currencyBreakdown[currency]) {
-      currencyBreakdown[currency] = { count: 0, amount: 0 };
-    }
-    currencyBreakdown[currency].count++;
-    currencyBreakdown[currency].amount += amount;
-
-    if (createTime) {
-      if (!earliest || createTime < earliest) earliest = createTime;
-      if (!latest || createTime > latest) latest = createTime;
-    }
-  }
-
-  // Process outbound payments from pay_details
-  for (const row of payDetails) {
-    const amount = toNumber(row.PAY_TXN_AMT);
-    const currency = row.CURRENCY_CD?.toUpperCase() ?? "UNKNOWN";
-    const createTime = formatDate(row.CREATE_TIME) ?? "";
-
-    totalCount++;
-    totalAmount += amount;
     outbound++;
 
     if (!currencyBreakdown[currency]) {
@@ -192,7 +174,6 @@ export async function getTransactionSummary(
     const createTime = formatDate(row.CREATE_TIME) ?? "";
 
     totalCount++;
-    totalAmount += amount;
     inbound++;
 
     if (!currencyBreakdown[currency]) {
@@ -209,7 +190,6 @@ export async function getTransactionSummary(
 
   return {
     totalCount,
-    totalAmount,
     currencyBreakdown,
     dateRange: { earliest, latest },
     directionBreakdown: { inbound, outbound },
@@ -228,160 +208,154 @@ export async function getTransactionList(
   const forexService = new ForexRateService();
   const effectiveLimit = Math.min(limit, 100); // Cap at 100
 
-  // Parse cursor: "createTime|id" format
+  // Parse cursor using base64-encoded JSON
   let cursorCreateTime: string | null = null;
   let cursorId: string | null = null;
   if (cursor) {
-    const parts = cursor.split("|");
-    if (parts.length === 2) {
-      cursorCreateTime = parts[0];
-      cursorId = parts[1];
+    const decoded = decodeCursor(cursor);
+    if (decoded) {
+      cursorCreateTime = decoded.createTime;
+      cursorId = decoded.id;
     }
   }
 
-  // Fetch all raw transactions
-  const [payOrders, payDetails, collOrders] = await Promise.all([
+  // Fetch with proper SQL cursor-based pagination.
+  // Keyset: (CREATE_TIME, PAY_ORDER_ID) < (cursorCreateTime, cursorId) for DESC order.
+  // We fetch effectiveLimit + 1 rows from each table to detect hasMore, then merge.
+
+  const hasCursor = cursorCreateTime !== null && cursorId !== null;
+  const fetchLimit = effectiveLimit + 1;
+
+  // Outbound from pmp_pay_order (authoritative header-level records)
+  const payWhere = hasCursor
+    ? `WHERE CUST_ID = ? AND (CREATE_TIME, PAY_ORDER_ID) < (?, ?)`
+    : `WHERE CUST_ID = ?`;
+  const payParams = hasCursor
+    ? [custId, cursorCreateTime, cursorId, fetchLimit]
+    : [custId, fetchLimit];
+
+  // Inbound from pmp_coll_order
+  const collWhere = hasCursor
+    ? `WHERE CUST_ID = ? AND (CREATE_TIME, COLL_ORDER_ID) < (?, ?)`
+    : `WHERE CUST_ID = ?`;
+  const collParams = hasCursor
+    ? [custId, cursorCreateTime, cursorId, fetchLimit]
+    : [custId, fetchLimit];
+
+  const [payOrders, collOrders] = await Promise.all([
     query<PayOrderRow[]>(
       `SELECT PAY_ORDER_ID, CUST_ID, ORDER_NO, SETTLE_AMT, SETTLE_CURR_CD,
               PAYMENT_STATUS, PAYMENT_TIME, NAME, CREATE_TIME
        FROM pmp_pay_order
-       WHERE CUST_ID = ?`,
-      [custId]
-    ),
-    query<PayDetailsRow[]>(
-      `SELECT ID, PAY_ORDER_ID, CUST_ID, PAY_TXN_AMT, CURRENCY_CD,
-              PAYMENT_TIME, SUBJECT_NAME, BANK_NAME, CREATE_TIME
-       FROM pmp_pay_details
-       WHERE CUST_ID = ?`,
-      [custId]
+       ${payWhere}
+       ORDER BY CREATE_TIME DESC, PAY_ORDER_ID DESC
+       LIMIT ?`,
+      payParams
     ),
     query<CollOrderRow[]>(
       `SELECT COLL_ORDER_ID, CUST_ID, COLL_TXN_AMT, COLL_CURRENCY_CD,
               COLL_STATUS, ARRIVAL_TIME, NAME, CREATE_TIME
        FROM pmp_coll_order
-       WHERE CUST_ID = ?`,
-      [custId]
+       ${collWhere}
+       ORDER BY CREATE_TIME DESC, COLL_ORDER_ID DESC
+       LIMIT ?`,
+      collParams
     ),
   ]);
 
   // Normalize into Transaction[]
-  const allTransactions: Transaction[] = [];
-
-  for (const row of payOrders) {
+  const payTransactions: Transaction[] = payOrders.map((row) => {
     const amount = toNumber(row.SETTLE_AMT);
     const currency = row.SETTLE_CURR_CD?.toUpperCase() ?? "UNKNOWN";
     const paymentTime = formatDate(row.PAYMENT_TIME);
     const createTime = formatDate(row.CREATE_TIME) ?? new Date().toISOString();
-    const paymentDate = row.PAYMENT_TIME ? new Date(row.PAYMENT_TIME) : new Date(row.CREATE_TIME);
 
-    // Get FX conversion
-    const fxResult = await forexService.convertToUsd(amount, currency, paymentDate);
-
-    allTransactions.push({
+    return {
       id: row.PAY_ORDER_ID,
       custId: row.CUST_ID,
       orderNo: row.ORDER_NO,
-      direction: "OUTBOUND",
+      direction: "OUTBOUND" as const,
       amount,
       currency,
-      usdAmount: fxResult.usdAmount,
-      fxRate: fxResult.rate,
-      fxRateDate: formatDate(fxResult.rateDate),
-      fxWarning: fxResult.warning ?? null,
+      usdAmount: null, // filled below
+      fxRate: null,
+      fxRateDate: null,
+      fxWarning: null,
       counterpartyName: row.NAME,
       counterpartyBank: null,
       status: row.PAYMENT_STATUS,
       paymentTime,
       createTime,
-    });
-  }
+    };
+  });
 
-  for (const row of payDetails) {
-    const amount = toNumber(row.PAY_TXN_AMT);
-    const currency = row.CURRENCY_CD?.toUpperCase() ?? "UNKNOWN";
-    const paymentTime = formatDate(row.PAYMENT_TIME);
-    const createTime = formatDate(row.CREATE_TIME) ?? new Date().toISOString();
-    const paymentDate = row.PAYMENT_TIME ? new Date(row.PAYMENT_TIME) : new Date(row.CREATE_TIME);
-
-    // Get FX conversion
-    const fxResult = await forexService.convertToUsd(amount, currency, paymentDate);
-
-    allTransactions.push({
-      id: row.ID,
-      custId: row.CUST_ID,
-      orderNo: row.PAY_ORDER_ID,
-      direction: "OUTBOUND",
-      amount,
-      currency,
-      usdAmount: fxResult.usdAmount,
-      fxRate: fxResult.rate,
-      fxRateDate: formatDate(fxResult.rateDate),
-      fxWarning: fxResult.warning ?? null,
-      counterpartyName: row.SUBJECT_NAME,
-      counterpartyBank: row.BANK_NAME,
-      status: null,
-      paymentTime,
-      createTime,
-    });
-  }
-
-  for (const row of collOrders) {
+  const collTransactions: Transaction[] = collOrders.map((row) => {
     const amount = toNumber(row.COLL_TXN_AMT);
     const currency = row.COLL_CURRENCY_CD?.toUpperCase() ?? "UNKNOWN";
     const paymentTime = formatDate(row.ARRIVAL_TIME);
     const createTime = formatDate(row.CREATE_TIME) ?? new Date().toISOString();
-    const paymentDate = row.ARRIVAL_TIME ? new Date(row.ARRIVAL_TIME) : new Date(row.CREATE_TIME);
 
-    // Get FX conversion
-    const fxResult = await forexService.convertToUsd(amount, currency, paymentDate);
-
-    allTransactions.push({
+    return {
       id: row.COLL_ORDER_ID,
       custId: row.CUST_ID,
       orderNo: null,
-      direction: "INBOUND",
+      direction: "INBOUND" as const,
       amount,
       currency,
-      usdAmount: fxResult.usdAmount,
-      fxRate: fxResult.rate,
-      fxRateDate: formatDate(fxResult.rateDate),
-      fxWarning: fxResult.warning ?? null,
+      usdAmount: null,
+      fxRate: null,
+      fxRateDate: null,
+      fxWarning: null,
       counterpartyName: row.NAME,
       counterpartyBank: null,
       status: row.COLL_STATUS,
       paymentTime,
       createTime,
-    });
-  }
-
-  // Sort newest first
-  allTransactions.sort((a, b) => {
-    const timeCompare = b.createTime.localeCompare(a.createTime);
-    if (timeCompare !== 0) return timeCompare;
-    return b.id.localeCompare(a.id);
+    };
   });
 
-  // Apply cursor-based pagination
-  let startIndex = 0;
-  if (cursorCreateTime && cursorId) {
-    startIndex = allTransactions.findIndex(
-      (t) => t.createTime === cursorCreateTime && t.id === cursorId
-    );
-    if (startIndex >= 0) {
-      startIndex++; // Start after the cursor
-    } else {
-      startIndex = 0; // Cursor not found, start from beginning
+  // Merge and sort all candidates
+  const allTransactions = [...payTransactions, ...collTransactions].sort(
+    (a, b) => {
+      const timeCompare = b.createTime.localeCompare(a.createTime);
+      if (timeCompare !== 0) return timeCompare;
+      return b.id.localeCompare(a.id);
     }
+  );
+
+  // Determine if there are more results
+  const hasMore = allTransactions.length > effectiveLimit;
+  const pageTransactions = allTransactions.slice(0, effectiveLimit);
+
+  // Parallelize FX conversions for all transactions on the page
+  const fxPromises = pageTransactions.map((txn) => {
+    const date = txn.paymentTime
+      ? new Date(txn.paymentTime)
+      : new Date(txn.createTime);
+    return forexService.convertToUsd(txn.amount, txn.currency, date);
+  });
+
+  const fxResults = await Promise.all(fxPromises);
+
+  for (let i = 0; i < pageTransactions.length; i++) {
+    const fx = fxResults[i];
+    pageTransactions[i].usdAmount = fx.usdAmount;
+    pageTransactions[i].fxRate = fx.rate;
+    pageTransactions[i].fxRateDate = formatDate(fx.rateDate);
+    pageTransactions[i].fxWarning = fx.warning ?? null;
   }
 
-  const paginatedTransactions = allTransactions.slice(startIndex, startIndex + effectiveLimit);
-  const hasMore = startIndex + effectiveLimit < allTransactions.length;
-  const nextCursor = hasMore && paginatedTransactions.length > 0
-    ? `${paginatedTransactions[paginatedTransactions.length - 1].createTime}|${paginatedTransactions[paginatedTransactions.length - 1].id}`
-    : null;
+  // Build next cursor from last item
+  const nextCursor =
+    hasMore && pageTransactions.length > 0
+      ? encodeCursor(
+          pageTransactions[pageTransactions.length - 1].createTime,
+          pageTransactions[pageTransactions.length - 1].id
+        )
+      : null;
 
   return {
-    transactions: paginatedTransactions,
+    transactions: pageTransactions,
     nextCursor,
     hasMore,
   };

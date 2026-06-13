@@ -8,7 +8,6 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Calendar,
-  DollarSign,
   Hash,
   TrendingUp,
 } from "lucide-react";
@@ -19,7 +18,6 @@ import {
 
 interface TransactionSummary {
   totalCount: number;
-  totalAmount: number;
   currencyBreakdown: Record<string, { count: number; amount: number }>;
   dateRange: { earliest: string | null; latest: string | null };
   directionBreakdown: { inbound: number; outbound: number };
@@ -30,12 +28,17 @@ interface TransactionSummary {
 // ---------------------------------------------------------------------------
 
 function formatCurrency(amount: number, currency?: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: currency ? "currency" : "decimal",
-    currency: currency ?? "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: currency ? "currency" : "decimal",
+      currency: currency ?? "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    // Fallback for unknown/invalid currency codes
+    return `${amount.toFixed(2)} ${currency ?? ""}`.trim();
+  }
 }
 
 function formatDate(iso: string | null): string {
@@ -112,11 +115,6 @@ function SummaryContent({ summary }: { summary: TransactionSummary }) {
           icon={<Hash className="h-4 w-4 text-muted-foreground" />}
           label="Total Count"
           value={summary.totalCount.toString()}
-        />
-        <MetricCard
-          icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
-          label="Total Amount"
-          value={formatCurrency(summary.totalAmount)}
         />
         <MetricCard
           icon={<ArrowDownLeft className="h-4 w-4 text-green-600" />}

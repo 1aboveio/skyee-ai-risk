@@ -45,12 +45,17 @@ interface TransactionListResult {
 // ---------------------------------------------------------------------------
 
 function formatCurrency(amount: number, currency?: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: currency ? "currency" : "decimal",
-    currency: currency ?? "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: currency ? "currency" : "decimal",
+      currency: currency ?? "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    // Fallback for unknown/invalid currency codes
+    return `${amount.toFixed(2)} ${currency ?? ""}`.trim();
+  }
 }
 
 function formatDate(iso: string | null): string {
