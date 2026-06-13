@@ -10,6 +10,9 @@ import { RiskSignalsPanel } from "@/components/review/risk-signals-panel";
 import { RiskGraphPanel } from "@/components/review/risk-graph-panel";
 import { getCustomerProfile } from "@/lib/evidence/customer-profile";
 import { getRiskSignals } from "@/lib/evidence/risk-signals";
+import { getTransactionSummary } from "@/lib/evidence/transactions";
+import { TransactionSummaryPanel } from "@/components/review/transaction-summary-panel";
+import { TransactionListPanel } from "@/components/review/transaction-list-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, User } from "lucide-react";
@@ -57,11 +60,13 @@ export default async function ReviewWorkbenchPage({
   const fetchedAt = new Date().toISOString();
   let customerProfileData: Awaited<ReturnType<typeof getCustomerProfile>> | null = null;
   let riskSignalsData: Awaited<ReturnType<typeof getRiskSignals>> | null = null;
+  let transactionSummaryData: Awaited<ReturnType<typeof getTransactionSummary>> | null = null;
 
   try {
-    [customerProfileData, riskSignalsData] = await Promise.all([
+    [customerProfileData, riskSignalsData, transactionSummaryData] = await Promise.all([
       getCustomerProfile(custId).catch(() => null),
       getRiskSignals(custId).catch(() => null),
+      getTransactionSummary(custId).catch(() => null),
     ]);
   } catch {
     // Errors are handled client-side; server fetch is best-effort for snapshot data
@@ -77,7 +82,9 @@ export default async function ReviewWorkbenchPage({
       riskSignals: riskSignalsData
         ? { status: "loaded" as const, data: riskSignalsData }
         : { status: "empty" as const },
-      transactionSummary: { status: "empty" as const },
+      transactionSummary: transactionSummaryData
+        ? { status: "loaded" as const, data: transactionSummaryData }
+        : { status: "empty" as const },
       transactionList: { status: "empty" as const },
       riskGraph: { status: "empty" as const },
       evidenceTimeline: { status: "empty" as const },
@@ -124,21 +131,9 @@ export default async function ReviewWorkbenchPage({
 
           <RiskSignalsPanel custId={custId} />
 
-          <WorkbenchPanel
-            title="Transaction Summary"
-            empty
-            emptyMessage="Transaction summary will be loaded from the Source Evidence Database."
-          >
-            <div />
-          </WorkbenchPanel>
+          <TransactionSummaryPanel custId={custId} />
 
-          <WorkbenchPanel
-            title="Transaction List"
-            empty
-            emptyMessage="Transaction list with cursor pagination will be displayed here."
-          >
-            <div />
-          </WorkbenchPanel>
+          <TransactionListPanel custId={custId} />
 
           <RiskGraphPanel custId={custId} />
         </div>
