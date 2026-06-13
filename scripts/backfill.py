@@ -59,7 +59,7 @@ TABLE_REGISTRY = {
 }
 
 # Large tables that need monthly processing
-LARGE_TABLES = {"pmp_coll_order", "cust_user_login_log"}
+LARGE_TABLES = {"pmp_coll_order", "cust_user_login_log", "pmp_pay_details", "pmp_pay_order"}
 
 
 def get_month_ranges(start_date: str, end_date: str):

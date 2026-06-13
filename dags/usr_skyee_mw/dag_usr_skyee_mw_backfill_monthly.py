@@ -24,7 +24,7 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-TABLES = ["pmp_coll_order", "cust_user_login_log"]
+TABLES = ["pmp_coll_order", "cust_user_login_log", "pmp_pay_details", "pmp_pay_order"]
 
 
 with DAG(

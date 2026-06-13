@@ -34,8 +34,6 @@ TABLES = [
     "cust_person_realname_info",
     "cust_realname_enterprise_ref_person",
     "cust_store_info",
-    "pmp_pay_details",
-    "pmp_pay_order",
 ]
 
 
