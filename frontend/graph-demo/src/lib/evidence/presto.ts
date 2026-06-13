@@ -27,18 +27,25 @@ interface PrestoQueryResult {
 /**
  * Execute a Presto query and return rows.
  * Polls the async result endpoint until the query finishes.
+ *
+ * Presto HTTP API does not support parameterized queries (`?` placeholders),
+ * so we inline values using `escapePrestoString()` after upstream validation.
  */
+const MAX_POLL_ITERATIONS = 60;
+const POLL_INTERVAL_MS = 500;
+
 export async function queryDimForex(
   currencyCode: string,
   startDate: string,
   endDate: string
 ): Promise<PrestoRow[]> {
+  // Presto HTTP API doesn't support placeholders — inline values with escaping
   const sql = `
     SELECT currency_code, rate_date, exchange_rate
     FROM dim_forex
     WHERE base_currency = 'USD'
-      AND currency_code = ?
-      AND rate_date BETWEEN ? AND ?
+      AND currency_code = '${escapePrestoString(currencyCode)}'
+      AND rate_date BETWEEN DATE '${startDate}' AND DATE '${endDate}'
     ORDER BY rate_date ASC
   `;
 
@@ -61,39 +68,9 @@ export async function queryDimForex(
 
   let result: PrestoQueryResult = await response.json();
 
-  // Apply parameters (Presto HTTP API doesn't support parameterized queries natively,
-  // so we inline them safely — these are validated upstream)
-  const parameterizedSql = `
-    SELECT currency_code, rate_date, exchange_rate
-    FROM dim_forex
-    WHERE base_currency = 'USD'
-      AND currency_code = '${escapePrestoString(currencyCode)}'
-      AND rate_date BETWEEN DATE '${startDate}' AND DATE '${endDate}'
-    ORDER BY rate_date ASC
-  `;
-
-  // Re-execute with inlined parameters
-  const paramResponse = await fetch(`${PRESTO_URL}/v1/statement`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/plain",
-      "X-Presto-Catalog": PRESTO_CATALOG,
-      "X-Presto-Schema": PRESTO_SCHEMA,
-      "X-Presto-User": "graph-demo",
-    },
-    body: parameterizedSql,
-  });
-
-  if (!paramResponse.ok) {
-    throw new Error(
-      `Presto query failed: ${paramResponse.status} ${paramResponse.statusText}`
-    );
-  }
-
-  result = await paramResponse.json();
-
-  // Poll for results
+  // Poll for results with timeout safeguard
   const allRows: unknown[][] = [];
+  let pollCount = 0;
   while (result.nextUri) {
     if (result.error) {
       throw new Error(`Presto error: ${result.error.message}`);
@@ -101,7 +78,15 @@ export async function queryDimForex(
     if (result.data) {
       allRows.push(...result.data);
     }
-    await sleep(500);
+
+    pollCount++;
+    if (pollCount >= MAX_POLL_ITERATIONS) {
+      throw new Error(
+        `Presto query timed out after ${MAX_POLL_ITERATIONS} poll iterations`
+      );
+    }
+
+    await sleep(POLL_INTERVAL_MS);
     const nextResponse = await fetch(result.nextUri);
     if (!nextResponse.ok) {
       throw new Error(

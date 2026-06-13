@@ -150,7 +150,8 @@ export class ForexRateService {
 
     let inserted = 0;
     for (const row of rows) {
-      const rateDate = new Date(row.rate_date);
+      // Parse as UTC to avoid timezone drift
+      const rateDate = new Date(row.rate_date + "T00:00:00Z");
       const rate = parseFloat(row.exchange_rate);
 
       if (isNaN(rate)) continue;
@@ -169,9 +170,8 @@ export class ForexRateService {
     currency: string,
     date: Date
 ): Promise<FxRateResult | null> {
-    // Backfill a window ending at the requested date
-    const startDate = new Date(date);
-    startDate.setDate(startDate.getDate() - 30);
+    // Backfill a window ending at the requested date (UTC arithmetic)
+    const startDate = new Date(date.getTime() - MAX_BACKFILL_DAYS * 24 * 60 * 60 * 1000);
 
     try {
       const rows = await queryDimForex(
@@ -184,7 +184,8 @@ export class ForexRateService {
 
       // Upsert all returned rates
       for (const row of rows) {
-        const rateDate = new Date(row.rate_date);
+        // Parse as UTC to avoid timezone drift
+        const rateDate = new Date(row.rate_date + "T00:00:00Z");
         const rate = parseFloat(row.exchange_rate);
         if (isNaN(rate)) continue;
         await upsertRate(currency, rate, rateDate, "dim_forex");
