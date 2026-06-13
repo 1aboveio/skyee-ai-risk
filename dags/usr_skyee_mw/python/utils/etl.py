@@ -5,7 +5,7 @@ from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql.utils import AnalysisException
-from typing import List, Dict, Union, Literal
+from typing import List, Dict, Union, Literal, Optional
 from typing_extensions import Annotated
 import typer
 import pandas as pd
@@ -13,6 +13,14 @@ import enum
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def create_spark_session(spark_remote: Optional[str] = None) -> SparkSession:
+    """Create a Spark session in Spark Connect or classic spark-submit mode."""
+    builder = SparkSession.builder
+    if spark_remote:
+        builder = builder.remote(spark_remote)
+    return builder.getOrCreate()
 
 
 class Etl(ABC):

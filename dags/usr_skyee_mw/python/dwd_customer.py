@@ -1,11 +1,12 @@
 """Generate dwd_customer from customer master and selected current identity.
 
 Usage:
-    python dwd_customer.py --spark-remote <spark_connect_url> [--bulk/--per-day]
+    python dwd_customer.py [--spark-remote <spark_connect_url>] [--bulk/--per-day]
 """
 
 import os
 import sys
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -15,7 +16,7 @@ from pyspark.sql.functions import col, lit, row_number, when
 from typing_extensions import Annotated
 import typer
 
-from utils.etl import Etl
+from utils.etl import Etl, create_spark_session
 
 
 class DwdCustomerEtl(Etl):
@@ -219,14 +220,12 @@ class DwdCustomerEtl(Etl):
 
 
 def main(
-    spark_remote: Annotated[str, typer.Option("--spark-remote")],
+    spark_remote: Annotated[Optional[str], typer.Option("--spark-remote")] = None,
     start_date: Annotated[str, typer.Option("--start-date")] = None,
     end_date: Annotated[str, typer.Option("--end-date")] = None,
     bulk: Annotated[bool, typer.Option("--bulk/--per-day")] = True,
 ):
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.remote(spark_remote).getOrCreate()
+    spark = create_spark_session(spark_remote)
     etl = DwdCustomerEtl(
         start_date=start_date,
         end_date=end_date,

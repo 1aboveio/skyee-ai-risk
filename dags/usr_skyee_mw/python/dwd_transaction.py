@@ -1,11 +1,12 @@
 """Generate dwd_transaction from payout details and collection orders.
 
 Usage:
-    python dwd_transaction.py --spark-remote <spark_connect_url> [--start-date <YYYY-MM-DD>] [--end-date <YYYY-MM-DD>] [--bulk/--per-day]
+    python dwd_transaction.py [--spark-remote <spark_connect_url>] [--start-date <YYYY-MM-DD>] [--end-date <YYYY-MM-DD>] [--bulk/--per-day]
 """
 
 import os
 import sys
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -23,7 +24,7 @@ from pyspark.sql.types import DecimalType, LongType, StringType, TimestampType
 from typing_extensions import Annotated
 import typer
 
-from utils.etl import Etl
+from utils.etl import Etl, create_spark_session
 
 
 class DwdTransactionEtl(Etl):
@@ -394,14 +395,12 @@ class DwdTransactionEtl(Etl):
 
 
 def main(
-    spark_remote: Annotated[str, typer.Option("--spark-remote")],
+    spark_remote: Annotated[Optional[str], typer.Option("--spark-remote")] = None,
     start_date: Annotated[str, typer.Option("--start-date")] = None,
     end_date: Annotated[str, typer.Option("--end-date")] = None,
     bulk: Annotated[bool, typer.Option("--bulk/--per-day")] = True,
 ):
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.remote(spark_remote).getOrCreate()
+    spark = create_spark_session(spark_remote)
     etl = DwdTransactionEtl(
         start_date=start_date,
         end_date=end_date,
