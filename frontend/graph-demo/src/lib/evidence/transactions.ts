@@ -118,6 +118,9 @@ function decodeCursor(cursor: string): CursorPayload | null {
 
 const PAGE_SIZE = 20;
 const MAX_CUST_ID_LENGTH = 64;
+// When USD amount filters are active, we must over-fetch from the database
+// because we can only apply USD filters after FX conversion (in-memory).
+const USD_FILTER_OVERFETCH_MULTIPLIER = 5;
 
 export async function getTransactionSummary(
   custId: string
@@ -217,6 +220,13 @@ export async function getTransactionList(
   const forexService = new ForexRateService();
   const effectiveLimit = Math.min(limit, 100); // Cap at 100
 
+  // When USD amount filters are active, over-fetch to compensate for
+  // post-pagination filtering (FX conversion happens in-memory).
+  const hasUsdFilters = filters?.minUsdAmount !== undefined || filters?.maxUsdAmount !== undefined;
+  const dbFetchLimit = hasUsdFilters
+    ? effectiveLimit * USD_FILTER_OVERFETCH_MULTIPLIER
+    : effectiveLimit;
+
   // Parse cursor using base64-encoded JSON
   let cursorCreateTime: string | null = null;
   let cursorId: string | null = null;
@@ -233,7 +243,7 @@ export async function getTransactionList(
   // We fetch effectiveLimit + 1 rows from each table to detect hasMore, then merge.
 
   const hasCursor = cursorCreateTime !== null && cursorId !== null;
-  const fetchLimit = effectiveLimit + 1;
+  const fetchLimit = dbFetchLimit + 1;
 
   // Build date filter conditions
   const dateFilter: string[] = [];
@@ -354,10 +364,10 @@ export async function getTransactionList(
   );
 
   // Determine if there are more results
-  const hasMore = allTransactions.length > effectiveLimit;
-  let pageTransactions = allTransactions.slice(0, effectiveLimit);
+  const hasMore = allTransactions.length > dbFetchLimit;
+  let pageTransactions = allTransactions.slice(0, dbFetchLimit);
 
-  // Parallelize FX conversions for all transactions on the page
+  // Parallelize FX conversions for all fetched transactions
   const fxPromises = pageTransactions.map((txn) => {
     const date = txn.paymentTime
       ? new Date(txn.paymentTime)
@@ -375,21 +385,27 @@ export async function getTransactionList(
     pageTransactions[i].fxWarning = fx.warning ?? null;
   }
 
-  // Apply USD amount filters (must be done after FX conversion)
-  if (filters?.minUsdAmount !== undefined) {
-    pageTransactions = pageTransactions.filter(
-      (txn) => (txn.usdAmount ?? 0) >= filters.minUsdAmount!
-    );
+  // Apply USD amount filters (done after FX conversion since we can't
+  // filter by USD amount in SQL — it requires FX conversion).
+  if (hasUsdFilters) {
+    pageTransactions = pageTransactions.filter((txn) => {
+      const usdAmt = txn.usdAmount ?? 0;
+      if (filters?.minUsdAmount !== undefined && usdAmt < filters.minUsdAmount) return false;
+      if (filters?.maxUsdAmount !== undefined && usdAmt > filters.maxUsdAmount) return false;
+      return true;
+    });
+    // Trim to the requested limit after filtering
+    pageTransactions = pageTransactions.slice(0, effectiveLimit);
   }
-  if (filters?.maxUsdAmount !== undefined) {
-    pageTransactions = pageTransactions.filter(
-      (txn) => (txn.usdAmount ?? 0) <= filters.maxUsdAmount!
-    );
-  }
+
+  // Re-evaluate hasMore based on whether we got enough filtered results
+  const effectiveHasMore = hasUsdFilters
+    ? hasMore || pageTransactions.length === effectiveLimit
+    : hasMore;
 
   // Build next cursor from last item
   const nextCursor =
-    hasMore && pageTransactions.length > 0
+    effectiveHasMore && pageTransactions.length > 0
       ? encodeCursor(
           pageTransactions[pageTransactions.length - 1].createTime,
           pageTransactions[pageTransactions.length - 1].id
@@ -399,6 +415,6 @@ export async function getTransactionList(
   return {
     transactions: pageTransactions,
     nextCursor,
-    hasMore,
+    hasMore: effectiveHasMore,
   };
 }

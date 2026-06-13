@@ -13,9 +13,6 @@ import { getRiskSignals } from "@/lib/evidence/risk-signals";
 import { getTransactionSummary } from "@/lib/evidence/transactions";
 import { TransactionSummaryPanel } from "@/components/review/transaction-summary-panel";
 import { TransactionListPanel } from "@/components/review/transaction-list-panel";
-import { EvidenceTimelinePanel } from "@/components/review/evidence-timeline-panel";
-import { EvidenceGapsPanel } from "@/components/review/evidence-gaps-panel";
-import { AiInvestigationInputPanel } from "@/components/review/ai-investigation-input-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, User } from "lucide-react";
@@ -75,14 +72,6 @@ export default async function ReviewWorkbenchPage({
     // Errors are handled client-side; server fetch is best-effort for snapshot data
   }
 
-  // Prepare snapshot data for flattened review history
-  const snapshotData = initialSnapshots?.map((s) => ({
-    id: s.id,
-    snapshotType: s.snapshotType,
-    note: s.note,
-    createdAt: s.createdAt,
-  })) ?? [];
-
   const currentEvidence = {
     custId,
     fetchedAt,
@@ -98,9 +87,6 @@ export default async function ReviewWorkbenchPage({
         : { status: "empty" as const },
       transactionList: { status: "empty" as const },
       riskGraph: { status: "empty" as const },
-      evidenceTimeline: { status: "empty" as const },
-      evidenceGaps: { status: "empty" as const },
-      aiInvestigationInput: { status: "empty" as const },
     },
   };
 
@@ -147,31 +133,6 @@ export default async function ReviewWorkbenchPage({
           <TransactionListPanel custId={custId} />
 
           <RiskGraphPanel custId={custId} />
-
-          {/* Derived Panels - use server-fetched data */}
-          <EvidenceTimelinePanel
-            profile={customerProfileData}
-            riskSignals={riskSignalsData ?? []}
-            transactions={[]}
-            transactionSummary={transactionSummaryData}
-            graphData={null}
-            reviewHistory={snapshotData}
-          />
-
-          <EvidenceGapsPanel
-            profile={customerProfileData}
-            riskSignals={riskSignalsData ?? []}
-            transactionSummary={transactionSummaryData}
-            graphData={null}
-            reviewHistory={snapshotData}
-          />
-
-          <AiInvestigationInputPanel
-            profile={customerProfileData}
-            riskSignals={riskSignalsData ?? []}
-            transactionSummary={transactionSummaryData}
-            graphData={null}
-          />
         </div>
 
         {/* Review History - Right side */}
