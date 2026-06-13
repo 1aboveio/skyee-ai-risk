@@ -37,6 +37,14 @@ export interface TransactionListResult {
   hasMore: boolean;
 }
 
+export interface TransactionFilters {
+  startDate?: string;
+  endDate?: string;
+  direction?: "INBOUND" | "OUTBOUND";
+  minUsdAmount?: number;
+  maxUsdAmount?: number;
+}
+
 // ---------------------------------------------------------------------------
 // MySQL row types
 // ---------------------------------------------------------------------------
@@ -199,7 +207,8 @@ export async function getTransactionSummary(
 export async function getTransactionList(
   custId: string,
   cursor?: string,
-  limit: number = PAGE_SIZE
+  limit: number = PAGE_SIZE,
+  filters?: TransactionFilters
 ): Promise<TransactionListResult> {
   if (custId.length > MAX_CUST_ID_LENGTH) {
     throw new Error("Customer ID too long.");
@@ -226,41 +235,62 @@ export async function getTransactionList(
   const hasCursor = cursorCreateTime !== null && cursorId !== null;
   const fetchLimit = effectiveLimit + 1;
 
+  // Build date filter conditions
+  const dateFilter: string[] = [];
+  const dateParams: string[] = [];
+  if (filters?.startDate) {
+    dateFilter.push(`CREATE_TIME >= ?`);
+    dateParams.push(filters.startDate);
+  }
+  if (filters?.endDate) {
+    dateFilter.push(`CREATE_TIME <= ?`);
+    dateParams.push(filters.endDate);
+  }
+  const dateFilterClause = dateFilter.length > 0 ? `AND ${dateFilter.join(" AND ")}` : "";
+
+  // Direction filter
+  const skipPayOrders = filters?.direction === "INBOUND";
+  const skipCollOrders = filters?.direction === "OUTBOUND";
+
   // Outbound from pmp_pay_order (authoritative header-level records)
   const payWhere = hasCursor
-    ? `WHERE CUST_ID = ? AND (CREATE_TIME, PAY_ORDER_ID) < (?, ?)`
-    : `WHERE CUST_ID = ?`;
+    ? `WHERE CUST_ID = ? AND (CREATE_TIME, PAY_ORDER_ID) < (?, ?) ${dateFilterClause}`
+    : `WHERE CUST_ID = ? ${dateFilterClause}`;
   const payParams = hasCursor
-    ? [custId, cursorCreateTime, cursorId, fetchLimit]
-    : [custId, fetchLimit];
+    ? [custId, cursorCreateTime, cursorId, ...dateParams, fetchLimit]
+    : [custId, ...dateParams, fetchLimit];
 
   // Inbound from pmp_coll_order
   const collWhere = hasCursor
-    ? `WHERE CUST_ID = ? AND (CREATE_TIME, COLL_ORDER_ID) < (?, ?)`
-    : `WHERE CUST_ID = ?`;
+    ? `WHERE CUST_ID = ? AND (CREATE_TIME, COLL_ORDER_ID) < (?, ?) ${dateFilterClause}`
+    : `WHERE CUST_ID = ? ${dateFilterClause}`;
   const collParams = hasCursor
-    ? [custId, cursorCreateTime, cursorId, fetchLimit]
-    : [custId, fetchLimit];
+    ? [custId, cursorCreateTime, cursorId, ...dateParams, fetchLimit]
+    : [custId, ...dateParams, fetchLimit];
 
   const [payOrders, collOrders] = await Promise.all([
-    query<PayOrderRow[]>(
-      `SELECT PAY_ORDER_ID, CUST_ID, ORDER_NO, SETTLE_AMT, SETTLE_CURR_CD,
-              PAYMENT_STATUS, PAYMENT_TIME, NAME, CREATE_TIME
-       FROM pmp_pay_order
-       ${payWhere}
-       ORDER BY CREATE_TIME DESC, PAY_ORDER_ID DESC
-       LIMIT ?`,
-      payParams
-    ),
-    query<CollOrderRow[]>(
-      `SELECT COLL_ORDER_ID, CUST_ID, COLL_TXN_AMT, COLL_CURRENCY_CD,
-              COLL_STATUS, ARRIVAL_TIME, NAME, CREATE_TIME
-       FROM pmp_coll_order
-       ${collWhere}
-       ORDER BY CREATE_TIME DESC, COLL_ORDER_ID DESC
-       LIMIT ?`,
-      collParams
-    ),
+    skipPayOrders
+      ? Promise.resolve([] as PayOrderRow[])
+      : query<PayOrderRow[]>(
+          `SELECT PAY_ORDER_ID, CUST_ID, ORDER_NO, SETTLE_AMT, SETTLE_CURR_CD,
+                  PAYMENT_STATUS, PAYMENT_TIME, NAME, CREATE_TIME
+           FROM pmp_pay_order
+           ${payWhere}
+           ORDER BY CREATE_TIME DESC, PAY_ORDER_ID DESC
+           LIMIT ?`,
+          payParams
+        ),
+    skipCollOrders
+      ? Promise.resolve([] as CollOrderRow[])
+      : query<CollOrderRow[]>(
+          `SELECT COLL_ORDER_ID, CUST_ID, COLL_TXN_AMT, COLL_CURRENCY_CD,
+                  COLL_STATUS, ARRIVAL_TIME, NAME, CREATE_TIME
+           FROM pmp_coll_order
+           ${collWhere}
+           ORDER BY CREATE_TIME DESC, COLL_ORDER_ID DESC
+           LIMIT ?`,
+          collParams
+        ),
   ]);
 
   // Normalize into Transaction[]
@@ -325,7 +355,7 @@ export async function getTransactionList(
 
   // Determine if there are more results
   const hasMore = allTransactions.length > effectiveLimit;
-  const pageTransactions = allTransactions.slice(0, effectiveLimit);
+  let pageTransactions = allTransactions.slice(0, effectiveLimit);
 
   // Parallelize FX conversions for all transactions on the page
   const fxPromises = pageTransactions.map((txn) => {
@@ -343,6 +373,18 @@ export async function getTransactionList(
     pageTransactions[i].fxRate = fx.rate;
     pageTransactions[i].fxRateDate = formatDate(fx.rateDate);
     pageTransactions[i].fxWarning = fx.warning ?? null;
+  }
+
+  // Apply USD amount filters (must be done after FX conversion)
+  if (filters?.minUsdAmount !== undefined) {
+    pageTransactions = pageTransactions.filter(
+      (txn) => (txn.usdAmount ?? 0) >= filters.minUsdAmount!
+    );
+  }
+  if (filters?.maxUsdAmount !== undefined) {
+    pageTransactions = pageTransactions.filter(
+      (txn) => (txn.usdAmount ?? 0) <= filters.maxUsdAmount!
+    );
   }
 
   // Build next cursor from last item
