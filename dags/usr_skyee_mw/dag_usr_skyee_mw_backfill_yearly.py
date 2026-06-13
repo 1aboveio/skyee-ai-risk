@@ -42,7 +42,7 @@ with DAG(
     default_args=default_args,
     description="Backfill regular stg_* tables (yearly)",
     schedule="@yearly",
-    start_date=datetime(2016, 9, 1),
+    start_date=datetime(2015, 9, 1),  # First run covers 2016
     catchup=True,
     max_active_runs=1,
     tags=["backfill", "usr_skyee_mw"],
