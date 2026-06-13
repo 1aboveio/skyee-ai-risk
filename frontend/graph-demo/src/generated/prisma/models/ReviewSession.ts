@@ -225,6 +225,7 @@ export type ReviewSessionOrderByWithRelationInput = {
 
 export type ReviewSessionWhereUniqueInput = Prisma.AtLeast<{
   id?: string
+  custId_reviewerId_status?: Prisma.ReviewSessionCustIdReviewerIdStatusCompoundUniqueInput
   AND?: Prisma.ReviewSessionWhereInput | Prisma.ReviewSessionWhereInput[]
   OR?: Prisma.ReviewSessionWhereInput[]
   NOT?: Prisma.ReviewSessionWhereInput | Prisma.ReviewSessionWhereInput[]
@@ -237,7 +238,7 @@ export type ReviewSessionWhereUniqueInput = Prisma.AtLeast<{
   updatedAt?: Prisma.DateTimeFilter<"ReviewSession"> | Date | string
   snapshots?: Prisma.ReviewSnapshotListRelationFilter
   decisions?: Prisma.ReviewDecisionListRelationFilter
-}, "id">
+}, "id" | "custId_reviewerId_status">
 
 export type ReviewSessionOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -350,6 +351,12 @@ export type ReviewSessionUncheckedUpdateManyInput = {
   status?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
+export type ReviewSessionCustIdReviewerIdStatusCompoundUniqueInput = {
+  custId: string
+  reviewerId: string
+  status: string
 }
 
 export type ReviewSessionCountOrderByAggregateInput = {

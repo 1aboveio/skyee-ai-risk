@@ -7,29 +7,33 @@ export async function getOrCreateReviewSession(
   reviewerId: string,
   reviewerEmail: string
 ) {
-  // Find active session for this customer and reviewer
-  const existingSession = await prisma.reviewSession.findFirst({
-    where: {
-      custId,
-      reviewerId,
-      status: "ACTIVE",
-    },
+  // Try to find an active session first
+  const existing = await prisma.reviewSession.findFirst({
+    where: { custId, reviewerId, status: "ACTIVE" },
     orderBy: { createdAt: "desc" },
   });
+  if (existing) return existing;
 
-  if (existingSession) {
-    return existingSession;
+  // Create new session; if a concurrent insert won the race,
+  // the @@unique([custId, reviewerId, status]) constraint throws
+  // and we fall back to fetching the winner.
+  try {
+    return await prisma.reviewSession.create({
+      data: { custId, contextType, reviewerId, reviewerEmail },
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("Unique constraint")
+    ) {
+      const raced = await prisma.reviewSession.findFirst({
+        where: { custId, reviewerId, status: "ACTIVE" },
+        orderBy: { createdAt: "desc" },
+      });
+      if (raced) return raced;
+    }
+    throw error;
   }
-
-  // Create new session
-  return prisma.reviewSession.create({
-    data: {
-      custId,
-      contextType,
-      reviewerId,
-      reviewerEmail,
-    },
-  });
 }
 
 export async function saveSnapshot(

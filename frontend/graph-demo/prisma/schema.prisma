@@ -30,6 +30,7 @@ model ReviewSession {
   snapshots   ReviewSnapshot[]
   decisions   ReviewDecision[]
 
+  @@unique([custId, reviewerId, status])
   @@index([custId])
   @@index([reviewerId])
 }
