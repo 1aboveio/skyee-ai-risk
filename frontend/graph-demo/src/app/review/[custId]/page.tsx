@@ -5,6 +5,10 @@ import { WorkbenchPanel } from "@/components/review/workbench-panel";
 import { ReviewHistory } from "@/components/review/review-history";
 import { SaveSnapshotButton } from "@/components/review/save-snapshot-button";
 import { CustomerSearchInput } from "@/components/review/customer-search-input";
+import { CustomerProfilePanel } from "@/components/review/customer-profile-panel";
+import { RiskSignalsPanel } from "@/components/review/risk-signals-panel";
+import { getCustomerProfile } from "@/lib/evidence/customer-profile";
+import { getRiskSignals } from "@/lib/evidence/risk-signals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, User } from "lucide-react";
@@ -45,13 +49,30 @@ export default async function ReviewWorkbenchPage({
       )
     : undefined;
 
-  // Current evidence state for snapshot capture
+  // Fetch evidence data server-side for snapshot capture
+  const fetchedAt = new Date().toISOString();
+  let customerProfileData: Awaited<ReturnType<typeof getCustomerProfile>> | null = null;
+  let riskSignalsData: Awaited<ReturnType<typeof getRiskSignals>> | null = null;
+
+  try {
+    [customerProfileData, riskSignalsData] = await Promise.all([
+      getCustomerProfile(custId).catch(() => null),
+      getRiskSignals(custId).catch(() => null),
+    ]);
+  } catch {
+    // Errors are handled client-side; server fetch is best-effort for snapshot data
+  }
+
   const currentEvidence = {
     custId,
-    fetchedAt: new Date().toISOString(),
+    fetchedAt,
     panels: {
-      customerProfile: { status: "empty" as const },
-      riskSignals: { status: "empty" as const },
+      customerProfile: customerProfileData
+        ? { status: "loaded" as const, data: customerProfileData }
+        : { status: "empty" as const },
+      riskSignals: riskSignalsData
+        ? { status: "loaded" as const, data: riskSignalsData }
+        : { status: "empty" as const },
       transactionSummary: { status: "empty" as const },
       transactionList: { status: "empty" as const },
       riskGraph: { status: "empty" as const },
@@ -95,21 +116,9 @@ export default async function ReviewWorkbenchPage({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Evidence Panels - Left side (2 columns) */}
         <div className="lg:col-span-2 space-y-6">
-          <WorkbenchPanel
-            title="Customer Profile"
-            empty
-            emptyMessage="Customer profile data will be loaded from the Source Evidence Database."
-          >
-            <div />
-          </WorkbenchPanel>
+          <CustomerProfilePanel custId={custId} />
 
-          <WorkbenchPanel
-            title="Risk Signals"
-            empty
-            emptyMessage="Risk signal data will be loaded from the Source Evidence Database."
-          >
-            <div />
-          </WorkbenchPanel>
+          <RiskSignalsPanel custId={custId} />
 
           <WorkbenchPanel
             title="Transaction Summary"
