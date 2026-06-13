@@ -8,7 +8,6 @@ Tables: all except pmp_coll_order, cust_user_login_log, pmp_pay_details, pmp_pay
 
 Variables:
     MYSQL_DB_URL_SECRET - MySQL JDBC URL with credentials
-    SPARK_CONNECT_URL   - Spark Connect server URL
 """
 
 from datetime import datetime, timedelta
@@ -62,7 +61,6 @@ with DAG(
             conn_id="spark_default",
             application_args=[
                 "--url", "jdbc:mysql://{{ var.value.MYSQL_DB_URL_SECRET }}",
-                "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
                 "--start-date", "{{ ds }}",
                 "--end-date", "{{ (macros.datetime.strptime(ds, '%Y-%m-%d') + macros.dateutil.relativedelta.relativedelta(years=1)).strftime('%Y-%m-%d') }}",
                 "--bulk",

@@ -12,15 +12,16 @@ Two association graph tables are maintained:
     first_seen can move backward without moving the Hudi record partition.
 
 Usage:
-    python dwd_graph_edges.py --spark-remote <spark_connect_url> [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--bulk/--per-day] [--max-degree 100] [--snapshot-hudi-mode upsert]
+    python dwd_graph_edges.py [--spark-remote <spark_connect_url>] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--bulk/--per-day] [--max-degree 100] [--snapshot-hudi-mode upsert]
 """
 
 import sys
 import os
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from utils.etl import Etl
+from utils.etl import Etl, create_spark_session
 from pyspark.sql import Column, DataFrame
 from pyspark.sql.functions import (
     col,
@@ -485,16 +486,14 @@ class DwdGraphEdgesSnapshotEtl(Etl):
 
 
 def main(
-    spark_remote: Annotated[str, typer.Option("--spark-remote")],
+    spark_remote: Annotated[Optional[str], typer.Option("--spark-remote")] = None,
     start_date: Annotated[str, typer.Option("--start-date")] = None,
     end_date: Annotated[str, typer.Option("--end-date")] = None,
     bulk: Annotated[bool, typer.Option("--bulk/--per-day")] = True,
     max_degree: Annotated[int, typer.Option("--max-degree")] = MAX_DEGREE,
     snapshot_hudi_mode: Annotated[str, typer.Option("--snapshot-hudi-mode")] = "upsert",
 ):
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.remote(spark_remote).getOrCreate()
+    spark = create_spark_session(spark_remote)
     etl = DwdGraphEdgesEtl(
         start_date=start_date,
         end_date=end_date,

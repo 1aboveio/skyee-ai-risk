@@ -1,16 +1,14 @@
 """
-Airflow DAG: Sync MySQL usr_skyee_mw tables to Hudi via Spark Connect.
+Airflow DAG: Sync MySQL usr_skyee_mw tables to Hudi via spark-submit.
 
 Schedule: Daily at 02:00 AM
 
 Variables:
     MYSQL_DB_URL_SECRET - MySQL JDBC URL with credentials
-    SPARK_CONNECT_URL   - Spark Connect server URL
 """
 
 from datetime import datetime, timedelta
 from airflow import DAG
-from airflow.models import Variable
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from airflow.operators.empty import EmptyOperator
 
@@ -65,7 +63,6 @@ with DAG(
             conn_id="spark_default",
             application_args=[
                 "--url", "jdbc:mysql://{{ var.value.MYSQL_DB_URL_SECRET }}",
-                "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
                 "--start-date", "{{ ds }}",
                 "--end-date", "{{ next_ds }}",
                 "--bulk",
@@ -81,7 +78,6 @@ with DAG(
         application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
         conn_id="spark_default",
         application_args=[
-            "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
             "--start-date", "{{ ds }}",
             "--end-date", "{{ next_ds }}",
             "--bulk",
@@ -95,7 +91,6 @@ with DAG(
         application=f"{SCRIPTS_PATH}/dwd_customer.py",
         conn_id="spark_default",
         application_args=[
-            "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
             "--bulk",
         ],
         verbose=True,
@@ -106,7 +101,6 @@ with DAG(
         application=f"{SCRIPTS_PATH}/dwd_transaction.py",
         conn_id="spark_default",
         application_args=[
-            "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
             "--start-date", "{{ ds }}",
             "--end-date", "{{ next_ds }}",
             "--bulk",
@@ -119,7 +113,6 @@ with DAG(
         application=f"{SCRIPTS_PATH}/dwd_graph_nodes.py",
         conn_id="spark_default",
         application_args=[
-            "--spark-remote", "{{ var.value.SPARK_CONNECT_URL }}",
             "--bulk",
         ],
         verbose=True,
