@@ -37,6 +37,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { WorkbenchPanel } from "@/components/review/workbench-panel";
+import { GraphCanvas } from "@/components/graph/graph-canvas";
+import { fetchGraph } from "@/lib/graph/fetch";
+import { riskVariant, displayName, formatDateTime } from "@/lib/graph/utils";
 import {
   categorizeEdgeType,
   edgeCategoryLabel,
@@ -50,152 +53,6 @@ type LoadState =
   | { status: "loading"; data: GraphSearchResult | null; error: null }
   | { status: "ready"; data: GraphSearchResult; error: null }
   | { status: "error"; data: GraphSearchResult | null; error: string };
-
-function riskVariant(node: Pick<GraphNode, "riskLevel" | "isHighRisk" | "isSanctioned">) {
-  if (node.isSanctioned || node.riskLevel === "HIGH") {
-    return "destructive";
-  }
-  if (node.isHighRisk || node.riskLevel === "MEDIUM_HIGH") {
-    return "secondary";
-  }
-  return "outline";
-}
-
-function displayName(node: GraphNode): string {
-  return node.custName ?? `Customer ${node.custId}`;
-}
-
-function formatDateTime(value: string | null): string {
-  if (!value) {
-    return "-";
-  }
-  return new Intl.DateTimeFormat("en", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-async function fetchGraph(custId: string, includeWeak: boolean): Promise<GraphSearchResult> {
-  const params = new URLSearchParams({
-    custId,
-    includeWeak: String(includeWeak),
-    limit: "15",
-  });
-  const response = await fetch(`/api/graph/search?${params.toString()}`);
-  if (!response.ok) {
-    try {
-      const body = (await response.json()) as {
-        error?: { message?: string; detail?: { node_degree?: number; max_degree?: number } };
-      };
-      const degree = body.error?.detail?.node_degree;
-      const maxDegree = body.error?.detail?.max_degree;
-      if (degree && maxDegree) {
-        throw new Error(
-          `${body.error?.message ?? "Graph query blocked"} Degree ${degree.toLocaleString()} exceeds interactive limit ${maxDegree.toLocaleString()}.`
-        );
-      }
-      throw new Error(body.error?.message ?? `Search failed with status ${response.status}`);
-    } catch (error) {
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error(`Search failed with status ${response.status}`);
-    }
-  }
-  return (await response.json()) as GraphSearchResult;
-}
-
-function GraphCanvas({ result }: { result: GraphSearchResult }) {
-  const width = 760;
-  const height = 440;
-  const center = { x: width / 2, y: height / 2 };
-  const neighbors = result.nodes.filter((node) => node.custId !== result.custId);
-  const radius = Math.min(width, height) * 0.36;
-  const positions = new Map<string, { x: number; y: number }>();
-  positions.set(result.custId, center);
-  neighbors.forEach((node, index) => {
-    const angle = (Math.PI * 2 * index) / Math.max(neighbors.length, 1) - Math.PI / 2;
-    positions.set(node.custId, {
-      x: center.x + Math.cos(angle) * radius,
-      y: center.y + Math.sin(angle) * radius,
-    });
-  });
-
-  return (
-    <div className="overflow-hidden rounded-lg border bg-muted/20">
-      <svg
-        role="img"
-        aria-label="Customer relationship graph"
-        viewBox={`0 0 ${width} ${height}`}
-        className="aspect-[19/11] w-full"
-      >
-        <rect width={width} height={height} fill="var(--card)" />
-        {result.edges.map((edge) => {
-          const source = positions.get(result.custId) ?? center;
-          const target = positions.get(edge.neighborCustId);
-          if (!target) {
-            return null;
-          }
-          return (
-            <g key={edge.edgeId}>
-              <line
-                x1={source.x}
-                y1={source.y}
-                x2={target.x}
-                y2={target.y}
-                stroke={edge.strength === "Strong" ? "var(--primary)" : "var(--chart-3)"}
-                strokeDasharray={edge.strength === "Weak" ? "7 7" : undefined}
-                strokeOpacity={0.75}
-                strokeWidth={edge.strength === "Strong" ? 2.5 : 1.8}
-              />
-            </g>
-          );
-        })}
-        {result.nodes.map((node) => {
-          const point = positions.get(node.custId);
-          if (!point) {
-            return null;
-          }
-          const isCenter = node.custId === result.custId;
-          const fill = node.isSanctioned
-            ? "var(--destructive)"
-            : node.isHighRisk
-              ? "var(--chart-4)"
-              : isCenter
-                ? "var(--primary)"
-                : "var(--secondary)";
-          return (
-            <g key={node.custId}>
-              <title>{`${node.custId} ${displayName(node)} ${node.riskLevel}`}</title>
-              <circle
-                cx={point.x}
-                cy={point.y}
-                r={isCenter ? 34 : 25}
-                fill={fill}
-                stroke="var(--background)"
-                strokeWidth="5"
-              />
-              <text
-                x={point.x}
-                y={point.y + 4}
-                textAnchor="middle"
-                className={
-                  isCenter || node.isHighRisk ? "fill-primary-foreground" : "fill-foreground"
-                }
-                style={{ fontSize: "13px", fontWeight: 600 }}
-              >
-                {node.custId.slice(-4)}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
 
 function MetricCard({
   title,
@@ -397,11 +254,11 @@ export function RiskGraphPanel({
   }, []);
 
   // Fetch graph data when custId, includeWeak, or refreshKey changes.
-  // Only .then/.catch call setState (not the effect body itself).
+  // Uses AbortController to cancel in-flight requests on cleanup.
   useEffect(() => {
     const controller = new AbortController();
 
-    fetchGraph(custId, includeWeak)
+    fetchGraph({ custId, includeWeak, signal: controller.signal })
       .then((data) => {
         if (!controller.signal.aborted) {
           setState({ status: "ready", data, error: null });
@@ -450,11 +307,10 @@ export function RiskGraphPanel({
   }
 
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-3">
+    <WorkbenchPanel title="Risk Graph">
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CardTitle className="text-sm font-medium">Risk Graph</CardTitle>
             <Badge variant="outline" className="text-[10px]">
               {result.nodes.length} nodes
             </Badge>
@@ -481,8 +337,7 @@ export function RiskGraphPanel({
             </Button>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+
         {state.status === "error" && (
           <Alert variant="destructive" className="mb-4">
             <AlertCircleIcon className="h-4 w-4" />
@@ -573,7 +428,7 @@ export function RiskGraphPanel({
           <span>Fetched: {formatDateTime(new Date().toISOString())}</span>
           <span>Customer: {result.custId}</span>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </WorkbenchPanel>
   );
 }
