@@ -45,8 +45,8 @@ export interface EnterpriseRealname {
 
 export type CustomerProfile = CustomerProfileBase &
   (
-    | { custType: "PERSONAL"; personal: PersonalRealname; enterprise: null }
-    | { custType: "COMPANY"; personal: null; enterprise: EnterpriseRealname }
+    | { custType: "PERSONAL"; personal: PersonalRealname | null; enterprise: null }
+    | { custType: "COMPANY"; personal: null; enterprise: EnterpriseRealname | null }
     | { custType: "UNKNOWN"; personal: null; enterprise: null }
   );
 
@@ -54,7 +54,9 @@ export type CustomerProfile = CustomerProfileBase &
 // MySQL row types
 // ---------------------------------------------------------------------------
 
-interface CustCustomerInfoRow {
+import type mysql from "mysql2/promise";
+
+interface CustCustomerInfoRow extends mysql.RowDataPacket {
   CUST_ID: string;
   CUST_TYPE: string | null;
   CUST_NAME: string | null;
@@ -73,7 +75,7 @@ interface CustCustomerInfoRow {
   LST_UPD_TIME: Date | string | null;
 }
 
-interface PersonalRealnameRow {
+interface PersonalRealnameRow extends mysql.RowDataPacket {
   NAME: string | null;
   EN_NAME: string | null;
   CERT_TYPE: string | null;
@@ -83,7 +85,7 @@ interface PersonalRealnameRow {
   LST_UPD_TIME: Date | string | null;
 }
 
-interface EnterpriseRealnameRow {
+interface EnterpriseRealnameRow extends mysql.RowDataPacket {
   ENTERPRISE_NAME: string | null;
   EN_NAME: string | null;
   CERT_NO: string | null;

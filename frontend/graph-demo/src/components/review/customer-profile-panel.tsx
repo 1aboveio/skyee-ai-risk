@@ -75,7 +75,7 @@ function riskBadgeVariant(level: string | null): "default" | "destructive" | "se
   }
 }
 
-function statusBadgeVariant(status: string | null): "default" | "secondary" | "outline" {
+function statusBadgeVariant(status: string | null): "default" | "destructive" | "secondary" | "outline" {
   switch (status?.toUpperCase()) {
     case "ACTIVE":
       return "default";

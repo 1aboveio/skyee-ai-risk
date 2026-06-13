@@ -1,30 +1,10 @@
 import {
-  GRAPH_SESSION_COOKIE,
-  parseSessionValue,
-  type GraphIdentitySession,
-} from "@/lib/auth/identity-session";
+  getSessionFromRequest,
+  unauthorizedResponse,
+} from "@/lib/auth/get-session-from-request";
 import { getCustomerProfile } from "@/lib/evidence/customer-profile";
 
 const MAX_CUST_ID_LENGTH = 64;
-
-function getSessionFromRequest(request: Request): GraphIdentitySession | null {
-  const cookieHeader = request.headers.get("cookie") ?? "";
-  const sessionCookie = cookieHeader
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${GRAPH_SESSION_COOKIE}=`))
-    ?.slice(GRAPH_SESSION_COOKIE.length + 1);
-  return parseSessionValue(
-    sessionCookie ? decodeURIComponent(sessionCookie) : undefined
-  );
-}
-
-function unauthorized(message: string) {
-  return Response.json(
-    { error: { code: "UNAUTHENTICATED", message } },
-    { status: 401 }
-  );
-}
 
 export async function GET(
   request: Request,
@@ -32,7 +12,9 @@ export async function GET(
 ): Promise<Response> {
   const session = getSessionFromRequest(request);
   if (!session) {
-    return unauthorized("Sign in with Identity before viewing customer profile.");
+    return unauthorizedResponse(
+      "Sign in with Identity before viewing customer profile."
+    );
   }
 
   const { custId } = await params;
