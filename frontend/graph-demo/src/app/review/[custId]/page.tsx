@@ -10,7 +10,7 @@ import { RiskSignalsPanel } from "@/components/review/risk-signals-panel";
 import { RiskGraphPanel } from "@/components/review/risk-graph-panel";
 import { getCustomerProfile } from "@/lib/evidence/customer-profile";
 import { getRiskSignals } from "@/lib/evidence/risk-signals";
-import { getTransactionSummary } from "@/lib/evidence/transactions";
+import { getTransactionSummary, getTransactionList } from "@/lib/evidence/transactions";
 import { TransactionSummaryPanel } from "@/components/review/transaction-summary-panel";
 import { TransactionListPanel } from "@/components/review/transaction-list-panel";
 import { EvidenceTimelinePanel } from "@/components/review/evidence-timeline-panel";
@@ -64,16 +64,20 @@ export default async function ReviewWorkbenchPage({
   let customerProfileData: Awaited<ReturnType<typeof getCustomerProfile>> | null = null;
   let riskSignalsData: Awaited<ReturnType<typeof getRiskSignals>> | null = null;
   let transactionSummaryData: Awaited<ReturnType<typeof getTransactionSummary>> | null = null;
+  let transactionListData: Awaited<ReturnType<typeof getTransactionList>> | null = null;
 
   try {
-    [customerProfileData, riskSignalsData, transactionSummaryData] = await Promise.all([
+    [customerProfileData, riskSignalsData, transactionSummaryData, transactionListData] = await Promise.all([
       getCustomerProfile(custId).catch(() => null),
       getRiskSignals(custId).catch(() => null),
       getTransactionSummary(custId).catch(() => null),
+      getTransactionList(custId, undefined, 50).catch(() => null), // Fetch up to 50 recent transactions
     ]);
   } catch {
     // Errors are handled client-side; server fetch is best-effort for snapshot data
   }
+
+  const transactions = transactionListData?.transactions ?? [];
 
   // Prepare snapshot data for derived panels
   const snapshotData = initialSnapshots?.map((s) => ({
@@ -152,7 +156,7 @@ export default async function ReviewWorkbenchPage({
           <EvidenceTimelinePanel
             profile={customerProfileData}
             riskSignals={riskSignalsData ?? []}
-            transactions={[]}
+            transactions={transactions}
             transactionSummary={transactionSummaryData}
             graphData={null}
             reviewHistory={snapshotData}

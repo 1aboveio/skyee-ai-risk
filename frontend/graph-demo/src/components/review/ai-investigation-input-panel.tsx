@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { WorkbenchPanel } from "./workbench-panel";
+import type { CustomerProfile } from "@/lib/evidence/customer-profile";
 import {
   Database,
   FileText,
@@ -16,37 +17,6 @@ import {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface CustomerProfile {
-  custId: string;
-  custType: string;
-  custName: string | null;
-  enName: string | null;
-  custMobile: string | null;
-  email: string | null;
-  registCountry: string | null;
-  custStatus: string | null;
-  realnameStatus: string | null;
-  riskLevel: string | null;
-  riskScore: number | null;
-  highRisk: boolean;
-  sanctioned: boolean;
-  regTime: string | null;
-  personal: {
-    name: string | null;
-    enName: string | null;
-    certType: string | null;
-    certNo: string | null;
-    residenceAddress: string | null;
-  } | null;
-  enterprise: {
-    enterpriseName: string | null;
-    enName: string | null;
-    certNo: string | null;
-    legalPersonName: string | null;
-    businessStatus: string | null;
-  } | null;
-}
 
 interface RiskSignal {
   signalType: string;
