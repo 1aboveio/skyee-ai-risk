@@ -6,3 +6,6 @@ export { SaveSnapshotButton } from "./save-snapshot-button";
 export { DecisionPanel } from "./decision-panel";
 export { TransactionSummaryPanel } from "./transaction-summary-panel";
 export { TransactionListPanel } from "./transaction-list-panel";
+export { EvidenceTimelinePanel } from "./evidence-timeline-panel";
+export { EvidenceGapsPanel } from "./evidence-gaps-panel";
+export { AiInvestigationInputPanel } from "./ai-investigation-input-panel";
