@@ -2,11 +2,11 @@ import {
   GRAPH_SESSION_COOKIE,
   parseSessionValue,
   type GraphIdentitySession,
-} from "./identity-session";
+} from "@/lib/auth/identity-session";
 
 /**
- * Extract the signed session from the request's cookie header.
- * Returns null when the cookie is missing, expired, or tampered with.
+ * Extract the Graph Identity session from a request's cookie header.
+ * Returns null when the cookie is missing or the session is invalid/expired.
  */
 export function getSessionFromRequest(
   request: Request
@@ -23,9 +23,9 @@ export function getSessionFromRequest(
 }
 
 /**
- * Build a standard 401 JSON response.
+ * Build a 401 JSON response for unauthenticated requests.
  */
-export function unauthorizedResponse(message: string): Response {
+export function unauthorizedResponse(message: string) {
   return Response.json(
     { error: { code: "UNAUTHENTICATED", message } },
     { status: 401 }

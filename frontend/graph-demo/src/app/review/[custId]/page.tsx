@@ -7,6 +7,7 @@ import { SaveSnapshotButton } from "@/components/review/save-snapshot-button";
 import { CustomerSearchInput } from "@/components/review/customer-search-input";
 import { CustomerProfilePanel } from "@/components/review/customer-profile-panel";
 import { RiskSignalsPanel } from "@/components/review/risk-signals-panel";
+import { RiskGraphPanel } from "@/components/review/risk-graph-panel";
 import { getCustomerProfile } from "@/lib/evidence/customer-profile";
 import { getRiskSignals } from "@/lib/evidence/risk-signals";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -139,13 +140,7 @@ export default async function ReviewWorkbenchPage({
             <div />
           </WorkbenchPanel>
 
-          <WorkbenchPanel
-            title="Risk Graph"
-            empty
-            emptyMessage="Risk graph associations will be displayed here."
-          >
-            <div />
-          </WorkbenchPanel>
+          <RiskGraphPanel custId={custId} />
         </div>
 
         {/* Review History - Right side */}

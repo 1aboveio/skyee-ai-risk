@@ -69,8 +69,10 @@ import {
 import type { GraphIdentitySession } from "@/lib/auth/identity-session";
 import { edgeAnnotations } from "@/lib/graph/edge-annotations";
 import { demoCustomers } from "@/lib/graph/mock-data";
+import { fetchGraph } from "@/lib/graph/fetch";
+import { riskVariant, displayName, formatDate, formatMoney, compactId } from "@/lib/graph/utils";
 import type { GraphEdge, GraphNode, GraphSearchResult } from "@/lib/graph/schema";
-import { cn } from "@/lib/utils";
+import { GraphCanvas } from "@/components/graph/graph-canvas";
 
 type LoadState =
   | { status: "idle"; data: null; error: null }
@@ -194,78 +196,6 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
 };
 
 const initialCustomerId = demoCustomers[0] ?? "1000321";
-
-function riskVariant(node: Pick<GraphNode, "riskLevel" | "isHighRisk" | "isSanctioned">) {
-  if (node.isSanctioned || node.riskLevel === "HIGH") {
-    return "destructive";
-  }
-  if (node.isHighRisk || node.riskLevel === "MEDIUM_HIGH") {
-    return "secondary";
-  }
-  return "outline";
-}
-
-function formatDate(value: string | null, locale: Locale): string {
-  if (!value) {
-    return "-";
-  }
-  return new Intl.DateTimeFormat(locale, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatMoney(value: number | null, locale: Locale): string {
-  if (value === null) {
-    return translations[locale].balanceUnavailable;
-  }
-  return new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function displayName(node: GraphNode): string {
-  return node.custName ?? `Customer ${node.custId}`;
-}
-
-function compactId(value: string): string {
-  if (value.length <= 10) {
-    return value;
-  }
-  return `${value.slice(0, 4)}...${value.slice(-4)}`;
-}
-
-async function fetchGraph(custId: string, includeWeak: boolean): Promise<GraphSearchResult> {
-  const params = new URLSearchParams({
-    custId,
-    includeWeak: String(includeWeak),
-    limit: "15",
-  });
-  const response = await fetch(`/api/graph/search?${params.toString()}`);
-  if (!response.ok) {
-    try {
-      const body = (await response.json()) as {
-        error?: { message?: string; detail?: { node_degree?: number; max_degree?: number } };
-      };
-      const degree = body.error?.detail?.node_degree;
-      const maxDegree = body.error?.detail?.max_degree;
-      if (degree && maxDegree) {
-        throw new Error(
-          `${body.error?.message ?? "Graph query blocked"} Degree ${degree.toLocaleString()} exceeds interactive limit ${maxDegree.toLocaleString()}.`
-        );
-      }
-      throw new Error(body.error?.message ?? `Search failed with status ${response.status}`);
-    } catch (error) {
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error(`Search failed with status ${response.status}`);
-    }
-  }
-  return (await response.json()) as GraphSearchResult;
-}
 
 function MetricCard({
   title,
@@ -399,95 +329,6 @@ function CustomerSearch({
   );
 }
 
-function GraphCanvas({ result }: { result: GraphSearchResult }) {
-  const width = 760;
-  const height = 440;
-  const center = { x: width / 2, y: height / 2 };
-  const neighbors = result.nodes.filter((node) => node.custId !== result.custId);
-  const radius = Math.min(width, height) * 0.36;
-  const positions = new Map<string, { x: number; y: number }>();
-  positions.set(result.custId, center);
-  neighbors.forEach((node, index) => {
-    const angle = (Math.PI * 2 * index) / Math.max(neighbors.length, 1) - Math.PI / 2;
-    positions.set(node.custId, {
-      x: center.x + Math.cos(angle) * radius,
-      y: center.y + Math.sin(angle) * radius,
-    });
-  });
-
-  return (
-    <div className="overflow-hidden rounded-lg border bg-muted/20">
-      <svg
-        role="img"
-        aria-label="Customer relationship graph"
-        viewBox={`0 0 ${width} ${height}`}
-        className="aspect-[19/11] w-full"
-      >
-        <rect width={width} height={height} fill="var(--card)" />
-        {result.edges.map((edge) => {
-          const source = positions.get(result.custId) ?? center;
-          const target = positions.get(edge.neighborCustId);
-          if (!target) {
-            return null;
-          }
-          return (
-            <g key={edge.edgeId}>
-              <line
-                x1={source.x}
-                y1={source.y}
-                x2={target.x}
-                y2={target.y}
-                stroke={edge.strength === "Strong" ? "var(--primary)" : "var(--chart-3)"}
-                strokeDasharray={edge.strength === "Weak" ? "7 7" : undefined}
-                strokeOpacity={0.75}
-                strokeWidth={edge.strength === "Strong" ? 2.5 : 1.8}
-              />
-            </g>
-          );
-        })}
-        {result.nodes.map((node) => {
-          const point = positions.get(node.custId);
-          if (!point) {
-            return null;
-          }
-          const isCenter = node.custId === result.custId;
-          const fill = node.isSanctioned
-            ? "var(--destructive)"
-            : node.isHighRisk
-              ? "var(--chart-4)"
-              : isCenter
-                ? "var(--primary)"
-                : "var(--secondary)";
-          return (
-            <g key={node.custId}>
-              <title>{`${node.custId} ${displayName(node)} ${node.riskLevel}`}</title>
-              <circle
-                cx={point.x}
-                cy={point.y}
-                r={isCenter ? 34 : 25}
-                fill={fill}
-                stroke="var(--background)"
-                strokeWidth="5"
-              />
-              <text
-                x={point.x}
-                y={point.y + 4}
-                textAnchor="middle"
-                className={cn(
-                  "text-[13px] font-semibold",
-                  isCenter || node.isHighRisk ? "fill-primary-foreground" : "fill-foreground"
-                )}
-              >
-                {node.custId.slice(-4)}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
-
 type EdgeRow = {
   edge: GraphEdge;
   node: GraphNode | null;
@@ -602,7 +443,7 @@ function EdgeTable({
         header: t.accountBalance,
         cell: ({ row }) => (
           <span className="tabular-nums">
-            {formatMoney(row.original.node?.currentBalance ?? null, locale)}
+            {formatMoney(row.original.node?.currentBalance ?? null, locale, translations[locale].balanceUnavailable)}
           </span>
         ),
       },
@@ -849,7 +690,7 @@ export function GraphDemo({ session }: { session: GraphIdentitySession }) {
     }
     setState((current) => ({ status: "loading", data: current.data, error: null }));
     try {
-      const data = await fetchGraph(trimmed, includeWeak);
+      const data = await fetchGraph({ custId: trimmed, includeWeak });
       setState({ status: "ready", data, error: null });
     } catch (error) {
       setState((current) => ({
