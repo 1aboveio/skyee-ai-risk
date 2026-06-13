@@ -63,7 +63,6 @@ class Etl(ABC):
     par_cols = []
     path = None
     repartition = []
-    precombine_fallbacks = {"LST_UPD_TIME": "CREATE_TIME"}
     url: str = None
     concurrency_mode: Literal["SINGLE_WRITER", "OPTIMISTIC_CONCURRENCY_CONTROL"] = (
         "SINGLE_WRITER"
@@ -222,14 +221,6 @@ class Etl(ABC):
                 f"(configured mode: {operation})"
             )
             operation = "bulk_insert"
-
-        fallback_field = self.precombine_fallbacks.get(self.ts)
-        if fallback_field and self.ts in df.columns and fallback_field in df.columns:
-            logger.info(
-                f"Filling null {self.ts} values from {fallback_field} "
-                "before Hudi write"
-            )
-            df = df.withColumn(self.ts, coalesce(col(self.ts), col(fallback_field)))
 
         hudi_options = {
             "hoodie.table.name": f"{self.dst_db}.{self.dst_tbl}",

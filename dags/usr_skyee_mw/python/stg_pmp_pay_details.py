@@ -5,7 +5,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from utils.etl import MySqlEtl, create_spark_session
-from pyspark.sql.functions import col
+from pyspark.sql.functions import coalesce, col
 from typing import Optional
 from typing_extensions import Annotated
 import typer
@@ -26,7 +26,9 @@ class StgPmpPayDetailsEtl(MySqlEtl):
     concurrency_mode = "SINGLE_WRITER"
 
     def transform(self, df):
-        return df.withColumn("dt", col("CREATE_TIME").cast("date"))
+        return df.withColumn(
+            "LST_UPD_TIME", coalesce(col("LST_UPD_TIME"), col("CREATE_TIME"))
+        ).withColumn("dt", col("CREATE_TIME").cast("date"))
 
 
 def main(
