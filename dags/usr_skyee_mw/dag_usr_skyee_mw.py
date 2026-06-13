@@ -59,6 +59,7 @@ with DAG(
     for table in TABLES:
         sync_task = SparkSubmitOperator(
             task_id=f"stg_{table}",
+            name=f"usr_skyee_mw.stg.{table}.{{{{ ds }}}}",
             application=f"{SCRIPTS_PATH}/stg_{table}.py",
             conn_id="spark_default",
             application_args=[
@@ -75,6 +76,7 @@ with DAG(
 
     graph_edges = SparkSubmitOperator(
         task_id="dwd_graph_edges",
+        name="usr_skyee_mw.dwd.graph_edges.{{ ds }}",
         application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
         conn_id="spark_default",
         application_args=[
@@ -88,6 +90,7 @@ with DAG(
 
     dwd_customer = SparkSubmitOperator(
         task_id="dwd_customer",
+        name="usr_skyee_mw.dwd.customer.{{ ds }}",
         application=f"{SCRIPTS_PATH}/dwd_customer.py",
         conn_id="spark_default",
         application_args=[
@@ -98,6 +101,7 @@ with DAG(
 
     dwd_transaction = SparkSubmitOperator(
         task_id="dwd_transaction",
+        name="usr_skyee_mw.dwd.transaction.{{ ds }}",
         application=f"{SCRIPTS_PATH}/dwd_transaction.py",
         conn_id="spark_default",
         application_args=[
@@ -110,6 +114,7 @@ with DAG(
 
     graph_nodes = SparkSubmitOperator(
         task_id="dwd_graph_nodes",
+        name="usr_skyee_mw.dwd.graph_nodes.{{ ds }}",
         application=f"{SCRIPTS_PATH}/dwd_graph_nodes.py",
         conn_id="spark_default",
         application_args=[

@@ -57,6 +57,7 @@ with DAG(
     tasks = [
         SparkSubmitOperator(
             task_id=f"stg_{table}",
+            name=f"usr_skyee_mw.backfill.yearly.stg.{table}.{{{{ ds }}}}",
             application=f"{SCRIPTS_PATH}/stg_{table}.py",
             conn_id="spark_default",
             application_args=[
