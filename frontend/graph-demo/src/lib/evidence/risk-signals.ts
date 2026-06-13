@@ -19,7 +19,9 @@ export interface RiskSignal {
 // MySQL row type
 // ---------------------------------------------------------------------------
 
-interface RiskFieldsRow {
+import type mysql from "mysql2/promise";
+
+interface RiskFieldsRow extends mysql.RowDataPacket {
   RISK_LEVEL: string | null;
   RISK_SCORE: number | null;
   HIGH_RISK: string | number | null;

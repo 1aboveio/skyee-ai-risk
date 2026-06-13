@@ -190,6 +190,7 @@ export async function getCustomerProfile(
       };
       return {
         ...base,
+        custType: "PERSONAL" as const,
         personal: {
           name: r.NAME,
           enName: r.EN_NAME,
@@ -201,7 +202,7 @@ export async function getCustomerProfile(
       };
     }
 
-    return { ...base, personal: null, enterprise: null };
+    return { ...base, custType: "PERSONAL" as const, personal: null, enterprise: null };
   }
 
   if (custType === "COMPANY") {
@@ -222,6 +223,7 @@ export async function getCustomerProfile(
       };
       return {
         ...base,
+        custType: "COMPANY" as const,
         personal: null,
         enterprise: {
           enterpriseName: r.ENTERPRISE_NAME,
@@ -233,8 +235,8 @@ export async function getCustomerProfile(
       };
     }
 
-    return { ...base, personal: null, enterprise: null };
+    return { ...base, custType: "COMPANY" as const, personal: null, enterprise: null };
   }
 
-  return { ...base, personal: null, enterprise: null };
+  return { ...base, custType: "UNKNOWN" as const, personal: null, enterprise: null };
 }

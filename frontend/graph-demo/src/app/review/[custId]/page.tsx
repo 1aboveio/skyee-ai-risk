@@ -37,12 +37,15 @@ export default async function ReviewWorkbenchPage({
 
   const activeSession = reviewHistory?.find((s) => s.status === "ACTIVE");
 
-  // Flatten snapshots for initial data
+  // Flatten snapshots for initial data (serialize Dates to strings)
   const initialSnapshots = reviewHistory
     ? reviewHistory.flatMap((s) =>
         s.snapshots.map((snapshot) => ({
-          ...snapshot,
+          id: snapshot.id,
           sessionId: s.id,
+          snapshotType: snapshot.snapshotType,
+          note: snapshot.note,
+          createdAt: snapshot.createdAt.toISOString(),
           contextType: s.contextType,
           reviewerEmail: s.reviewerEmail,
         }))
