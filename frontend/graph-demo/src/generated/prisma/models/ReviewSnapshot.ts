@@ -191,6 +191,7 @@ export type ReviewSnapshotWhereInput = {
   fxRatesUsed?: Prisma.JsonNullableFilter<"ReviewSnapshot">
   createdAt?: Prisma.DateTimeFilter<"ReviewSnapshot"> | Date | string
   session?: Prisma.XOR<Prisma.ReviewSessionScalarRelationFilter, Prisma.ReviewSessionWhereInput>
+  decisions?: Prisma.ReviewDecisionListRelationFilter
 }
 
 export type ReviewSnapshotOrderByWithRelationInput = {
@@ -202,6 +203,7 @@ export type ReviewSnapshotOrderByWithRelationInput = {
   fxRatesUsed?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   session?: Prisma.ReviewSessionOrderByWithRelationInput
+  decisions?: Prisma.ReviewDecisionOrderByRelationAggregateInput
 }
 
 export type ReviewSnapshotWhereUniqueInput = Prisma.AtLeast<{
@@ -216,6 +218,7 @@ export type ReviewSnapshotWhereUniqueInput = Prisma.AtLeast<{
   fxRatesUsed?: Prisma.JsonNullableFilter<"ReviewSnapshot">
   createdAt?: Prisma.DateTimeFilter<"ReviewSnapshot"> | Date | string
   session?: Prisma.XOR<Prisma.ReviewSessionScalarRelationFilter, Prisma.ReviewSessionWhereInput>
+  decisions?: Prisma.ReviewDecisionListRelationFilter
 }, "id">
 
 export type ReviewSnapshotOrderByWithAggregationInput = {
@@ -252,6 +255,7 @@ export type ReviewSnapshotCreateInput = {
   fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   session: Prisma.ReviewSessionCreateNestedOneWithoutSnapshotsInput
+  decisions?: Prisma.ReviewDecisionCreateNestedManyWithoutSnapshotInput
 }
 
 export type ReviewSnapshotUncheckedCreateInput = {
@@ -262,6 +266,7 @@ export type ReviewSnapshotUncheckedCreateInput = {
   evidenceData: Prisma.JsonNullValueInput | runtime.InputJsonValue
   fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
+  decisions?: Prisma.ReviewDecisionUncheckedCreateNestedManyWithoutSnapshotInput
 }
 
 export type ReviewSnapshotUpdateInput = {
@@ -272,6 +277,7 @@ export type ReviewSnapshotUpdateInput = {
   fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   session?: Prisma.ReviewSessionUpdateOneRequiredWithoutSnapshotsNestedInput
+  decisions?: Prisma.ReviewDecisionUpdateManyWithoutSnapshotNestedInput
 }
 
 export type ReviewSnapshotUncheckedUpdateInput = {
@@ -282,6 +288,7 @@ export type ReviewSnapshotUncheckedUpdateInput = {
   evidenceData?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  decisions?: Prisma.ReviewDecisionUncheckedUpdateManyWithoutSnapshotNestedInput
 }
 
 export type ReviewSnapshotCreateManyInput = {
@@ -349,6 +356,11 @@ export type ReviewSnapshotMinOrderByAggregateInput = {
   createdAt?: Prisma.SortOrder
 }
 
+export type ReviewSnapshotNullableScalarRelationFilter = {
+  is?: Prisma.ReviewSnapshotWhereInput | null
+  isNot?: Prisma.ReviewSnapshotWhereInput | null
+}
+
 export type ReviewSnapshotCreateNestedManyWithoutSessionInput = {
   create?: Prisma.XOR<Prisma.ReviewSnapshotCreateWithoutSessionInput, Prisma.ReviewSnapshotUncheckedCreateWithoutSessionInput> | Prisma.ReviewSnapshotCreateWithoutSessionInput[] | Prisma.ReviewSnapshotUncheckedCreateWithoutSessionInput[]
   connectOrCreate?: Prisma.ReviewSnapshotCreateOrConnectWithoutSessionInput | Prisma.ReviewSnapshotCreateOrConnectWithoutSessionInput[]
@@ -391,6 +403,22 @@ export type ReviewSnapshotUncheckedUpdateManyWithoutSessionNestedInput = {
   deleteMany?: Prisma.ReviewSnapshotScalarWhereInput | Prisma.ReviewSnapshotScalarWhereInput[]
 }
 
+export type ReviewSnapshotCreateNestedOneWithoutDecisionsInput = {
+  create?: Prisma.XOR<Prisma.ReviewSnapshotCreateWithoutDecisionsInput, Prisma.ReviewSnapshotUncheckedCreateWithoutDecisionsInput>
+  connectOrCreate?: Prisma.ReviewSnapshotCreateOrConnectWithoutDecisionsInput
+  connect?: Prisma.ReviewSnapshotWhereUniqueInput
+}
+
+export type ReviewSnapshotUpdateOneWithoutDecisionsNestedInput = {
+  create?: Prisma.XOR<Prisma.ReviewSnapshotCreateWithoutDecisionsInput, Prisma.ReviewSnapshotUncheckedCreateWithoutDecisionsInput>
+  connectOrCreate?: Prisma.ReviewSnapshotCreateOrConnectWithoutDecisionsInput
+  upsert?: Prisma.ReviewSnapshotUpsertWithoutDecisionsInput
+  disconnect?: Prisma.ReviewSnapshotWhereInput | boolean
+  delete?: Prisma.ReviewSnapshotWhereInput | boolean
+  connect?: Prisma.ReviewSnapshotWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.ReviewSnapshotUpdateToOneWithWhereWithoutDecisionsInput, Prisma.ReviewSnapshotUpdateWithoutDecisionsInput>, Prisma.ReviewSnapshotUncheckedUpdateWithoutDecisionsInput>
+}
+
 export type ReviewSnapshotCreateWithoutSessionInput = {
   id?: string
   snapshotType: string
@@ -398,6 +426,7 @@ export type ReviewSnapshotCreateWithoutSessionInput = {
   evidenceData: Prisma.JsonNullValueInput | runtime.InputJsonValue
   fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
+  decisions?: Prisma.ReviewDecisionCreateNestedManyWithoutSnapshotInput
 }
 
 export type ReviewSnapshotUncheckedCreateWithoutSessionInput = {
@@ -407,6 +436,7 @@ export type ReviewSnapshotUncheckedCreateWithoutSessionInput = {
   evidenceData: Prisma.JsonNullValueInput | runtime.InputJsonValue
   fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
+  decisions?: Prisma.ReviewDecisionUncheckedCreateNestedManyWithoutSnapshotInput
 }
 
 export type ReviewSnapshotCreateOrConnectWithoutSessionInput = {
@@ -448,6 +478,62 @@ export type ReviewSnapshotScalarWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"ReviewSnapshot"> | Date | string
 }
 
+export type ReviewSnapshotCreateWithoutDecisionsInput = {
+  id?: string
+  snapshotType: string
+  note?: string | null
+  evidenceData: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  session: Prisma.ReviewSessionCreateNestedOneWithoutSnapshotsInput
+}
+
+export type ReviewSnapshotUncheckedCreateWithoutDecisionsInput = {
+  id?: string
+  sessionId: string
+  snapshotType: string
+  note?: string | null
+  evidenceData: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+}
+
+export type ReviewSnapshotCreateOrConnectWithoutDecisionsInput = {
+  where: Prisma.ReviewSnapshotWhereUniqueInput
+  create: Prisma.XOR<Prisma.ReviewSnapshotCreateWithoutDecisionsInput, Prisma.ReviewSnapshotUncheckedCreateWithoutDecisionsInput>
+}
+
+export type ReviewSnapshotUpsertWithoutDecisionsInput = {
+  update: Prisma.XOR<Prisma.ReviewSnapshotUpdateWithoutDecisionsInput, Prisma.ReviewSnapshotUncheckedUpdateWithoutDecisionsInput>
+  create: Prisma.XOR<Prisma.ReviewSnapshotCreateWithoutDecisionsInput, Prisma.ReviewSnapshotUncheckedCreateWithoutDecisionsInput>
+  where?: Prisma.ReviewSnapshotWhereInput
+}
+
+export type ReviewSnapshotUpdateToOneWithWhereWithoutDecisionsInput = {
+  where?: Prisma.ReviewSnapshotWhereInput
+  data: Prisma.XOR<Prisma.ReviewSnapshotUpdateWithoutDecisionsInput, Prisma.ReviewSnapshotUncheckedUpdateWithoutDecisionsInput>
+}
+
+export type ReviewSnapshotUpdateWithoutDecisionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  snapshotType?: Prisma.StringFieldUpdateOperationsInput | string
+  note?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  evidenceData?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  session?: Prisma.ReviewSessionUpdateOneRequiredWithoutSnapshotsNestedInput
+}
+
+export type ReviewSnapshotUncheckedUpdateWithoutDecisionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  sessionId?: Prisma.StringFieldUpdateOperationsInput | string
+  snapshotType?: Prisma.StringFieldUpdateOperationsInput | string
+  note?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  evidenceData?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
 export type ReviewSnapshotCreateManySessionInput = {
   id?: string
   snapshotType: string
@@ -464,6 +550,7 @@ export type ReviewSnapshotUpdateWithoutSessionInput = {
   evidenceData?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  decisions?: Prisma.ReviewDecisionUpdateManyWithoutSnapshotNestedInput
 }
 
 export type ReviewSnapshotUncheckedUpdateWithoutSessionInput = {
@@ -473,6 +560,7 @@ export type ReviewSnapshotUncheckedUpdateWithoutSessionInput = {
   evidenceData?: Prisma.JsonNullValueInput | runtime.InputJsonValue
   fxRatesUsed?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  decisions?: Prisma.ReviewDecisionUncheckedUpdateManyWithoutSnapshotNestedInput
 }
 
 export type ReviewSnapshotUncheckedUpdateManyWithoutSessionInput = {
@@ -485,6 +573,35 @@ export type ReviewSnapshotUncheckedUpdateManyWithoutSessionInput = {
 }
 
 
+/**
+ * Count Type ReviewSnapshotCountOutputType
+ */
+
+export type ReviewSnapshotCountOutputType = {
+  decisions: number
+}
+
+export type ReviewSnapshotCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  decisions?: boolean | ReviewSnapshotCountOutputTypeCountDecisionsArgs
+}
+
+/**
+ * ReviewSnapshotCountOutputType without action
+ */
+export type ReviewSnapshotCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the ReviewSnapshotCountOutputType
+   */
+  select?: Prisma.ReviewSnapshotCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * ReviewSnapshotCountOutputType without action
+ */
+export type ReviewSnapshotCountOutputTypeCountDecisionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.ReviewDecisionWhereInput
+}
+
 
 export type ReviewSnapshotSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -495,6 +612,8 @@ export type ReviewSnapshotSelect<ExtArgs extends runtime.Types.Extensions.Intern
   fxRatesUsed?: boolean
   createdAt?: boolean
   session?: boolean | Prisma.ReviewSessionDefaultArgs<ExtArgs>
+  decisions?: boolean | Prisma.ReviewSnapshot$decisionsArgs<ExtArgs>
+  _count?: boolean | Prisma.ReviewSnapshotCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["reviewSnapshot"]>
 
 export type ReviewSnapshotSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -532,6 +651,8 @@ export type ReviewSnapshotSelectScalar = {
 export type ReviewSnapshotOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "sessionId" | "snapshotType" | "note" | "evidenceData" | "fxRatesUsed" | "createdAt", ExtArgs["result"]["reviewSnapshot"]>
 export type ReviewSnapshotInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   session?: boolean | Prisma.ReviewSessionDefaultArgs<ExtArgs>
+  decisions?: boolean | Prisma.ReviewSnapshot$decisionsArgs<ExtArgs>
+  _count?: boolean | Prisma.ReviewSnapshotCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type ReviewSnapshotIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   session?: boolean | Prisma.ReviewSessionDefaultArgs<ExtArgs>
@@ -544,6 +665,7 @@ export type $ReviewSnapshotPayload<ExtArgs extends runtime.Types.Extensions.Inte
   name: "ReviewSnapshot"
   objects: {
     session: Prisma.$ReviewSessionPayload<ExtArgs>
+    decisions: Prisma.$ReviewDecisionPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -948,6 +1070,7 @@ readonly fields: ReviewSnapshotFieldRefs;
 export interface Prisma__ReviewSnapshotClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   session<T extends Prisma.ReviewSessionDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ReviewSessionDefaultArgs<ExtArgs>>): Prisma.Prisma__ReviewSessionClient<runtime.Types.Result.GetResult<Prisma.$ReviewSessionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+  decisions<T extends Prisma.ReviewSnapshot$decisionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ReviewSnapshot$decisionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ReviewDecisionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1382,6 +1505,30 @@ export type ReviewSnapshotDeleteManyArgs<ExtArgs extends runtime.Types.Extension
    * Limit how many ReviewSnapshots to delete.
    */
   limit?: number
+}
+
+/**
+ * ReviewSnapshot.decisions
+ */
+export type ReviewSnapshot$decisionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the ReviewDecision
+   */
+  select?: Prisma.ReviewDecisionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the ReviewDecision
+   */
+  omit?: Prisma.ReviewDecisionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.ReviewDecisionInclude<ExtArgs> | null
+  where?: Prisma.ReviewDecisionWhereInput
+  orderBy?: Prisma.ReviewDecisionOrderByWithRelationInput | Prisma.ReviewDecisionOrderByWithRelationInput[]
+  cursor?: Prisma.ReviewDecisionWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.ReviewDecisionScalarFieldEnum | Prisma.ReviewDecisionScalarFieldEnum[]
 }
 
 /**

@@ -191,6 +191,7 @@ export type ReviewDecisionWhereInput = {
   snapshotId?: Prisma.StringNullableFilter<"ReviewDecision"> | string | null
   createdAt?: Prisma.DateTimeFilter<"ReviewDecision"> | Date | string
   session?: Prisma.XOR<Prisma.ReviewSessionScalarRelationFilter, Prisma.ReviewSessionWhereInput>
+  snapshot?: Prisma.XOR<Prisma.ReviewSnapshotNullableScalarRelationFilter, Prisma.ReviewSnapshotWhereInput> | null
 }
 
 export type ReviewDecisionOrderByWithRelationInput = {
@@ -201,6 +202,7 @@ export type ReviewDecisionOrderByWithRelationInput = {
   snapshotId?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   session?: Prisma.ReviewSessionOrderByWithRelationInput
+  snapshot?: Prisma.ReviewSnapshotOrderByWithRelationInput
 }
 
 export type ReviewDecisionWhereUniqueInput = Prisma.AtLeast<{
@@ -214,6 +216,7 @@ export type ReviewDecisionWhereUniqueInput = Prisma.AtLeast<{
   snapshotId?: Prisma.StringNullableFilter<"ReviewDecision"> | string | null
   createdAt?: Prisma.DateTimeFilter<"ReviewDecision"> | Date | string
   session?: Prisma.XOR<Prisma.ReviewSessionScalarRelationFilter, Prisma.ReviewSessionWhereInput>
+  snapshot?: Prisma.XOR<Prisma.ReviewSnapshotNullableScalarRelationFilter, Prisma.ReviewSnapshotWhereInput> | null
 }, "id">
 
 export type ReviewDecisionOrderByWithAggregationInput = {
@@ -244,9 +247,9 @@ export type ReviewDecisionCreateInput = {
   id?: string
   decisionType: string
   note: string
-  snapshotId?: string | null
   createdAt?: Date | string
   session: Prisma.ReviewSessionCreateNestedOneWithoutDecisionsInput
+  snapshot?: Prisma.ReviewSnapshotCreateNestedOneWithoutDecisionsInput
 }
 
 export type ReviewDecisionUncheckedCreateInput = {
@@ -262,9 +265,9 @@ export type ReviewDecisionUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   decisionType?: Prisma.StringFieldUpdateOperationsInput | string
   note?: Prisma.StringFieldUpdateOperationsInput | string
-  snapshotId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   session?: Prisma.ReviewSessionUpdateOneRequiredWithoutDecisionsNestedInput
+  snapshot?: Prisma.ReviewSnapshotUpdateOneWithoutDecisionsNestedInput
 }
 
 export type ReviewDecisionUncheckedUpdateInput = {
@@ -289,7 +292,6 @@ export type ReviewDecisionUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   decisionType?: Prisma.StringFieldUpdateOperationsInput | string
   note?: Prisma.StringFieldUpdateOperationsInput | string
-  snapshotId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -381,12 +383,54 @@ export type ReviewDecisionUncheckedUpdateManyWithoutSessionNestedInput = {
   deleteMany?: Prisma.ReviewDecisionScalarWhereInput | Prisma.ReviewDecisionScalarWhereInput[]
 }
 
+export type ReviewDecisionCreateNestedManyWithoutSnapshotInput = {
+  create?: Prisma.XOR<Prisma.ReviewDecisionCreateWithoutSnapshotInput, Prisma.ReviewDecisionUncheckedCreateWithoutSnapshotInput> | Prisma.ReviewDecisionCreateWithoutSnapshotInput[] | Prisma.ReviewDecisionUncheckedCreateWithoutSnapshotInput[]
+  connectOrCreate?: Prisma.ReviewDecisionCreateOrConnectWithoutSnapshotInput | Prisma.ReviewDecisionCreateOrConnectWithoutSnapshotInput[]
+  createMany?: Prisma.ReviewDecisionCreateManySnapshotInputEnvelope
+  connect?: Prisma.ReviewDecisionWhereUniqueInput | Prisma.ReviewDecisionWhereUniqueInput[]
+}
+
+export type ReviewDecisionUncheckedCreateNestedManyWithoutSnapshotInput = {
+  create?: Prisma.XOR<Prisma.ReviewDecisionCreateWithoutSnapshotInput, Prisma.ReviewDecisionUncheckedCreateWithoutSnapshotInput> | Prisma.ReviewDecisionCreateWithoutSnapshotInput[] | Prisma.ReviewDecisionUncheckedCreateWithoutSnapshotInput[]
+  connectOrCreate?: Prisma.ReviewDecisionCreateOrConnectWithoutSnapshotInput | Prisma.ReviewDecisionCreateOrConnectWithoutSnapshotInput[]
+  createMany?: Prisma.ReviewDecisionCreateManySnapshotInputEnvelope
+  connect?: Prisma.ReviewDecisionWhereUniqueInput | Prisma.ReviewDecisionWhereUniqueInput[]
+}
+
+export type ReviewDecisionUpdateManyWithoutSnapshotNestedInput = {
+  create?: Prisma.XOR<Prisma.ReviewDecisionCreateWithoutSnapshotInput, Prisma.ReviewDecisionUncheckedCreateWithoutSnapshotInput> | Prisma.ReviewDecisionCreateWithoutSnapshotInput[] | Prisma.ReviewDecisionUncheckedCreateWithoutSnapshotInput[]
+  connectOrCreate?: Prisma.ReviewDecisionCreateOrConnectWithoutSnapshotInput | Prisma.ReviewDecisionCreateOrConnectWithoutSnapshotInput[]
+  upsert?: Prisma.ReviewDecisionUpsertWithWhereUniqueWithoutSnapshotInput | Prisma.ReviewDecisionUpsertWithWhereUniqueWithoutSnapshotInput[]
+  createMany?: Prisma.ReviewDecisionCreateManySnapshotInputEnvelope
+  set?: Prisma.ReviewDecisionWhereUniqueInput | Prisma.ReviewDecisionWhereUniqueInput[]
+  disconnect?: Prisma.ReviewDecisionWhereUniqueInput | Prisma.ReviewDecisionWhereUniqueInput[]
+  delete?: Prisma.ReviewDecisionWhereUniqueInput | Prisma.ReviewDecisionWhereUniqueInput[]
+  connect?: Prisma.ReviewDecisionWhereUniqueInput | Prisma.ReviewDecisionWhereUniqueInput[]
+  update?: Prisma.ReviewDecisionUpdateWithWhereUniqueWithoutSnapshotInput | Prisma.ReviewDecisionUpdateWithWhereUniqueWithoutSnapshotInput[]
+  updateMany?: Prisma.ReviewDecisionUpdateManyWithWhereWithoutSnapshotInput | Prisma.ReviewDecisionUpdateManyWithWhereWithoutSnapshotInput[]
+  deleteMany?: Prisma.ReviewDecisionScalarWhereInput | Prisma.ReviewDecisionScalarWhereInput[]
+}
+
+export type ReviewDecisionUncheckedUpdateManyWithoutSnapshotNestedInput = {
+  create?: Prisma.XOR<Prisma.ReviewDecisionCreateWithoutSnapshotInput, Prisma.ReviewDecisionUncheckedCreateWithoutSnapshotInput> | Prisma.ReviewDecisionCreateWithoutSnapshotInput[] | Prisma.ReviewDecisionUncheckedCreateWithoutSnapshotInput[]
+  connectOrCreate?: Prisma.ReviewDecisionCreateOrConnectWithoutSnapshotInput | Prisma.ReviewDecisionCreateOrConnectWithoutSnapshotInput[]
+  upsert?: Prisma.ReviewDecisionUpsertWithWhereUniqueWithoutSnapshotInput | Prisma.ReviewDecisionUpsertWithWhereUniqueWithoutSnapshotInput[]
+  createMany?: Prisma.ReviewDecisionCreateManySnapshotInputEnvelope
+  set?: Prisma.ReviewDecisionWhereUniqueInput | Prisma.ReviewDecisionWhereUniqueInput[]
+  disconnect?: Prisma.ReviewDecisionWhereUniqueInput | Prisma.ReviewDecisionWhereUniqueInput[]
+  delete?: Prisma.ReviewDecisionWhereUniqueInput | Prisma.ReviewDecisionWhereUniqueInput[]
+  connect?: Prisma.ReviewDecisionWhereUniqueInput | Prisma.ReviewDecisionWhereUniqueInput[]
+  update?: Prisma.ReviewDecisionUpdateWithWhereUniqueWithoutSnapshotInput | Prisma.ReviewDecisionUpdateWithWhereUniqueWithoutSnapshotInput[]
+  updateMany?: Prisma.ReviewDecisionUpdateManyWithWhereWithoutSnapshotInput | Prisma.ReviewDecisionUpdateManyWithWhereWithoutSnapshotInput[]
+  deleteMany?: Prisma.ReviewDecisionScalarWhereInput | Prisma.ReviewDecisionScalarWhereInput[]
+}
+
 export type ReviewDecisionCreateWithoutSessionInput = {
   id?: string
   decisionType: string
   note: string
-  snapshotId?: string | null
   createdAt?: Date | string
+  snapshot?: Prisma.ReviewSnapshotCreateNestedOneWithoutDecisionsInput
 }
 
 export type ReviewDecisionUncheckedCreateWithoutSessionInput = {
@@ -435,6 +479,48 @@ export type ReviewDecisionScalarWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"ReviewDecision"> | Date | string
 }
 
+export type ReviewDecisionCreateWithoutSnapshotInput = {
+  id?: string
+  decisionType: string
+  note: string
+  createdAt?: Date | string
+  session: Prisma.ReviewSessionCreateNestedOneWithoutDecisionsInput
+}
+
+export type ReviewDecisionUncheckedCreateWithoutSnapshotInput = {
+  id?: string
+  sessionId: string
+  decisionType: string
+  note: string
+  createdAt?: Date | string
+}
+
+export type ReviewDecisionCreateOrConnectWithoutSnapshotInput = {
+  where: Prisma.ReviewDecisionWhereUniqueInput
+  create: Prisma.XOR<Prisma.ReviewDecisionCreateWithoutSnapshotInput, Prisma.ReviewDecisionUncheckedCreateWithoutSnapshotInput>
+}
+
+export type ReviewDecisionCreateManySnapshotInputEnvelope = {
+  data: Prisma.ReviewDecisionCreateManySnapshotInput | Prisma.ReviewDecisionCreateManySnapshotInput[]
+  skipDuplicates?: boolean
+}
+
+export type ReviewDecisionUpsertWithWhereUniqueWithoutSnapshotInput = {
+  where: Prisma.ReviewDecisionWhereUniqueInput
+  update: Prisma.XOR<Prisma.ReviewDecisionUpdateWithoutSnapshotInput, Prisma.ReviewDecisionUncheckedUpdateWithoutSnapshotInput>
+  create: Prisma.XOR<Prisma.ReviewDecisionCreateWithoutSnapshotInput, Prisma.ReviewDecisionUncheckedCreateWithoutSnapshotInput>
+}
+
+export type ReviewDecisionUpdateWithWhereUniqueWithoutSnapshotInput = {
+  where: Prisma.ReviewDecisionWhereUniqueInput
+  data: Prisma.XOR<Prisma.ReviewDecisionUpdateWithoutSnapshotInput, Prisma.ReviewDecisionUncheckedUpdateWithoutSnapshotInput>
+}
+
+export type ReviewDecisionUpdateManyWithWhereWithoutSnapshotInput = {
+  where: Prisma.ReviewDecisionScalarWhereInput
+  data: Prisma.XOR<Prisma.ReviewDecisionUpdateManyMutationInput, Prisma.ReviewDecisionUncheckedUpdateManyWithoutSnapshotInput>
+}
+
 export type ReviewDecisionCreateManySessionInput = {
   id?: string
   decisionType: string
@@ -447,8 +533,8 @@ export type ReviewDecisionUpdateWithoutSessionInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   decisionType?: Prisma.StringFieldUpdateOperationsInput | string
   note?: Prisma.StringFieldUpdateOperationsInput | string
-  snapshotId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  snapshot?: Prisma.ReviewSnapshotUpdateOneWithoutDecisionsNestedInput
 }
 
 export type ReviewDecisionUncheckedUpdateWithoutSessionInput = {
@@ -467,6 +553,38 @@ export type ReviewDecisionUncheckedUpdateManyWithoutSessionInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
+export type ReviewDecisionCreateManySnapshotInput = {
+  id?: string
+  sessionId: string
+  decisionType: string
+  note: string
+  createdAt?: Date | string
+}
+
+export type ReviewDecisionUpdateWithoutSnapshotInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  decisionType?: Prisma.StringFieldUpdateOperationsInput | string
+  note?: Prisma.StringFieldUpdateOperationsInput | string
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  session?: Prisma.ReviewSessionUpdateOneRequiredWithoutDecisionsNestedInput
+}
+
+export type ReviewDecisionUncheckedUpdateWithoutSnapshotInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  sessionId?: Prisma.StringFieldUpdateOperationsInput | string
+  decisionType?: Prisma.StringFieldUpdateOperationsInput | string
+  note?: Prisma.StringFieldUpdateOperationsInput | string
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
+export type ReviewDecisionUncheckedUpdateManyWithoutSnapshotInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  sessionId?: Prisma.StringFieldUpdateOperationsInput | string
+  decisionType?: Prisma.StringFieldUpdateOperationsInput | string
+  note?: Prisma.StringFieldUpdateOperationsInput | string
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
 
 
 export type ReviewDecisionSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -477,6 +595,7 @@ export type ReviewDecisionSelect<ExtArgs extends runtime.Types.Extensions.Intern
   snapshotId?: boolean
   createdAt?: boolean
   session?: boolean | Prisma.ReviewSessionDefaultArgs<ExtArgs>
+  snapshot?: boolean | Prisma.ReviewDecision$snapshotArgs<ExtArgs>
 }, ExtArgs["result"]["reviewDecision"]>
 
 export type ReviewDecisionSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -487,6 +606,7 @@ export type ReviewDecisionSelectCreateManyAndReturn<ExtArgs extends runtime.Type
   snapshotId?: boolean
   createdAt?: boolean
   session?: boolean | Prisma.ReviewSessionDefaultArgs<ExtArgs>
+  snapshot?: boolean | Prisma.ReviewDecision$snapshotArgs<ExtArgs>
 }, ExtArgs["result"]["reviewDecision"]>
 
 export type ReviewDecisionSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -497,6 +617,7 @@ export type ReviewDecisionSelectUpdateManyAndReturn<ExtArgs extends runtime.Type
   snapshotId?: boolean
   createdAt?: boolean
   session?: boolean | Prisma.ReviewSessionDefaultArgs<ExtArgs>
+  snapshot?: boolean | Prisma.ReviewDecision$snapshotArgs<ExtArgs>
 }, ExtArgs["result"]["reviewDecision"]>
 
 export type ReviewDecisionSelectScalar = {
@@ -511,18 +632,22 @@ export type ReviewDecisionSelectScalar = {
 export type ReviewDecisionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "sessionId" | "decisionType" | "note" | "snapshotId" | "createdAt", ExtArgs["result"]["reviewDecision"]>
 export type ReviewDecisionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   session?: boolean | Prisma.ReviewSessionDefaultArgs<ExtArgs>
+  snapshot?: boolean | Prisma.ReviewDecision$snapshotArgs<ExtArgs>
 }
 export type ReviewDecisionIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   session?: boolean | Prisma.ReviewSessionDefaultArgs<ExtArgs>
+  snapshot?: boolean | Prisma.ReviewDecision$snapshotArgs<ExtArgs>
 }
 export type ReviewDecisionIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   session?: boolean | Prisma.ReviewSessionDefaultArgs<ExtArgs>
+  snapshot?: boolean | Prisma.ReviewDecision$snapshotArgs<ExtArgs>
 }
 
 export type $ReviewDecisionPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "ReviewDecision"
   objects: {
     session: Prisma.$ReviewSessionPayload<ExtArgs>
+    snapshot: Prisma.$ReviewSnapshotPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -926,6 +1051,7 @@ readonly fields: ReviewDecisionFieldRefs;
 export interface Prisma__ReviewDecisionClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   session<T extends Prisma.ReviewSessionDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ReviewSessionDefaultArgs<ExtArgs>>): Prisma.Prisma__ReviewSessionClient<runtime.Types.Result.GetResult<Prisma.$ReviewSessionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+  snapshot<T extends Prisma.ReviewDecision$snapshotArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ReviewDecision$snapshotArgs<ExtArgs>>): Prisma.Prisma__ReviewSnapshotClient<runtime.Types.Result.GetResult<Prisma.$ReviewSnapshotPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1359,6 +1485,25 @@ export type ReviewDecisionDeleteManyArgs<ExtArgs extends runtime.Types.Extension
    * Limit how many ReviewDecisions to delete.
    */
   limit?: number
+}
+
+/**
+ * ReviewDecision.snapshot
+ */
+export type ReviewDecision$snapshotArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the ReviewSnapshot
+   */
+  select?: Prisma.ReviewSnapshotSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the ReviewSnapshot
+   */
+  omit?: Prisma.ReviewSnapshotOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.ReviewSnapshotInclude<ExtArgs> | null
+  where?: Prisma.ReviewSnapshotWhereInput
 }
 
 /**

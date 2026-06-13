@@ -6,8 +6,11 @@ import {
 import { getOrCreateReviewSession, getReviewHistory, saveSnapshot } from "@/lib/review/store";
 import { z } from "zod/v4";
 
+const MAX_NOTE_LENGTH = 2000;
+const MAX_CUST_ID_LENGTH = 64;
+
 const snapshotRequestSchema = z.object({
-  note: z.string().optional(),
+  note: z.string().max(MAX_NOTE_LENGTH).optional(),
   evidenceData: z.record(z.string(), z.unknown()),
 });
 
@@ -40,6 +43,13 @@ export async function POST(
   }
 
   const { custId } = await params;
+
+  if (custId.length > MAX_CUST_ID_LENGTH) {
+    return Response.json(
+      { error: { code: "VALIDATION_ERROR", message: "Customer ID too long." } },
+      { status: 400 }
+    );
+  }
 
   let body: unknown;
   try {

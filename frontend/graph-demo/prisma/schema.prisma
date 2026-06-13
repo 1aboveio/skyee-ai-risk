@@ -44,6 +44,8 @@ model ReviewSnapshot {
   fxRatesUsed   Json?    // FX rate metadata used in snapshot
   createdAt     DateTime @default(now())
 
+  decisions     ReviewDecision[]
+
   @@index([sessionId])
 }
 
@@ -53,10 +55,12 @@ model ReviewDecision {
   session       ReviewSession @relation(fields: [sessionId], references: [id])
   decisionType  String   // ACCEPT, REJECT
   note          String   // mandatory reviewer note
-  snapshotId    String?  // link to auto-saved snapshot
+  snapshotId    String?
+  snapshot      ReviewSnapshot? @relation(fields: [snapshotId], references: [id])
   createdAt     DateTime @default(now())
 
   @@index([sessionId])
+  @@index([snapshotId])
 }
 
 model FxRate {

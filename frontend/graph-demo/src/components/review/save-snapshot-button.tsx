@@ -58,8 +58,11 @@ export function SaveSnapshotButton({
       setSuccess(true);
       setNote("");
 
-      // Notify parent component
+      // Notify parent and sibling components
       onSaved?.();
+      window.dispatchEvent(
+        new CustomEvent("snapshot-saved", { detail: { custId } })
+      );
 
       // Close dialog after a brief delay to show success
       setTimeout(() => {

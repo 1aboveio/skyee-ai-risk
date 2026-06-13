@@ -5,14 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Clock, FileText, CheckCircle, XCircle } from "lucide-react";
+import { AlertCircle, Clock, FileText } from "lucide-react";
 
-interface ReviewItem {
+interface SnapshotItem {
   id: string;
   sessionId: string;
-  type: "snapshot" | "decision";
-  snapshotType?: string;
-  decisionType?: string;
+  snapshotType: string;
   note: string | null;
   createdAt: string;
   contextType: string;
@@ -21,14 +19,19 @@ interface ReviewItem {
 
 interface ReviewHistoryProps {
   custId: string;
+  initialSnapshots?: SnapshotItem[];
 }
 
-export function ReviewHistory({ custId }: ReviewHistoryProps) {
-  const [items, setItems] = useState<ReviewItem[]>([]);
-  const [loading, setLoading] = useState(true);
+export function ReviewHistory({ custId, initialSnapshots }: ReviewHistoryProps) {
+  const [items, setItems] = useState<SnapshotItem[]>(initialSnapshots ?? []);
+  const [loading, setLoading] = useState(!initialSnapshots);
   const [error, setError] = useState<string | null>(null);
 
+  // Fetch on mount if no initial data
   useEffect(() => {
+    if (initialSnapshots) return;
+
+    let cancelled = false;
     async function fetchHistory() {
       try {
         setLoading(true);
@@ -39,40 +42,45 @@ export function ReviewHistory({ custId }: ReviewHistoryProps) {
           throw new Error("Failed to fetch review history");
         }
 
-        const snapshots = (await response.json()) as Array<{
-          id: string;
-          sessionId: string;
-          snapshotType: string;
-          note: string | null;
-          createdAt: string;
-          contextType: string;
-          reviewerEmail: string;
-        }>;
-
-        const mapped: ReviewItem[] = snapshots.map((s) => ({
-          id: s.id,
-          sessionId: s.sessionId,
-          type: "snapshot",
-          snapshotType: s.snapshotType,
-          note: s.note,
-          createdAt: s.createdAt,
-          contextType: s.contextType,
-          reviewerEmail: s.reviewerEmail,
-        }));
-
-        mapped.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-
-        setItems(mapped);
+        const snapshots = (await response.json()) as SnapshotItem[];
+        if (!cancelled) {
+          snapshots.sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          setItems(snapshots);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unknown error");
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Unknown error");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
-
     fetchHistory();
+    return () => { cancelled = true; };
+  }, [custId, initialSnapshots]);
+
+  // Refresh when a snapshot is saved
+  useEffect(() => {
+    function handleSnapshotSaved(event: Event) {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.custId !== custId) return;
+
+      fetch(`/api/review/${custId}/snapshots`)
+        .then((r) => r.json())
+        .then((snapshots: SnapshotItem[]) => {
+          snapshots.sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          setItems(snapshots);
+        })
+        .catch(() => {});
+    }
+    window.addEventListener("snapshot-saved", handleSnapshotSaved);
+    return () => window.removeEventListener("snapshot-saved", handleSnapshotSaved);
   }, [custId]);
 
   if (loading) {
@@ -113,18 +121,10 @@ export function ReviewHistory({ custId }: ReviewHistoryProps) {
         <Card key={item.id} className="p-3">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
-              {item.type === "snapshot" ? (
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              ) : item.decisionType === "ACCEPT" ? (
-                <CheckCircle className="h-4 w-4 text-green-500" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-500" />
-              )}
+              <FileText className="h-4 w-4 text-muted-foreground" />
               <div>
                 <div className="flex items-center gap-2">
-                  <Badge variant={item.type === "snapshot" ? "secondary" : "default"}>
-                    {item.type === "snapshot" ? "Snapshot Only" : item.decisionType}
-                  </Badge>
+                  <Badge variant="secondary">Snapshot Only</Badge>
                   <Badge variant="outline">{item.contextType}</Badge>
                 </div>
                 {item.note && (
