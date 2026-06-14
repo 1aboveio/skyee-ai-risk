@@ -2,21 +2,43 @@ import { Prisma } from "@/generated/prisma/client";
 import prisma from "@/lib/prisma";
 import { isLocale, type Locale } from "@/lib/i18n/resolve-locale";
 
+export type LocalePreferenceDb = {
+  reviewerLocalePreference: {
+    findUnique(args: {
+      where: { reviewerId: string };
+    }): Promise<{ locale: string } | null>;
+  };
+};
+
 export async function getReviewerLocalePreference(
-  reviewerId: string
+  reviewerId: string,
+  db: LocalePreferenceDb = prisma
 ): Promise<Locale | null> {
   try {
-    const preference = await prisma.reviewerLocalePreference.findUnique({
+    const preference = await db.reviewerLocalePreference.findUnique({
       where: { reviewerId },
     });
     if (preference && isLocale(preference.locale)) {
       return preference.locale;
     }
     return null;
-  } catch {
-    // Gracefully fall back when the preference table is not yet available
-    // (e.g. local dev without a migrated database).
-    return null;
+  } catch (error) {
+    // The preference table may not exist in unmigrated local/dev databases
+    // before the first deployment. Treat that as "no preference".
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2021"
+    ) {
+      return null;
+    }
+
+    // Any other query error is unexpected: log it and let callers distinguish
+    // it from a missing preference.
+    console.error("Failed to load reviewer locale preference", {
+      reviewerId,
+      error,
+    });
+    throw error;
   }
 }
 
