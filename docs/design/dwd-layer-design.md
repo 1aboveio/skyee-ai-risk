@@ -281,12 +281,12 @@ Identity selection rule:
 | creditor_province | varchar(255) | pd.BENEFICIARY_PROVINCE | Payee province |
 | creditor_city | varchar(255) | pd.BENEFICIARY_CITY | Payee city |
 | creditor_postcode | varchar(255) | pd.BENEFICIARY_POST_CODE | Payee postcode |
-| **Debtor Agent (Payer's Bank)** | | | |
-| debtor_agent_name | varchar(100) | pd.BANK_NAME | Payer's bank name |
-| debtor_agent_code | varchar(50) | pd.BANK_CODE | Payer's bank code |
+| **Debtor Agent (Payer's Bank / Clearing Channel)** | | | |
+| debtor_agent_name | varchar(100) | pd.CLEAR_CHL_NAME | Payer's clearing channel name |
+| debtor_agent_code | varchar(50) | pd.CLEAR_CHL_CODE | Payer's clearing channel code |
 | debtor_agent_swift | varchar(32) | pd.SWIFT_CODE | Payer's bank SWIFT |
 | debtor_agent_bic | varchar(32) | pd.INTER_SWIFT_BIC | Payer's bank BIC |
-| debtor_agent_country | varchar(10) | pd.BANK_COUNTRY | Payer's bank country |
+| debtor_agent_country | varchar(10) | pd.BANK_COUNTRY | Payer's bank country (if available) |
 | debtor_agent_branch_name | varchar(128) | pd.BANK_BRANCH_NAME | Payer's bank branch |
 | debtor_agent_branch_no | varchar(128) | pd.BANK_BRANCH_NO | Payer's bank branch no |
 | **Creditor Agent (Payee's Bank)** | | | |
@@ -310,6 +310,10 @@ Identity selection rule:
 | trade_type | varchar(50) | po.TRADE_TYPE | Trade type |
 | business_type | varchar(50) | po.BUSINESS_TYPE | Business type |
 | sub_biz_type | varchar(20) | po.SUB_BIZ_TYPE | Sub business type |
+| **Payment Evidence** | | | |
+| payment_subject_name | varchar(200) | pd.SUBJECT_NAME | Payment subject / order description |
+| pay_attach_name | varchar(255) | pd.PAY_ATTACH_NAME | Payment attachment name |
+| pay_ref_file_ids | varchar(500) | pd.PAY_REF_FILE_IDS | Payment reference file IDs |
 | **Clearing & Settlement** | | | |
 | clear_status | varchar(20) | pd.CLEAR_STATUS | Clearing status |
 | clear_time | timestamp | pd.CLEAR_TIME | Clearing time |
