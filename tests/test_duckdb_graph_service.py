@@ -9,6 +9,30 @@ import scripts.duckdb_graph_query as graph_query
 import scripts.duckdb_graph_service as graph_service
 
 
+class _FakeSourceEvidenceAdapter(graph_service.SourceEvidenceDatabaseAdapter):
+    def __init__(
+        self,
+        payloads: dict[int, dict],
+        fail_on_calls: set[int] | None = None,
+    ) -> None:
+        self.payloads = payloads
+        self.fail_on_calls = fail_on_calls or set()
+        self.calls: list[list[int]] = []
+        self._call_index = 0
+
+    def get_customer_profiles(self, customer_ids: list[int]) -> dict[int, dict]:
+        self.calls.append(list(customer_ids))
+        if self._call_index in self.fail_on_calls:
+            self._call_index += 1
+            raise RuntimeError(f"simulated source evidence timeout on call {self._call_index}")
+        self._call_index += 1
+        return {
+            customer_id: self.payloads[customer_id]
+            for customer_id in customer_ids
+            if customer_id in self.payloads
+        }
+
+
 TABLE_COLUMNS = (
     "src_attr_type",
     "src_attr_value",
@@ -371,6 +395,132 @@ def test_neighbor_lookup_preserves_optional_graph_node_metadata(tmp_path, monkey
         high_risk = client.get("/high-risk/4001")
     assert high_risk.status_code == 200
     assert high_risk.json()[0]["cust_id"] == 4002
+
+
+def test_neighbors_enrichment_is_batched_and_not_per_neighbor(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.batch_enrichment
+    # @level integration
+    rows = [
+        _row("customer", 5001, "cs_5001", "mobile_phone", "555-0001", "ma_1"),
+        _row("mobile_phone", "555-0001", "ma_1", "customer", 5002, "cs_5002"),
+        _row("customer", 5001, "cs_5001", "email", "e1@example.com", "em_1"),
+        _row("email", "e1@example.com", "em_1", "customer", 5003, "cs_5003"),
+        _row("customer", 5001, "cs_5001", "ip", "10.1.1.1", "ip_1"),
+        _row("ip", "10.1.1.1", "ip_1", "customer", 5004, "cs_5004"),
+    ]
+
+    db_path = tmp_path / "graph-batch.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.setenv("GRAPH_ENRICHMENT_BATCH_SIZE", "2")
+    monkeypatch.setattr(
+        graph_service,
+        "source_evidence_adapter",
+        _FakeSourceEvidenceAdapter(
+            payloads={
+                5002: {"cust_name": "Alice", "risk_level": "LOW"},
+                5003: {"cust_name": "Bob", "risk_level": "LOW"},
+                5004: {"cust_name": "Carol", "risk_level": "LOW"},
+            },
+        ),
+    )
+
+    with TestClient(graph_service.app) as client:
+        links = _neighbors(client, 5001)
+
+    assert len(links) == 3
+    assert len(graph_service.source_evidence_adapter.calls) == 2
+    assert all(len(batch) <= 2 for batch in graph_service.source_evidence_adapter.calls)
+    assert {5002, 5003, 5004} == {
+        row["neighbor_cust_id"] for row in links
+    }
+
+
+def test_neighbors_apply_enrichment_after_fanout_limit(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.fanout_limit_enrichment_order
+    # @level integration
+    rows = [
+        _row("customer", 6001, "cs_6001", "mobile_phone", "777-0001", "ma_1"),
+        _row("mobile_phone", "777-0001", "ma_1", "customer", 6002, "cs_6002"),
+        _row("customer", 6001, "cs_6001", "mobile_phone", "777-0001", "ma_1"),
+        _row("mobile_phone", "777-0001", "ma_1", "customer", 6003, "cs_6003"),
+        _row("customer", 6001, "cs_6001", "mobile_phone", "777-0001", "ma_1"),
+        _row("mobile_phone", "777-0001", "ma_1", "customer", 6004, "cs_6004"),
+        _row("customer", 6001, "cs_6001", "mobile_phone", "777-0001", "ma_1"),
+        _row("mobile_phone", "777-0001", "ma_1", "customer", 6005, "cs_6005"),
+        _row("customer", 6001, "cs_6001", "mobile_phone", "777-0001", "ma_1"),
+        _row("mobile_phone", "777-0001", "ma_1", "customer", 6006, "cs_6006"),
+    ]
+    # Multiple evidence rows for each neighbor are intentionally avoided because
+    # enrichment is bound to unique linked customer IDs after dedupe.
+    db_path = tmp_path / "graph-limit.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.setenv("GRAPH_ENRICHMENT_BATCH_SIZE", "10")
+    monkeypatch.setattr(
+        graph_service,
+        "source_evidence_adapter",
+        _FakeSourceEvidenceAdapter(
+            payloads={
+                6002: {"cust_name": "Customer 6002"},
+                6003: {"cust_name": "Customer 6003"},
+                6004: {"cust_name": "Customer 6004"},
+                6005: {"cust_name": "Customer 6005"},
+                6006: {"cust_name": "Customer 6006"},
+            },
+        ),
+    )
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/neighbors/6001?limit=2")
+    assert response.status_code == 200
+    links = response.json()
+
+    assert len(links) == 2
+    returned_ids = [item["neighbor_cust_id"] for item in links]
+    assert len(graph_service.source_evidence_adapter.calls) == 1
+    assert set(graph_service.source_evidence_adapter.calls[0]).issubset(set(returned_ids))
+    assert set(graph_service.source_evidence_adapter.calls[0]) == set(returned_ids)
+
+
+def test_neighbors_partial_enrichment_failure_is_returned(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.partial_enrichment_failure
+    # @level integration
+    rows = [
+        _row("customer", 7001, "cs_7001", "mobile_phone", "901-0001", "ma_1"),
+        _row("mobile_phone", "901-0001", "ma_1", "customer", 7002, "cs_7002"),
+        _row("customer", 7001, "cs_7001", "mobile_phone", "901-0001", "ma_1"),
+        _row("mobile_phone", "901-0001", "ma_1", "customer", 7003, "cs_7003"),
+        _row("customer", 7001, "cs_7001", "mobile_phone", "901-0001", "ma_1"),
+        _row("mobile_phone", "901-0001", "ma_1", "customer", 7004, "cs_7004"),
+    ]
+    db_path = tmp_path / "graph-partial.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.setenv("GRAPH_ENRICHMENT_BATCH_SIZE", "2")
+
+    fake_adapter = _FakeSourceEvidenceAdapter(
+        payloads={
+            7002: {"cust_name": "Customer 7002"},
+            7003: {"cust_name": "Customer 7003"},
+        },
+        fail_on_calls={1},
+    )
+    monkeypatch.setattr(graph_service, "source_evidence_adapter", fake_adapter)
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/neighbors/7001")
+    assert response.status_code == 200
+    links = response.json()
+
+    linked = {link["neighbor_cust_id"]: link for link in links}
+    assert linked[7002]["enrichment_status"] == "enriched"
+    assert linked[7002]["cust_name"] == "Customer 7002"
+    assert linked[7003]["enrichment_status"] == "enriched"
+    assert linked[7003]["cust_name"] == "Customer 7003"
+    assert linked[7004]["enrichment_status"] == "partial"
+    assert linked[7004]["cust_name"] is None
+    assert "simulated source evidence timeout" in linked[7004]["enrichment_error"]
 
 
 def test_high_risk_endpoint_requires_graph_node_metadata(tmp_path, monkeypatch):

@@ -18,6 +18,8 @@ from typing import Any
 import duckdb
 from fastapi import FastAPI, HTTPException, Query
 
+from scripts.live_enrichment import SourceEvidenceDatabaseAdapter, enrich_neighbor_rows_with_metadata
+
 DEFAULT_DB_PATH = "data/skyee_graph.duckdb"
 ASSOCIATION_TABLE = "association_attribute_links"
 
@@ -48,12 +50,26 @@ SAME_ATTRIBUTE_BY_ATTRIBUTE = {v: k for k, v in ASSOCIATION_ATTRIBUTE_TO_SAME_AT
 app = FastAPI(title="Skyee Association Link Lookup Service")
 
 
+class GraphNodeSourceEvidenceAdapter(SourceEvidenceDatabaseAdapter):
+    def get_customer_profiles(self, customer_ids: list[int]) -> dict[int, dict[str, Any]]:
+        """Load enrichment fields from DuckDB graph_nodes snapshot tables."""
+        return _load_neighbor_metadata(customer_ids)
+
+
+source_evidence_adapter: SourceEvidenceDatabaseAdapter = GraphNodeSourceEvidenceAdapter()
+
+
 def get_db_path() -> str:
     return os.getenv("GRAPH_DUCKDB_PATH", DEFAULT_DB_PATH)
 
 
 def get_max_query_degree() -> int:
     return int(os.getenv("GRAPH_MAX_QUERY_DEGREE", "1000"))
+
+
+def get_enrichment_batch_size() -> int:
+    configured = int(os.getenv("GRAPH_ENRICHMENT_BATCH_SIZE", "100"))
+    return configured if configured > 0 else 100
 
 
 def _snapshot_missing() -> str:
@@ -278,26 +294,11 @@ def _load_neighbor_metadata(cust_ids: list[int]) -> dict[int, dict[str, Any]]:
 
 
 def _apply_neighbor_metadata(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    metadata = _load_neighbor_metadata(
-        sorted(
-            {
-                int(row["neighbor_cust_id"])
-                for row in rows
-                if row.get("neighbor_cust_id") is not None
-            }
-        )
+    return enrich_neighbor_rows_with_metadata(
+        rows=rows,
+        adapter=source_evidence_adapter,
+        batch_size=get_enrichment_batch_size(),
     )
-    for row in rows:
-        node = metadata.get(int(row["neighbor_cust_id"]), {})
-        row["cust_name"] = node.get("cust_name")
-        row["risk_level"] = node.get("risk_level")
-        row["is_high_risk"] = node.get("is_high_risk")
-        row["is_sanctioned"] = node.get("is_sanctioned")
-        row["current_balance"] = node.get("current_balance")
-        row["confirmed_risk_status"] = node.get("confirmed_risk_status")
-        row["confirmed_risk_type"] = node.get("confirmed_risk_type")
-        row["node_degree"] = node.get("node_degree", 0)
-    return rows
 
 
 def _require_graph_nodes():
@@ -415,7 +416,7 @@ def _build_neighbor_rows(cust_id: int, same_attribute_type: str | None = None) -
             continue
         linked_rows.append(result)
 
-    return _apply_neighbor_metadata(linked_rows)
+    return linked_rows
 
 
 def _count_neighbors(cust_id: int, same_attribute_type: str | None = None) -> int:
@@ -591,17 +592,19 @@ def neighbors(
     assert_expandable(cust_id)
     rows = _build_neighbor_rows(cust_id, same_attribute_type)
     if limit is not None:
-        return rows[:limit]
-    return rows
+        rows = rows[:limit]
+
+    return _apply_neighbor_metadata(rows)
 
 
 @app.get("/high-risk/{cust_id}")
 def high_risk(cust_id: int, limit: int = Query(50, ge=1, le=500)):
     _require_graph_nodes()
     assert_expandable(cust_id)
+    rows = _apply_neighbor_metadata(_build_neighbor_rows(cust_id))
     rows = [
         row
-        for row in _build_neighbor_rows(cust_id)
+        for row in rows
         if row.get("risk_level") in {"HIGH", "MEDIUM_HIGH"}
         or row.get("is_high_risk") in {"Y", "true", "1", True}
         or row.get("is_sanctioned") in {"Y", "true", "1", True}
