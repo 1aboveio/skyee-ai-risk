@@ -10,6 +10,8 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import type { GraphIdentitySession } from "@/lib/auth/identity-session";
+import { t, type Locale } from "@/lib/i18n";
+import type { DictionaryKey } from "@/lib/i18n/keys";
 import { cn } from "@/lib/utils";
 import { LanguageSwitcher } from "./language-switcher";
 
@@ -17,25 +19,27 @@ type AppModule = "home" | "graph" | "review";
 
 type NavItem = {
   key: AppModule;
-  label: string;
+  label: DictionaryKey;
   href: string;
   icon: LucideIcon;
 };
 
 const navItems: NavItem[] = [
-  { key: "home", label: "Home", href: "/", icon: HomeIcon },
-  { key: "graph", label: "Graph Network Search", href: "/graph", icon: NetworkIcon },
-  { key: "review", label: "Review Workbench", href: "/review", icon: ClipboardCheckIcon },
+  { key: "home", label: "home", href: "/", icon: HomeIcon },
+  { key: "graph", label: "graphNetworkSearch", href: "/graph", icon: NetworkIcon },
+  { key: "review", label: "reviewWorkbench", href: "/review", icon: ClipboardCheckIcon },
 ];
 
 export function AppShell({
   active,
   children,
   session,
+  locale,
 }: {
   active: AppModule;
   children: React.ReactNode;
   session: GraphIdentitySession;
+  locale: Locale;
 }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -47,13 +51,13 @@ export function AppShell({
             </div>
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">Skyee AI Risk</div>
-              <div className="truncate text-xs text-muted-foreground">Operations Console</div>
+              <div className="truncate text-xs text-muted-foreground">{t("operationsConsole", locale)}</div>
             </div>
           </div>
           <LanguageSwitcher />
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1 px-3 py-4" aria-label="Primary">
+        <nav className="flex flex-1 flex-col gap-1 px-3 py-4" aria-label={t("primaryNavigation", locale)}>
           {navItems.map((item) => {
             const Icon = item.icon;
             const selected = active === item.key;
@@ -70,7 +74,7 @@ export function AppShell({
                 )}
               >
                 <Icon className="size-4" />
-                <span className="truncate">{item.label}</span>
+                <span className="truncate">{t(item.label, locale)}</span>
               </Link>
             );
           })}
@@ -78,7 +82,7 @@ export function AppShell({
 
         <div className="border-t border-sidebar-border p-3">
           <div className="rounded-lg bg-background/70 p-3 ring-1 ring-border">
-            <div className="truncate text-xs text-muted-foreground">Signed in</div>
+            <div className="truncate text-xs text-muted-foreground">{t("signedIn", locale)}</div>
             <div className="mt-1 truncate text-sm font-medium">{session.user.email}</div>
             <div className="mt-3 flex items-center justify-between gap-2">
               <Badge variant="outline">{session.membership.role}</Badge>
@@ -87,7 +91,7 @@ export function AppShell({
                 className="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
               >
                 <LogOutIcon className="size-4" />
-                <span className="sr-only">Sign out</span>
+                <span className="sr-only">{t("signOut", locale)}</span>
               </a>
             </div>
           </div>
@@ -109,14 +113,14 @@ export function AppShell({
               className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
             >
               <LogOutIcon className="size-4" />
-              Sign out
+              {t("signOut", locale)}
             </a>
           </div>
         </header>
 
         <nav
           className="grid grid-cols-3 border-b bg-sidebar px-2 py-2 lg:hidden"
-          aria-label="Module navigation"
+          aria-label={t("moduleNavigation", locale)}
         >
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -133,7 +137,7 @@ export function AppShell({
                 )}
               >
                 <Icon className="size-4" />
-                <span className="line-clamp-2 leading-tight">{item.label}</span>
+                <span className="line-clamp-2 leading-tight">{t(item.label, locale)}</span>
               </Link>
             );
           })}

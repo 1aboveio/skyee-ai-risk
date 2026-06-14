@@ -1,38 +1,47 @@
 import { AlertTriangleIcon, ArrowRightIcon, ShieldOffIcon } from "lucide-react";
 
+import { headers } from "next/headers";
 import { Badge } from "@/components/ui/badge";
 import { getIdentityLogoutUrl } from "@/lib/auth/identity-session";
+import { t, type Locale } from "@/lib/i18n";
+import type { DictionaryKey } from "@/lib/i18n/keys";
+import { resolveLocale } from "@/lib/i18n/resolve-locale";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-const errorMessages: Record<string, { title: string; body: string }> = {
+type ErrorMessageKeys = {
+  title: DictionaryKey;
+  body: DictionaryKey;
+};
+
+const errorMessages: Record<string, ErrorMessageKeys> = {
   access_denied: {
-    title: "Access denied",
-    body: "Your identity is valid, but your account is not authorized for this Skyee AI Risk workspace.",
+    title: "authAccessDeniedTitle",
+    body: "authAccessDeniedBody",
   },
   invalid_client: {
-    title: "Application is not configured",
-    body: "The identity provider does not recognize this application client.",
+    title: "authApplicationNotConfiguredTitle",
+    body: "authApplicationNotConfiguredBody",
   },
   invalid_state: {
-    title: "Login session expired",
-    body: "The sign-in request could not be verified. Start a new login flow.",
+    title: "authLoginSessionExpiredTitle",
+    body: "authLoginSessionExpiredBody",
   },
   token_exchange_failed: {
-    title: "Login could not be completed",
-    body: "The application could not exchange the identity authorization code.",
+    title: "authTokenExchangeFailedTitle",
+    body: "authTokenExchangeFailedBody",
   },
   invalid_org: {
-    title: "Wrong organization",
-    body: "The signed-in account belongs to a different organization.",
+    title: "authWrongOrganizationTitle",
+    body: "authWrongOrganizationBody",
   },
   invalid_email_domain: {
-    title: "Email domain not allowed",
-    body: "Use an account from the configured Skyee email domain.",
+    title: "authEmailDomainNotAllowedTitle",
+    body: "authEmailDomainNotAllowedBody",
   },
   invalid_user: {
-    title: "User profile incomplete",
-    body: "The identity provider returned a user profile without the required account fields.",
+    title: "authUserProfileIncompleteTitle",
+    body: "authUserProfileIncompleteBody",
   },
 };
 
@@ -43,6 +52,11 @@ function firstParam(value: string | string[] | undefined): string | null {
   return value ?? null;
 }
 
+function resolveAuthLocale(acceptLanguage: string | undefined): Locale {
+  // Auth routes must never read or write a signed-in reviewer preference.
+  return resolveLocale(undefined, acceptLanguage);
+}
+
 export default async function AuthErrorPage({
   searchParams,
 }: {
@@ -51,9 +65,12 @@ export default async function AuthErrorPage({
   const params = await searchParams;
   const error = firstParam(params.error) ?? "unknown_error";
   const description = firstParam(params.error_description);
-  const message = errorMessages[error] ?? {
-    title: "Login failed",
-    body: "The identity provider returned an authentication error.",
+  const acceptLanguage = (await headers()).get("accept-language") ?? undefined;
+  const locale = resolveAuthLocale(acceptLanguage);
+
+  const messageKeys = errorMessages[error] ?? {
+    title: "authLoginFailedTitle",
+    body: "authLoginFailedBody",
   };
 
   return (
@@ -64,14 +81,16 @@ export default async function AuthErrorPage({
             <ShieldOffIcon className="size-5" />
           </div>
           <div>
-            <Badge variant="outline">Authentication</Badge>
+            <Badge variant="outline">{t("authentication", locale)}</Badge>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-              {message.title}
+              {t(messageKeys.title, locale)}
             </h1>
           </div>
         </div>
 
-        <p className="mt-4 text-sm leading-6 text-muted-foreground">{message.body}</p>
+        <p className="mt-4 text-sm leading-6 text-muted-foreground">
+          {t(messageKeys.body, locale)}
+        </p>
 
         {description ? (
           <div className="mt-4 flex gap-2 rounded-lg border bg-muted/40 p-3 text-sm">
@@ -89,7 +108,7 @@ export default async function AuthErrorPage({
             type="submit"
             className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
-            Login with another account
+            {t("loginWithAnotherAccount", locale)}
             <ArrowRightIcon className="size-4" />
           </button>
         </form>

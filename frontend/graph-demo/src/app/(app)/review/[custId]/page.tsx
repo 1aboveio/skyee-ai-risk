@@ -1,7 +1,9 @@
+import { headers } from "next/headers";
 import { getGraphIdentitySession } from "@/lib/auth/identity-session";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/app-shell";
-import { getReviewHistory } from "@/lib/review/store";
+import { resolveInitialLocale } from "@/lib/i18n/server-locale";
+import { getReviewHistory, getReviewerLocalePreference } from "@/lib/review/store";
 import { WorkbenchPanel } from "@/components/review/workbench-panel";
 import { ReviewHistory } from "@/components/review/review-history";
 import { SaveSnapshotButton } from "@/components/review/save-snapshot-button";
@@ -112,8 +114,16 @@ export default async function ReviewWorkbenchPage({
     },
   };
 
+  const acceptLanguage = (await headers()).get("accept-language") ?? undefined;
+  const locale = await resolveInitialLocale({
+    isAuthRoute: false,
+    session,
+    acceptLanguage,
+    getReviewerLocalePreference,
+  });
+
   return (
-    <AppShell active="review" session={session}>
+    <AppShell active="review" session={session} locale={locale}>
       <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-5 md:px-6 md:py-8">
         {/* Header with cust_id search */}
         <div className="flex items-start justify-between gap-4">
