@@ -1,5 +1,12 @@
 import { getMockGraph } from "./mock-data";
-import type { GraphEdge, GraphNode, GraphSearchRequest, GraphSearchResult } from "./schema";
+import type {
+  GraphEdge,
+  GraphNode,
+  GraphSearchRequest,
+  GraphSearchResult,
+  SameAttributeType,
+} from "./schema";
+import { sameAttributeTypeSchema } from "./schema";
 
 type ServiceNeighbor = {
   neighbor_cust_id: number | string;
@@ -13,16 +20,38 @@ type ServiceNeighbor = {
   source_cust_id?: number | string | null;
   target_cust_id?: number | string | null;
   edge_type?: string | null;
+  same_attribute_type?: string | null;
+  attr_link_type?: string | null;
   edge_source?: string | null;
+  edge_source_field?: string | null;
   strength?: string | null;
   edge_value?: string | null;
-  record_count?: number | null;
+  record_count?: number | string | null;
   first_seen?: string | null;
   last_seen?: string | null;
+  enrichment_status?: string | null;
+  enrichment_error?: string | null;
 };
 
 type ServiceHighRisk = {
   cust_id: number | string;
+  cust_name?: string | null;
+  risk_level?: string | null;
+  is_high_risk?: string | boolean | null;
+  is_sanctioned?: string | boolean | null;
+  current_balance?: number | string | null;
+  enrichment_status?: string | null;
+  enrichment_error?: string | null;
+  edge_type?: string | null;
+  same_attribute_type?: string | null;
+  attr_link_type?: string | null;
+  edge_source?: string | null;
+  edge_source_field?: string | null;
+  strength?: string | null;
+  edge_value?: string | null;
+  first_seen?: string | null;
+  last_seen?: string | null;
+  record_count?: number | string | null;
 };
 
 type ServiceDegree = {
@@ -39,6 +68,17 @@ type ServiceErrorDetail =
       node_degree?: number;
       max_degree?: number;
     };
+
+const legacyEdgeTypeToSameAttribute: Record<string, SameAttributeType> = {
+  SAME_PHONE: "same_mobile_phone",
+  SAME_EMAIL: "same_email",
+  SAME_ENTITY_NAME: "same_business_name",
+  SAME_PERSON_NAME: "same_person_name",
+  SAME_ID_NO: "same_id_no",
+  SAME_ADDRESS: "same_address",
+  SAME_STORE_URL: "same_store_url",
+  SAME_IP: "same_ip",
+};
 
 export class GraphServiceError extends Error {
   status: number;
@@ -93,6 +133,18 @@ function decimalNumber(value: number | string | null | undefined): number | null
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseSameAttributeType(value: string | null | undefined): SameAttributeType | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  if (sameAttributeTypeSchema.safeParse(value).success) {
+    return value as SameAttributeType;
+  }
+
+  return legacyEdgeTypeToSameAttribute[value] ?? undefined;
+}
+
 async function serviceGet<T>(baseUrl: string, path: string): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, { cache: "no-store" });
   if (!response.ok) {
@@ -108,27 +160,70 @@ async function serviceGet<T>(baseUrl: string, path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-function normalizeServiceResult(
-  input: GraphSearchRequest,
-  neighbors: ServiceNeighbor[],
-  highRisk: ServiceHighRisk[],
-  degree: ServiceDegree | null
-): GraphSearchResult {
-  const highRiskIds = new Set(highRisk.map((node) => String(node.cust_id)));
-  const filtered = input.includeWeak
-    ? neighbors
-    : neighbors.filter((edge) => strength(edge.strength) === "Strong");
-
-  const center: GraphNode = {
+function nodeForCenter(input: GraphSearchRequest): GraphNode {
+  return {
     custId: input.custId,
     custName: "Selected customer",
     riskLevel: "UNKNOWN",
     isHighRisk: false,
     isSanctioned: false,
-    nodeDegree: degree?.node_degree ?? filtered.length,
+    nodeDegree: 0,
     currentBalance: null,
   };
+}
 
+function edgeForRow(
+  row: ServiceNeighbor,
+  index: number,
+  input: GraphSearchRequest
+): GraphEdge {
+  const neighborCustId = String(row.neighbor_cust_id);
+  const low = String(row.source_cust_id ?? input.custId);
+  const high = String(row.target_cust_id ?? neighborCustId);
+  const sameAttributeType = parseSameAttributeType(row.same_attribute_type ?? row.edge_type);
+
+  return {
+    edgeId: String(row.edge_id ?? `${low}-${high}-${index}`),
+    sourceCustId: low,
+    targetCustId: high,
+    neighborCustId,
+    edgeType: row.edge_type ?? "UNKNOWN",
+    sameAttributeType,
+    attributeLinkType: row.attr_link_type ?? null,
+    edgeSource: row.edge_source ?? null,
+    edgeSourceField: row.edge_source_field ?? null,
+    strength: strength(row.strength),
+    edgeValue: row.edge_value ?? null,
+    recordCount: Number(row.record_count ?? 0),
+    firstSeen: row.first_seen ?? null,
+    lastSeen: row.last_seen ?? null,
+  };
+}
+
+function normalizeServiceResult(
+  input: GraphSearchRequest,
+  neighbors: ServiceNeighbor[],
+  highRisk: ServiceHighRisk[],
+  degree: ServiceDegree | null,
+  warnings: string[]
+): GraphSearchResult {
+  const highRiskIds = new Set(
+    highRisk
+      .map((node) => String(node.cust_id))
+      .concat(
+        neighbors
+          .filter((edge) => toBoolean(edge.is_high_risk))
+          .map((edge) => String(edge.neighbor_cust_id))
+      )
+  );
+
+  const filtered = input.includeWeak
+    ? neighbors
+    : neighbors.filter((edge) => strength(edge.strength) === "Strong");
+
+  const edges = filtered.map((item, index) => edgeForRow(item, index, input));
+
+  const center = nodeForCenter(input);
   const nodes: GraphNode[] = [
     center,
     ...filtered.map((item) => {
@@ -139,30 +234,20 @@ function normalizeServiceResult(
         riskLevel: riskLevel(item.risk_level),
         isHighRisk: toBoolean(item.is_high_risk) || highRiskIds.has(custId),
         isSanctioned: toBoolean(item.is_sanctioned),
-        nodeDegree: item.node_degree ?? 0,
+        nodeDegree: Number(item.node_degree ?? 0),
         currentBalance: decimalNumber(item.current_balance),
+        enrichmentStatus: item.enrichment_status ?? null,
+        enrichmentError: item.enrichment_error ?? null,
       };
     }),
   ];
 
-  const edges = filtered.map((item, index): GraphEdge => {
-    const neighborCustId = String(item.neighbor_cust_id);
-    const low = String(item.source_cust_id ?? input.custId);
-    const high = String(item.target_cust_id ?? neighborCustId);
-    return {
-      edgeId: String(item.edge_id ?? `${low}-${high}-${index}`),
-      sourceCustId: low,
-      targetCustId: high,
-      neighborCustId,
-      edgeType: item.edge_type ?? "UNKNOWN",
-      edgeSource: item.edge_source ?? null,
-      strength: strength(item.strength),
-      edgeValue: item.edge_value ?? null,
-      recordCount: item.record_count ?? 0,
-      firstSeen: item.first_seen ?? null,
-      lastSeen: item.last_seen ?? null,
-    };
-  });
+  const centerNodeDegree = degree?.node_degree;
+  if (typeof centerNodeDegree === "number") {
+    nodes[0]!.nodeDegree = centerNodeDegree;
+  } else {
+    nodes[0]!.nodeDegree = filtered.length;
+  }
 
   return {
     custId: input.custId,
@@ -177,7 +262,18 @@ function normalizeServiceResult(
       weakEdgeCount: edges.filter((edge) => edge.strength === "Weak").length,
       highRiskCount: nodes.filter((node) => node.isHighRisk || node.isSanctioned).length,
     },
+    warnings,
   };
+}
+
+function mergeWarnings(existing: string[], candidate: string) {
+  if (!candidate) {
+    return existing;
+  }
+  if (existing.includes(candidate)) {
+    return existing;
+  }
+  return [...existing, candidate];
 }
 
 export async function searchCustomerGraph(
@@ -190,19 +286,65 @@ export async function searchCustomerGraph(
   }
 
   const params = new URLSearchParams({ limit: String(input.limit) });
-  const [neighbors, highRisk, degree] = await Promise.all([
-    serviceGet<ServiceNeighbor[]>(
-      baseUrl,
-      `/neighbors/${encodeURIComponent(input.custId)}?${params.toString()}`
-    ),
-    serviceGet<ServiceHighRisk[]>(
-      baseUrl,
-      `/high-risk/${encodeURIComponent(input.custId)}?${params.toString()}`
-    ),
-    serviceGet<ServiceDegree>(
-      baseUrl,
-      `/degree/${encodeURIComponent(input.custId)}`
-    ),
-  ]);
-  return normalizeServiceResult(input, neighbors, highRisk, degree);
+  if (input.sameAttributeType) {
+    params.set("same_attribute_type", input.sameAttributeType);
+  }
+
+  const neighborsPromise = serviceGet<ServiceNeighbor[]>(
+    baseUrl,
+    `/neighbors/${encodeURIComponent(input.custId)}?${params.toString()}`
+  );
+  const highRiskPromise = serviceGet<ServiceHighRisk[]>(
+    baseUrl,
+    `/high-risk/${encodeURIComponent(input.custId)}?${params.toString()}`
+  );
+  const degreePromise = serviceGet<ServiceDegree>(
+    baseUrl,
+    `/degree/${encodeURIComponent(input.custId)}`
+  );
+
+  const [neighborsResult, highRiskResult, degreeResult] = await Promise.allSettled([
+    neighborsPromise,
+    highRiskPromise,
+    degreePromise,
+  ] as const);
+  if (neighborsResult.status === "rejected") {
+    throw neighborsResult.reason;
+  }
+
+  const neighbors = neighborsResult.value;
+  let highRisk: ServiceHighRisk[] = [];
+  let degree: ServiceDegree | null = null;
+  let warnings: string[] = [];
+
+  if (highRiskResult.status === "fulfilled") {
+    highRisk = highRiskResult.value;
+  } else {
+    const reason = highRiskResult.reason;
+    if (reason instanceof GraphServiceError && reason.status === 503) {
+      warnings = mergeWarnings(
+        warnings,
+        `High-risk enrichment unavailable: ${reason.message}`
+      );
+    } else {
+      throw reason;
+    }
+  }
+
+  if (degreeResult.status === "fulfilled") {
+    degree = degreeResult.value;
+  } else {
+    const reason = degreeResult.reason;
+    if (reason instanceof GraphServiceError && reason.status === 503) {
+      warnings = mergeWarnings(
+        warnings,
+        `Degree lookup unavailable: ${reason.message}`
+      );
+    } else {
+      warnings = mergeWarnings(warnings, "Degree lookup incomplete; using edge count estimate.");
+      degree = null;
+    }
+  }
+
+  return normalizeServiceResult(input, neighbors, highRisk, degree, warnings);
 }

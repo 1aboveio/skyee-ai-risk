@@ -210,6 +210,8 @@ export const mockGraphData = {
     {
       custId: TEST_CUST_ID,
       custName: "Zhang Wei",
+      nodeDegree: 2,
+      currentBalance: 12000,
       riskLevel: "HIGH" as const,
       isHighRisk: true,
       isSanctioned: false,
@@ -217,6 +219,8 @@ export const mockGraphData = {
     {
       custId: "NEIGHBOR_001",
       custName: "Li Na",
+      nodeDegree: 1,
+      currentBalance: 3000,
       riskLevel: "MEDIUM" as const,
       isHighRisk: false,
       isSanctioned: false,
@@ -224,6 +228,8 @@ export const mockGraphData = {
     {
       custId: "NEIGHBOR_002",
       custName: "Sanctioned Entity",
+      nodeDegree: 1,
+      currentBalance: 0,
       riskLevel: "HIGH" as const,
       isHighRisk: true,
       isSanctioned: true,
@@ -233,6 +239,10 @@ export const mockGraphData = {
     {
       edgeId: "edge-001",
       edgeType: "shared_phone",
+      sameAttributeType: "same_mobile_phone",
+      attributeLinkType: "PRIMARY_MOBILE",
+      edgeSource: "cust_customer_info",
+      edgeSourceField: "CUST_MOBILE",
       neighborCustId: "NEIGHBOR_001",
       strength: "Strong" as const,
       edgeValue: "+86-138-0000-1234",
@@ -240,13 +250,18 @@ export const mockGraphData = {
     },
     {
       edgeId: "edge-002",
-      edgeType: "counterparty",
+      edgeType: "SAME_NAME_PAYER_MOBILE",
+      sameAttributeType: "same_business_name",
+      attributeLinkType: "PAYER_MOBILE",
+      edgeSource: "pmp_pay_order",
+      edgeSourceField: "PAYER_MOBILE",
       neighborCustId: "NEIGHBOR_002",
       strength: "Weak" as const,
       edgeValue: "2 transactions",
       lastSeen: "2025-05-20T00:00:00.000Z",
     },
   ],
+  warnings: [],
   stats: {
     nodeCount: 3,
     edgeCount: 2,

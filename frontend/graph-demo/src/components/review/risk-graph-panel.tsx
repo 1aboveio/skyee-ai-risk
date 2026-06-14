@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircleIcon,
   DatabaseIcon,
+  InfoIcon,
   Link2Icon,
   NetworkIcon,
   RefreshCcwIcon,
@@ -40,6 +41,10 @@ import { WorkbenchPanel } from "@/components/review/workbench-panel";
 import { GraphCanvas } from "@/components/graph/graph-canvas";
 import { fetchGraph } from "@/lib/graph/fetch";
 import { riskVariant, displayName, formatDateTime } from "@/lib/graph/utils";
+import {
+  getEdgeAnnotation,
+  sameAttributeTypeLabels,
+} from "@/lib/graph/edge-annotations";
 import {
   categorizeEdgeType,
   edgeCategoryLabel,
@@ -99,13 +104,68 @@ function NodeRow({ node, isCenter }: { node: GraphNode; isCenter: boolean }) {
   );
 }
 
+function renderSameAttributeTypeLabel(value: string | undefined): string {
+  return value ? sameAttributeTypeLabels[value] ?? value : "Unknown";
+}
+
+function EdgeInfo({ edge }: { edge: GraphEdge }) {
+  const annotation = getEdgeAnnotation({
+    edgeType: edge.edgeType,
+    sameAttributeType: edge.sameAttributeType,
+  });
+  if (!annotation) {
+    return null;
+  }
+
+  const fieldSource = edge.edgeSource?.trim();
+  const fieldName = edge.edgeSourceField?.trim();
+  const hasProvenance = Boolean(fieldSource || fieldName || edge.attributeLinkType);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<Button type="button" variant="ghost" size="icon" className="h-6 w-6" />}
+      >
+        <span className="sr-only">Provenance</span>
+        <InfoIcon className="h-3 w-3" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-96">
+        <div className="flex flex-col gap-2">
+          <div className="font-medium">
+            {edge.sameAttributeType
+              ? sameAttributeTypeLabels[edge.sameAttributeType] ?? annotation.title
+              : annotation.title}
+          </div>
+          <div className="text-sm">{annotation.description}</div>
+          {hasProvenance ? (
+            <div className="text-muted-foreground">
+              <div>{`Attribute link: ${edge.attributeLinkType ?? "derived"}`}</div>
+              {fieldName ? <div>{`Field: ${fieldSource}.${fieldName}`}</div> : null}
+              {!fieldName && fieldSource ? <div>{`Source: ${fieldSource}`}</div> : null}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-1">
+            {annotation.fields.slice(0, 8).map((field) => (
+              <Badge key={`${field.table}.${field.column}`} variant="outline" className="text-[10px]">
+                {field.table}.{field.column}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function EdgeRow({ edge, node }: { edge: GraphEdge; node: GraphNode | null }) {
-  const category = categorizeEdgeType(edge.edgeType);
+  const edgeDimension = edge.sameAttributeType ?? edge.edgeType;
+  const category = categorizeEdgeType(edgeDimension);
   return (
     <TableRow>
       <TableCell className="py-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-sm font-medium">{edge.edgeType}</span>
+          <span className="text-sm font-medium">{renderSameAttributeTypeLabel(edgeDimension)}</span>
+          <EdgeInfo edge={edge} />
           <Badge variant={edgeCategoryVariant(category)} className="text-[10px]">
             {edgeCategoryLabel(category)}
           </Badge>
@@ -195,7 +255,8 @@ function CategorySummary({ edges }: { edges: GraphEdge[] }) {
       unknown: 0,
     };
     for (const edge of edges) {
-      counts[categorizeEdgeType(edge.edgeType)]++;
+      const edgeDimension = edge.sameAttributeType ?? edge.edgeType;
+      counts[categorizeEdgeType(edgeDimension)]++;
     }
     return counts;
   }, [edges]);
@@ -345,6 +406,19 @@ export function RiskGraphPanel({
             <AlertDescription>{state.error}</AlertDescription>
           </Alert>
         )}
+        {result.warnings && result.warnings.length > 0 ? (
+          <Alert className="mb-4">
+            <InfoIcon className="h-4 w-4" />
+            <AlertTitle>Warnings</AlertTitle>
+            <AlertDescription>
+              <ul className="list-disc pl-4">
+                {result.warnings.map((message, index) => (
+                  <li key={`${message}-${index}`}>{message}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         {/* Metrics */}
         <div className="grid grid-cols-5 gap-2">

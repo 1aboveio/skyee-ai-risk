@@ -25,9 +25,14 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const url = new URL(request.url);
-  const parsed = graphSearchRequestSchema.safeParse(
-    Object.fromEntries(url.searchParams.entries())
-  );
+  const searchParams = Object.fromEntries(url.searchParams.entries());
+  const requestPayload = {
+    ...searchParams,
+    sameAttributeType:
+      searchParams.same_attribute_type ?? searchParams.sameAttributeType,
+  };
+
+  const parsed = graphSearchRequestSchema.safeParse(requestPayload);
 
   if (!parsed.success) {
     return Response.json(

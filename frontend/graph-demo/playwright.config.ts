@@ -28,7 +28,7 @@ export default defineConfig({
   webServer: {
     command:
       "DATABASE_URL=postgres://graph_demo:graph_demo@localhost:5432/graph_demo APP_SESSION_SECRET=test-session-secret-for-e2e-only-32b! pnpm dev",
-    url: "http://localhost:3000",
+    url: "http://localhost:3000/api/health",
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
     cwd: ".",

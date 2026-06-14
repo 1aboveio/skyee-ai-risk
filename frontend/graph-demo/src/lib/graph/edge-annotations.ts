@@ -128,3 +128,53 @@ export const edgeAnnotations: Record<string, EdgeAnnotation> = {
     fields: fields(["LOGIN_IP"]),
   },
 };
+
+export const sameAttributeTypeAliases: Record<string, string> = {
+  same_mobile_phone: "SAME_PHONE",
+  same_email: "SAME_EMAIL",
+  same_business_name: "SAME_ENTITY_NAME",
+  same_person_name: "SAME_PERSON_NAME",
+  same_id_no: "SAME_ID_NO",
+  same_address: "SAME_ADDRESS",
+  same_store_url: "SAME_STORE_URL",
+  same_ip: "SAME_IP",
+};
+
+export const sameAttributeTypeLabels: Record<string, string> = {
+  same_mobile_phone: "Same Mobile Phone",
+  same_email: "Same Email",
+  same_business_name: "Same Business Name",
+  same_person_name: "Same Person Name",
+  same_id_no: "Same Identity Number",
+  same_address: "Same Address",
+  same_store_url: "Same Store URL",
+  same_ip: "Same IP",
+};
+
+export const sameAttributeTypeLabelsZh: Record<string, string> = {
+  same_mobile_phone: "同卡/同手机号",
+  same_email: "同邮箱",
+  same_business_name: "同企业名称",
+  same_person_name: "同姓名",
+  same_id_no: "同证件号",
+  same_address: "同地址",
+  same_store_url: "同店铺链接",
+  same_ip: "同登录 IP",
+};
+
+export function getEdgeAnnotation(params: {
+  edgeType?: string;
+  sameAttributeType?: string;
+}) {
+  if (params.sameAttributeType && edgeAnnotations[params.sameAttributeType]) {
+    return edgeAnnotations[params.sameAttributeType];
+  }
+
+  if (params.edgeType && edgeAnnotations[params.edgeType]) {
+    return edgeAnnotations[params.edgeType];
+  }
+
+  return params.sameAttributeType
+    ? edgeAnnotations[sameAttributeTypeAliases[params.sameAttributeType] ?? ""]
+    : undefined;
+}

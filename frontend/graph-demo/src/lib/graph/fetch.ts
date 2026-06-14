@@ -3,12 +3,14 @@ import type { GraphSearchResult } from "./schema";
 export interface FetchGraphOptions {
   custId: string;
   includeWeak: boolean;
+  sameAttributeType?: string;
   signal?: AbortSignal;
 }
 
 export async function fetchGraph({
   custId,
   includeWeak,
+  sameAttributeType,
   signal,
 }: FetchGraphOptions): Promise<GraphSearchResult> {
   const params = new URLSearchParams({
@@ -16,6 +18,9 @@ export async function fetchGraph({
     includeWeak: String(includeWeak),
     limit: "15",
   });
+  if (sameAttributeType) {
+    params.set("same_attribute_type", sameAttributeType);
+  }
   const response = await fetch(`/api/graph/search?${params.toString()}`, { signal });
   if (!response.ok) {
     try {
