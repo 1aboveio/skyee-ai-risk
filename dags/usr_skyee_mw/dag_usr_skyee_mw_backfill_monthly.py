@@ -1,18 +1,16 @@
 """
-Airflow DAG: Backfill large stg_* tables and graph attributes monthly.
+Airflow DAG: Backfill graph attributes monthly.
 
 Schedule: @monthly from 2016-09-01
 Catchup: enabled
 
-Tables: pmp_coll_order, cust_user_login_log, pmp_pay_details, pmp_pay_order
+Skipped staging tables already backfilled:
+    pmp_coll_order, cust_user_login_log, pmp_pay_details, pmp_pay_order
 
 Graph:
     dwd_graph_attr_index is rebuilt for the same monthly window.
     dwd_graph_edge_monthly can still be rebuilt from monthly source data when
     pairwise warehouse edges are needed.
-
-Variables:
-    MYSQL_DB_URL_SECRET - MySQL JDBC URL with credentials
 """
 
 from datetime import datetime, timedelta
@@ -33,13 +31,18 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-TABLES = ["pmp_coll_order", "cust_user_login_log", "pmp_pay_details", "pmp_pay_order"]
+BACKFILLED_STG_TABLES = [
+    "pmp_coll_order",
+    "cust_user_login_log",
+    "pmp_pay_details",
+    "pmp_pay_order",
+]
 
 
 with DAG(
     dag_id="usr_skyee_mw_backfill_monthly",
     default_args=default_args,
-    description="Backfill large stg_* tables and graph attributes (monthly)",
+    description="Skip completed stg backfills and rebuild graph attributes monthly",
     schedule="@monthly",
     start_date=datetime(2016, 9, 1),
     catchup=True,
@@ -52,20 +55,8 @@ with DAG(
     end = EmptyOperator(task_id="end")
 
     stg_tasks = [
-        SparkSubmitOperator(
-            task_id=f"stg_{table}",
-            name=f"usr_skyee_mw.backfill.monthly.stg.{table}.{LOCAL_INTERVAL_START}",
-            application=f"{SCRIPTS_PATH}/stg_{table}.py",
-            conn_id="spark_default",
-            application_args=[
-                "--url", "jdbc:mysql://{{ var.value.MYSQL_DB_URL_SECRET }}",
-                "--start-date", LOCAL_INTERVAL_START,
-                "--end-date", LOCAL_INTERVAL_END,
-                "--bulk",
-            ],
-            verbose=True,
-        )
-        for table in TABLES
+        EmptyOperator(task_id=f"stg_{table}")
+        for table in BACKFILLED_STG_TABLES
     ]
 
     graph_attr_index = SparkSubmitOperator(
