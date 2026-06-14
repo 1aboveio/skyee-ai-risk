@@ -2,21 +2,81 @@ import { Prisma } from "@/generated/prisma/client";
 import prisma from "@/lib/prisma";
 import { isLocale, type Locale } from "@/lib/i18n/resolve-locale";
 
+export type LocalePreferenceDb = {
+  reviewerLocalePreference: {
+    findUnique(args: {
+      where: { reviewerId: string };
+    }): Promise<{ locale: string } | null>;
+  };
+};
+
+export type LocalePreferenceWriteDb = {
+  reviewerLocalePreference: {
+    upsert(args: {
+      where: { reviewerId: string };
+      create: { reviewerId: string; locale: string };
+      update: { locale: string };
+    }): Promise<{ reviewerId: string; locale: string }>;
+  };
+};
+
 export async function getReviewerLocalePreference(
-  reviewerId: string
+  reviewerId: string,
+  db: LocalePreferenceDb = prisma
 ): Promise<Locale | null> {
   try {
-    const preference = await prisma.reviewerLocalePreference.findUnique({
+    const preference = await db.reviewerLocalePreference.findUnique({
       where: { reviewerId },
     });
     if (preference && isLocale(preference.locale)) {
       return preference.locale;
     }
     return null;
-  } catch {
-    // Gracefully fall back when the preference table is not yet available
-    // (e.g. local dev without a migrated database).
-    return null;
+  } catch (error) {
+    // The preference table may not exist in unmigrated local/dev databases
+    // before the first deployment. Treat that as "no preference".
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2021"
+    ) {
+      return null;
+    }
+
+    // Any other query error is unexpected: log it and let callers distinguish
+    // it from a missing preference.
+    console.error("Failed to load reviewer locale preference", {
+      reviewerId,
+      error,
+    });
+    throw error;
+  }
+}
+
+export async function updateReviewerLocalePreference(
+  reviewerId: string,
+  locale: Locale,
+  db: LocalePreferenceWriteDb = prisma
+): Promise<Locale> {
+  try {
+    const preference = await db.reviewerLocalePreference.upsert({
+      where: { reviewerId },
+      create: { reviewerId, locale },
+      update: { locale },
+    });
+
+    if (isLocale(preference.locale)) {
+      return preference.locale;
+    }
+
+    // Guard against a corrupted stored value by returning the requested locale.
+    return locale;
+  } catch (error) {
+    console.error("Failed to update reviewer locale preference", {
+      reviewerId,
+      locale,
+      error,
+    });
+    throw error;
   }
 }
 

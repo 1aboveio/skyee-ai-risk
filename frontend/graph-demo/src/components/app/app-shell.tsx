@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import type { GraphIdentitySession } from "@/lib/auth/identity-session";
 import { cn } from "@/lib/utils";
+import { LanguageSwitcher } from "./language-switcher";
 
 type AppModule = "home" | "graph" | "review";
 
@@ -39,14 +40,17 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-sidebar-border bg-sidebar lg:flex lg:flex-col">
-        <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-5">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <ShieldCheckIcon className="size-4" />
+        <div className="flex h-16 items-center justify-between gap-3 border-b border-sidebar-border px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <ShieldCheckIcon className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold">Skyee AI Risk</div>
+              <div className="truncate text-xs text-muted-foreground">Operations Console</div>
+            </div>
           </div>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">Skyee AI Risk</div>
-            <div className="truncate text-xs text-muted-foreground">Operations Console</div>
-          </div>
+          <LanguageSwitcher />
         </div>
 
         <nav className="flex flex-1 flex-col gap-1 px-3 py-4" aria-label="Primary">
@@ -98,13 +102,16 @@ export function AppShell({
             </div>
             <span className="truncate text-sm font-semibold">Skyee AI Risk</span>
           </Link>
-          <a
-            href="/auth/logout"
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
-          >
-            <LogOutIcon className="size-4" />
-            Sign out
-          </a>
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher />
+            <a
+              href="/auth/logout"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+            >
+              <LogOutIcon className="size-4" />
+              Sign out
+            </a>
+          </div>
         </header>
 
         <nav

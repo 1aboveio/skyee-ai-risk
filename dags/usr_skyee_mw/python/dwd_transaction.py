@@ -17,6 +17,7 @@ from pyspark.sql.functions import (
     concat,
     greatest,
     lit,
+    nullif,
     to_date,
     trim,
     when,
@@ -251,7 +252,7 @@ class DwdTransactionEtl(Etl):
             col("po.same_name_payer_province").alias("ultimate_debtor_province"),
             col("po.same_name_payer_city").alias("ultimate_debtor_city"),
             col("po.same_name_payer_postcode").alias("ultimate_debtor_postcode"),
-            col("pd.subject_name").alias("creditor_name"),
+            col("pd.bank_acct_name").alias("creditor_name"),
             col("pd.beneficiary_email").alias("creditor_email"),
             col("pd.beneficiary_identification_type").alias("creditor_cert_type"),
             col("pd.beneficiary_identification_no").alias("creditor_cert_no"),
@@ -261,6 +262,7 @@ class DwdTransactionEtl(Etl):
             col("pd.beneficiary_province").alias("creditor_province"),
             col("pd.beneficiary_city").alias("creditor_city"),
             col("pd.beneficiary_post_code").alias("creditor_postcode"),
+            col("pd.subject_name").alias("payment_subject_name"),
             self._empty(StringType()).alias("debtor_agent_name"),
             self._empty(StringType()).alias("debtor_agent_code"),
             self._empty(StringType()).alias("debtor_agent_swift"),
@@ -282,9 +284,11 @@ class DwdTransactionEtl(Etl):
             col("po.trade_type").alias("trade_type"),
             col("po.business_type").alias("business_type"),
             coalesce(col("pd.sub_biz_type"), col("po.sub_biz_type")).alias("sub_biz_type"),
-            coalesce(col("pd.fund_purpose"), col("po.fund_purpose"), col("po.pay_purpose")).alias(
-                "fund_purpose"
-            ),
+            coalesce(
+                nullif(col("pd.fund_purpose"), lit("")),
+                nullif(col("po.fund_purpose"), lit("")),
+                nullif(col("po.pay_purpose"), lit(""))
+            ).alias("fund_purpose"),
             coalesce(col("pd.clear_status"), col("po.clear_status")).alias("clear_status"),
             coalesce(col("pd.clear_time"), col("po.clear_time")).alias("clear_time"),
             col("pd.clear_chl_code").alias("clear_channel_code"),
