@@ -75,6 +75,18 @@ def _assert_snapshot_schema(con: duckdb.DuckDBPyConnection):
         )
 
 
+def _table_exists(con: duckdb.DuckDBPyConnection, table_name: str) -> bool:
+    row = con.execute(
+        """
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'main' AND table_name = ?
+        """,
+        [table_name],
+    ).fetchone()
+    return row is not None
+
+
 def _query(sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
     _ensure_snapshot_exists()
     con = duckdb.connect(get_db_path(), read_only=True)
@@ -177,6 +189,93 @@ def _derive_same_attribute_type(attribute_type: str | None) -> str | None:
     return ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.get(attribute_type)
 
 
+def _load_neighbor_metadata(cust_ids: list[int]) -> dict[int, dict[str, Any]]:
+    if not cust_ids:
+        return {}
+
+    _ensure_snapshot_exists()
+    con = duckdb.connect(get_db_path(), read_only=True)
+    try:
+        if not _table_exists(con, "graph_nodes"):
+            return {}
+
+        has_degrees = _table_exists(con, "graph_node_degrees")
+        degree_join = (
+            "LEFT JOIN graph_node_degrees d ON d.cust_id = n.cust_id"
+            if has_degrees
+            else ""
+        )
+        degree_expr = (
+            "COALESCE(d.node_degree, 0) AS node_degree"
+            if has_degrees
+            else "0 AS node_degree"
+        )
+        result = con.execute(
+            f"""
+            SELECT
+                n.cust_id,
+                n.cust_name,
+                n.risk_level,
+                n.is_high_risk,
+                n.is_sanctioned,
+                n.current_balance,
+                n.confirmed_risk_status,
+                n.confirmed_risk_type,
+                {degree_expr}
+            FROM graph_nodes n
+            {degree_join}
+            WHERE n.cust_id IN (SELECT UNNEST(?))
+            """,
+            [cust_ids],
+        )
+        columns = [desc[0] for desc in result.description]
+        return {int(row[0]): dict(zip(columns, row)) for row in result.fetchall()}
+    finally:
+        con.close()
+
+
+def _apply_neighbor_metadata(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    metadata = _load_neighbor_metadata(
+        sorted(
+            {
+                int(row["neighbor_cust_id"])
+                for row in rows
+                if row.get("neighbor_cust_id") is not None
+            }
+        )
+    )
+    for row in rows:
+        node = metadata.get(int(row["neighbor_cust_id"]), {})
+        row["cust_name"] = node.get("cust_name")
+        row["risk_level"] = node.get("risk_level")
+        row["is_high_risk"] = node.get("is_high_risk")
+        row["is_sanctioned"] = node.get("is_sanctioned")
+        row["current_balance"] = node.get("current_balance")
+        row["confirmed_risk_status"] = node.get("confirmed_risk_status")
+        row["confirmed_risk_type"] = node.get("confirmed_risk_type")
+        row["node_degree"] = node.get("node_degree", 0)
+    return rows
+
+
+def _require_graph_nodes():
+    _ensure_snapshot_exists()
+    con = duckdb.connect(get_db_path(), read_only=True)
+    try:
+        if not _table_exists(con, "graph_nodes"):
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "HIGH_RISK_ENRICHMENT_UNAVAILABLE",
+                    "message": (
+                        "High-risk neighbor lookup requires graph_nodes enrichment "
+                        "metadata in the DuckDB snapshot."
+                    ),
+                },
+            )
+    finally:
+        con.close()
+
+
 def _build_neighbor_rows(cust_id: int, same_attribute_type: str | None = None) -> list[dict[str, Any]]:
     shared_attr_filter: str | None = None
     if same_attribute_type is not None:
@@ -229,7 +328,7 @@ def _build_neighbor_rows(cust_id: int, same_attribute_type: str | None = None) -
             continue
         linked_rows.append(result)
 
-    return linked_rows
+    return _apply_neighbor_metadata(linked_rows)
 
 
 def _count_neighbors(cust_id: int, same_attribute_type: str | None = None) -> int:
@@ -411,11 +510,31 @@ def neighbors(
 
 @app.get("/high-risk/{cust_id}")
 def high_risk(cust_id: int, limit: int = Query(50, ge=1, le=500)):
-    # High-risk enrichment is added after association lookup in a later slice.
-    # Keep the endpoint shape compatible without pretending neighbor rows are
-    # high-risk customer records.
-    _ = (cust_id, limit)
-    return []
+    _require_graph_nodes()
+    assert_expandable(cust_id)
+    rows = [
+        row
+        for row in _build_neighbor_rows(cust_id)
+        if row.get("risk_level") in {"HIGH", "MEDIUM_HIGH"}
+        or row.get("is_high_risk") in {"Y", "true", "1", True}
+        or row.get("is_sanctioned") in {"Y", "true", "1", True}
+    ]
+    return [
+        {
+            "cust_id": row["neighbor_cust_id"],
+            "cust_name": row.get("cust_name"),
+            "risk_level": row.get("risk_level"),
+            "is_high_risk": row.get("is_high_risk"),
+            "is_sanctioned": row.get("is_sanctioned"),
+            "current_balance": row.get("current_balance"),
+            "confirmed_risk_status": row.get("confirmed_risk_status"),
+            "confirmed_risk_type": row.get("confirmed_risk_type"),
+            "edge_type": row.get("edge_type"),
+            "strength": row.get("strength"),
+            "edge_value": row.get("edge_value"),
+        }
+        for row in rows[:limit]
+    ]
 
 
 @app.get("/shared/{source_cust_id}/{target_cust_id}")

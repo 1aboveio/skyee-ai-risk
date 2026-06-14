@@ -67,6 +67,61 @@ def _create_snapshot(path: Path, rows: list[dict]) -> None:
     con.close()
 
 
+def _create_graph_nodes(path: Path, rows: list[dict]) -> None:
+    con = duckdb.connect(str(path))
+    con.execute("DROP TABLE IF EXISTS graph_nodes")
+    con.execute("DROP TABLE IF EXISTS graph_node_degrees")
+    con.execute(
+        """
+        CREATE TABLE graph_nodes (
+            cust_id BIGINT,
+            cust_name VARCHAR,
+            risk_level VARCHAR,
+            is_high_risk VARCHAR,
+            is_sanctioned VARCHAR,
+            current_balance DOUBLE,
+            confirmed_risk_status VARCHAR,
+            confirmed_risk_type VARCHAR
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE graph_node_degrees (
+            cust_id BIGINT,
+            node_degree INTEGER
+        )
+        """
+    )
+    con.executemany(
+        """
+        INSERT INTO graph_nodes (
+            cust_id, cust_name, risk_level, is_high_risk, is_sanctioned,
+            current_balance, confirmed_risk_status, confirmed_risk_type
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                row["cust_id"],
+                row["cust_name"],
+                row["risk_level"],
+                row["is_high_risk"],
+                row["is_sanctioned"],
+                row["current_balance"],
+                row.get("confirmed_risk_status"),
+                row.get("confirmed_risk_type"),
+            )
+            for row in rows
+        ],
+    )
+    con.executemany(
+        "INSERT INTO graph_node_degrees (cust_id, node_degree) VALUES (?, ?)",
+        [(row["cust_id"], row.get("node_degree", 0)) for row in rows],
+    )
+    con.close()
+
+
 def _row(
     source_type: str,
     source_value: int | str,
@@ -180,3 +235,65 @@ def test_neighbor_lookup_works_when_only_association_attribute_links_exists(tmp_
         links = _neighbors(client, 3001)
     assert len(links) == 1
     assert links[0]["neighbor_cust_id"] == 3002
+
+
+def test_neighbor_lookup_preserves_optional_graph_node_metadata(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.neighbor_metadata_compatibility
+    # @level integration
+    rows = [
+        _row("customer", 4001, "cs_4001", "mobile_phone", "177-0001", "ma_1"),
+        _row("mobile_phone", "177-0001", "ma_1", "customer", 4002, "cs_4002"),
+    ]
+    db_path = tmp_path / "graph-with-nodes.duckdb"
+    _create_snapshot(db_path, rows)
+    _create_graph_nodes(
+        db_path,
+        [
+            {
+                "cust_id": 4002,
+                "cust_name": "Linked Customer",
+                "risk_level": "HIGH",
+                "is_high_risk": "Y",
+                "is_sanctioned": "N",
+                "current_balance": 123.45,
+                "confirmed_risk_status": "confirmed",
+                "confirmed_risk_type": "bad_customer",
+                "node_degree": 7,
+            }
+        ],
+    )
+
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    with TestClient(graph_service.app) as client:
+        links = _neighbors(client, 4001)
+
+    assert len(links) == 1
+    assert links[0]["cust_name"] == "Linked Customer"
+    assert links[0]["risk_level"] == "HIGH"
+    assert links[0]["is_high_risk"] == "Y"
+    assert links[0]["is_sanctioned"] == "N"
+    assert links[0]["current_balance"] == 123.45
+    assert links[0]["node_degree"] == 7
+
+    with TestClient(graph_service.app) as client:
+        high_risk = client.get("/high-risk/4001")
+    assert high_risk.status_code == 200
+    assert high_risk.json()[0]["cust_id"] == 4002
+
+
+def test_high_risk_endpoint_requires_graph_node_metadata(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.high_risk_metadata_contract
+    # @level integration
+    rows = [
+        _row("customer", 5001, "cs_5001", "ip", "10.0.0.5", "ip_5"),
+        _row("ip", "10.0.0.5", "ip_5", "customer", 5002, "cs_5002"),
+    ]
+    db_path = tmp_path / "graph-without-nodes.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/high-risk/5001")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "HIGH_RISK_ENRICHMENT_UNAVAILABLE"

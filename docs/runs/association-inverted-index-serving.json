@@ -2,7 +2,7 @@
   "runSlug": "association-inverted-index-serving",
   "skill": "resolve-prd",
   "createdAt": "2026-06-14T08:25:50Z",
-  "updatedAt": "2026-06-14T08:45:31Z",
+  "updatedAt": "2026-06-14T08:53:23Z",
   "models": {
     "implementation": "gpt-5.3-codex",
     "review": "gpt-5.4",
@@ -30,8 +30,8 @@
       "status": "in-review",
       "pr": "#36",
       "branch": "issue-30-attribute-link-core",
-      "lastVerdict": null,
-      "reviewRounds": 0,
+      "lastVerdict": "NEEDS_CHANGES",
+      "reviewRounds": 1,
       "blocker": null,
       "oracleConsults": [],
       "worker": "019ec545-b6c7-76c3-a935-052f2bad9565"
