@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 from typing import Any
+from urllib.parse import urlparse
 
 import duckdb
 from fastapi import FastAPI, HTTPException, Query
@@ -50,13 +51,91 @@ SAME_ATTRIBUTE_BY_ATTRIBUTE = {v: k for k, v in ASSOCIATION_ATTRIBUTE_TO_SAME_AT
 app = FastAPI(title="Skyee Association Link Lookup Service")
 
 
-class GraphNodeSourceEvidenceAdapter(SourceEvidenceDatabaseAdapter):
+class NullSourceEvidenceAdapter(SourceEvidenceDatabaseAdapter):
     def get_customer_profiles(self, customer_ids: list[int]) -> dict[int, dict[str, Any]]:
-        """Load enrichment fields from DuckDB graph_nodes snapshot tables."""
+        """Return no live enrichment when Source Evidence is not configured."""
+        return {}
+
+
+class MySqlSourceEvidenceAdapter(SourceEvidenceDatabaseAdapter):
+    def __init__(self, connection_url: str) -> None:
+        self.connection_url = connection_url
+
+    def get_customer_profiles(self, customer_ids: list[int]) -> dict[int, dict[str, Any]]:
+        """Load live customer fields from the online Source Evidence MySQL database."""
+        if not customer_ids:
+            return {}
+
+        try:
+            import pymysql
+            import pymysql.cursors
+        except ImportError as exc:
+            raise RuntimeError("pymysql is required for SOURCE_EVIDENCE_MYSQL_URL enrichment") from exc
+
+        parsed = urlparse(self.connection_url)
+        database = parsed.path.lstrip("/")
+        if not parsed.hostname or not parsed.username or not database:
+            raise RuntimeError("SOURCE_EVIDENCE_MYSQL_URL must include host, user, and database")
+
+        placeholders = ", ".join(["%s"] * len(customer_ids))
+        sql = f"""
+            SELECT
+                ci.CUST_ID AS cust_id,
+                ci.CUST_NAME AS cust_name,
+                ci.RISK_LEVEL AS risk_level,
+                ci.HIGH_RISK AS is_high_risk,
+                ci.SANCTIONED AS is_sanctioned,
+                ci.CUST_STATUS AS cust_status,
+                bal.current_balance AS current_balance
+            FROM cust_customer_info ci
+            LEFT JOIN (
+                SELECT CUST_ID, SUM(PEG_BALANCE) AS current_balance
+                FROM cust_collections_acct
+                WHERE CUST_ID IN ({placeholders})
+                GROUP BY CUST_ID
+            ) bal ON bal.CUST_ID = ci.CUST_ID
+            WHERE ci.CUST_ID IN ({placeholders})
+        """
+        query_params = [*customer_ids, *customer_ids]
+        connection = pymysql.connect(
+            host=parsed.hostname,
+            port=parsed.port or 3306,
+            user=parsed.username,
+            password=parsed.password or "",
+            database=database,
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+            read_timeout=5,
+            write_timeout=5,
+        )
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, query_params)
+                rows = cursor.fetchall()
+        finally:
+            connection.close()
+
+        return {int(row["cust_id"]): row for row in rows}
+
+
+class DuckDbGraphNodeSourceEvidenceAdapter(SourceEvidenceDatabaseAdapter):
+    def get_customer_profiles(self, customer_ids: list[int]) -> dict[int, dict[str, Any]]:
+        """Legacy explicit fallback for loading enrichment from DuckDB graph_nodes."""
         return _load_neighbor_metadata(customer_ids)
 
 
-source_evidence_adapter: SourceEvidenceDatabaseAdapter = GraphNodeSourceEvidenceAdapter()
+def create_source_evidence_adapter() -> SourceEvidenceDatabaseAdapter:
+    adapter_mode = os.getenv("SOURCE_EVIDENCE_ADAPTER", "mysql").strip().lower()
+    if adapter_mode == "duckdb_graph_nodes":
+        return DuckDbGraphNodeSourceEvidenceAdapter()
+
+    connection_url = os.getenv("SOURCE_EVIDENCE_MYSQL_URL") or os.getenv("SOURCE_EVIDENCE_DB_URL")
+    if connection_url:
+        return MySqlSourceEvidenceAdapter(connection_url)
+    return NullSourceEvidenceAdapter()
+
+
+source_evidence_adapter: SourceEvidenceDatabaseAdapter = create_source_evidence_adapter()
 
 
 def get_db_path() -> str:
@@ -301,23 +380,18 @@ def _apply_neighbor_metadata(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
     )
 
 
-def _require_graph_nodes():
-    _ensure_snapshot_exists()
-    con = duckdb.connect(get_db_path(), read_only=True)
-    try:
-        if not _table_exists(con, "graph_nodes"):
-            raise HTTPException(
-                status_code=503,
-                detail={
-                    "code": "HIGH_RISK_ENRICHMENT_UNAVAILABLE",
-                    "message": (
-                        "High-risk neighbor lookup requires graph_nodes enrichment "
-                        "metadata in the DuckDB snapshot."
-                    ),
-                },
-            )
-    finally:
-        con.close()
+def _require_high_risk_enrichment():
+    if isinstance(source_evidence_adapter, NullSourceEvidenceAdapter):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "HIGH_RISK_ENRICHMENT_UNAVAILABLE",
+                "message": (
+                    "High-risk neighbor lookup requires configured Source Evidence "
+                    "enrichment."
+                ),
+            },
+        )
 
 
 def _legacy_edge_degree(cust_id: int) -> int:
@@ -599,7 +673,7 @@ def neighbors(
 
 @app.get("/high-risk/{cust_id}")
 def high_risk(cust_id: int, limit: int = Query(50, ge=1, le=500)):
-    _require_graph_nodes()
+    _require_high_risk_enrichment()
     assert_expandable(cust_id)
     rows = _apply_neighbor_metadata(_build_neighbor_rows(cust_id))
     rows = [

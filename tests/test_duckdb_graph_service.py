@@ -386,6 +386,11 @@ def test_neighbor_lookup_preserves_optional_graph_node_metadata(tmp_path, monkey
     )
 
     monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.setattr(
+        graph_service,
+        "source_evidence_adapter",
+        graph_service.DuckDbGraphNodeSourceEvidenceAdapter(),
+    )
     with TestClient(graph_service.app) as client:
         links = _neighbors(client, 4001)
 
@@ -401,6 +406,66 @@ def test_neighbor_lookup_preserves_optional_graph_node_metadata(tmp_path, monkey
         high_risk = client.get("/high-risk/4001")
     assert high_risk.status_code == 200
     assert high_risk.json()[0]["cust_id"] == 4002
+
+
+def test_default_enrichment_does_not_read_duckdb_graph_nodes(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.source_evidence_default_boundary
+    # @level integration
+    rows = [
+        _row("customer", 4101, "cs_4101", "mobile_phone", "177-4101", "ma_4101"),
+        _row("mobile_phone", "177-4101", "ma_4101", "customer", 4102, "cs_4102"),
+    ]
+    db_path = tmp_path / "graph-default-source-evidence.duckdb"
+    _create_snapshot(db_path, rows)
+    _create_graph_nodes(
+        db_path,
+        [
+            {
+                "cust_id": 4102,
+                "cust_name": "Stale Snapshot Name",
+                "risk_level": "HIGH",
+                "is_high_risk": "Y",
+                "is_sanctioned": "N",
+                "current_balance": 999.99,
+                "confirmed_risk_status": "confirmed",
+                "confirmed_risk_type": "bad_customer",
+                "node_degree": 99,
+            }
+        ],
+    )
+
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.delenv("SOURCE_EVIDENCE_MYSQL_URL", raising=False)
+    monkeypatch.delenv("SOURCE_EVIDENCE_DB_URL", raising=False)
+    monkeypatch.delenv("SOURCE_EVIDENCE_ADAPTER", raising=False)
+    monkeypatch.setattr(
+        graph_service,
+        "source_evidence_adapter",
+        graph_service.create_source_evidence_adapter(),
+    )
+    with TestClient(graph_service.app) as client:
+        links = _neighbors(client, 4101)
+
+    assert len(links) == 1
+    assert links[0]["neighbor_cust_id"] == 4102
+    assert links[0]["cust_name"] is None
+    assert links[0]["risk_level"] is None
+    assert links[0]["current_balance"] is None
+    assert links[0]["enrichment_status"] == "unavailable"
+
+
+def test_mysql_source_evidence_adapter_is_selected_when_configured(monkeypatch):
+    # @covers duckdb_graph_service.source_evidence_default_boundary
+    # @level integration
+    monkeypatch.setenv(
+        "SOURCE_EVIDENCE_MYSQL_URL",
+        "mysql://risk_user:risk_pass@source-evidence.example/usr_skyee_mw",
+    )
+    monkeypatch.delenv("SOURCE_EVIDENCE_ADAPTER", raising=False)
+
+    adapter = graph_service.create_source_evidence_adapter()
+
+    assert isinstance(adapter, graph_service.MySqlSourceEvidenceAdapter)
 
 
 def test_neighbors_enrichment_is_batched_and_not_per_neighbor(tmp_path, monkeypatch):
