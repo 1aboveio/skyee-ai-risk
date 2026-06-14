@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { Prisma } from "@/generated/prisma/client";
-import { getReviewerLocalePreference, type LocalePreferenceDb } from "./store";
+import {
+  getReviewerLocalePreference,
+  updateReviewerLocalePreference,
+  type LocalePreferenceDb,
+  type LocalePreferenceWriteDb,
+} from "./store";
 
 // @covers lib/review/store
 // @level unit
@@ -19,6 +24,22 @@ function makeThrowingDb(error: Error): LocalePreferenceDb {
       findUnique: vi.fn().mockRejectedValue(error),
     },
   } as unknown as LocalePreferenceDb;
+}
+
+function makeUpsertDb(returnValue: { reviewerId: string; locale: string }): LocalePreferenceWriteDb {
+  return {
+    reviewerLocalePreference: {
+      upsert: vi.fn().mockResolvedValue(returnValue),
+    },
+  } as unknown as LocalePreferenceWriteDb;
+}
+
+function makeUpsertThrowingDb(error: Error): LocalePreferenceWriteDb {
+  return {
+    reviewerLocalePreference: {
+      upsert: vi.fn().mockRejectedValue(error),
+    },
+  } as unknown as LocalePreferenceWriteDb;
 }
 
 describe("getReviewerLocalePreference", () => {
@@ -75,6 +96,57 @@ describe("getReviewerLocalePreference", () => {
     const db = makeThrowingDb(genericError);
 
     await expect(getReviewerLocalePreference("r1", db)).rejects.toThrow(
+      genericError
+    );
+    expect(consoleSpy).toHaveBeenCalledOnce();
+
+    consoleSpy.mockRestore();
+  });
+});
+
+describe("updateReviewerLocalePreference", () => {
+  it("upserts a preference record for the reviewer", async () => {
+    const db = makeUpsertDb({ reviewerId: "r1", locale: "en" });
+
+    await expect(updateReviewerLocalePreference("r1", "en", db)).resolves.toBe("en");
+    expect(db.reviewerLocalePreference.upsert).toHaveBeenCalledWith({
+      where: { reviewerId: "r1" },
+      create: { reviewerId: "r1", locale: "en" },
+      update: { locale: "en" },
+    });
+  });
+
+  it("upserts zh-CN locale preference", async () => {
+    const db = makeUpsertDb({ reviewerId: "r1", locale: "zh-CN" });
+
+    await expect(updateReviewerLocalePreference("r1", "zh-CN", db)).resolves.toBe("zh-CN");
+  });
+
+  it("logs and re-throws Prisma errors", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const dbError = new Prisma.PrismaClientKnownRequestError(
+      "Database connection failed",
+      { code: "P1001", clientVersion: "7.8.0" }
+    );
+    const db = makeUpsertThrowingDb(dbError);
+
+    await expect(updateReviewerLocalePreference("r1", "en", db)).rejects.toThrow(
+      dbError
+    );
+    expect(consoleSpy).toHaveBeenCalledOnce();
+    expect(consoleSpy.mock.calls[0]?.[0]).toMatch(
+      /Failed to update reviewer locale preference/i
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  it("logs and re-throws non-Prisma errors", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const genericError = new Error("unexpected");
+    const db = makeUpsertThrowingDb(genericError);
+
+    await expect(updateReviewerLocalePreference("r1", "en", db)).rejects.toThrow(
       genericError
     );
     expect(consoleSpy).toHaveBeenCalledOnce();

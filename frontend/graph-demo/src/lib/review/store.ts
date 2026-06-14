@@ -10,6 +10,16 @@ export type LocalePreferenceDb = {
   };
 };
 
+export type LocalePreferenceWriteDb = {
+  reviewerLocalePreference: {
+    upsert(args: {
+      where: { reviewerId: string };
+      create: { reviewerId: string; locale: string };
+      update: { locale: string };
+    }): Promise<{ reviewerId: string; locale: string }>;
+  };
+};
+
 export async function getReviewerLocalePreference(
   reviewerId: string,
   db: LocalePreferenceDb = prisma
@@ -36,6 +46,34 @@ export async function getReviewerLocalePreference(
     // it from a missing preference.
     console.error("Failed to load reviewer locale preference", {
       reviewerId,
+      error,
+    });
+    throw error;
+  }
+}
+
+export async function updateReviewerLocalePreference(
+  reviewerId: string,
+  locale: Locale,
+  db: LocalePreferenceWriteDb = prisma
+): Promise<Locale> {
+  try {
+    const preference = await db.reviewerLocalePreference.upsert({
+      where: { reviewerId },
+      create: { reviewerId, locale },
+      update: { locale },
+    });
+
+    if (isLocale(preference.locale)) {
+      return preference.locale;
+    }
+
+    // Guard against a corrupted stored value by returning the requested locale.
+    return locale;
+  } catch (error) {
+    console.error("Failed to update reviewer locale preference", {
+      reviewerId,
+      locale,
       error,
     });
     throw error;
