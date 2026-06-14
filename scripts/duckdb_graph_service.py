@@ -392,6 +392,44 @@ def _require_high_risk_enrichment():
                 ),
             },
         )
+    if isinstance(source_evidence_adapter, DuckDbGraphNodeSourceEvidenceAdapter):
+        _ensure_snapshot_exists()
+        con = duckdb.connect(get_db_path(), read_only=True)
+        try:
+            if not _table_exists(con, "graph_nodes"):
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "code": "HIGH_RISK_ENRICHMENT_UNAVAILABLE",
+                        "message": (
+                            "High-risk neighbor lookup requires configured Source "
+                            "Evidence enrichment or explicit legacy graph_nodes "
+                            "metadata."
+                        ),
+                    },
+                )
+        finally:
+            con.close()
+
+
+def _assert_high_risk_rows_enriched(rows: list[dict[str, Any]]) -> None:
+    unavailable = [
+        row
+        for row in rows
+        if row.get("enrichment_status") in {"partial", "unavailable"}
+    ]
+    if unavailable:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "HIGH_RISK_ENRICHMENT_UNAVAILABLE",
+                "message": (
+                    "High-risk neighbor lookup requires complete Source Evidence "
+                    "enrichment before risk filtering."
+                ),
+                "unavailable_count": len(unavailable),
+            },
+        )
 
 
 def _legacy_edge_degree(cust_id: int) -> int:
@@ -676,6 +714,7 @@ def high_risk(cust_id: int, limit: int = Query(50, ge=1, le=500)):
     _require_high_risk_enrichment()
     assert_expandable(cust_id)
     rows = _apply_neighbor_metadata(_build_neighbor_rows(cust_id))
+    _assert_high_risk_rows_enriched(rows)
     rows = [
         row
         for row in rows

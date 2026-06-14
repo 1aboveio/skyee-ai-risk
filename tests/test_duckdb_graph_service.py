@@ -652,6 +652,54 @@ def test_high_risk_endpoint_requires_graph_node_metadata(tmp_path, monkeypatch):
     assert response.json()["detail"]["code"] == "HIGH_RISK_ENRICHMENT_UNAVAILABLE"
 
 
+def test_high_risk_legacy_adapter_requires_graph_nodes(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.high_risk_metadata_contract
+    # @level integration
+    rows = [
+        _row("customer", 5101, "cs_5101", "ip", "10.0.0.51", "ip_51"),
+        _row("ip", "10.0.0.51", "ip_51", "customer", 5102, "cs_5102"),
+    ]
+    db_path = tmp_path / "graph-legacy-no-nodes.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.setattr(
+        graph_service,
+        "source_evidence_adapter",
+        graph_service.DuckDbGraphNodeSourceEvidenceAdapter(),
+    )
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/high-risk/5101")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "HIGH_RISK_ENRICHMENT_UNAVAILABLE"
+
+
+def test_high_risk_returns_unavailable_when_enrichment_fails(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.high_risk_metadata_contract
+    # @level integration
+    rows = [
+        _row("customer", 5201, "cs_5201", "mobile_phone", "177-5201", "ma_5201"),
+        _row("mobile_phone", "177-5201", "ma_5201", "customer", 5202, "cs_5202"),
+    ]
+    db_path = tmp_path / "graph-high-risk-enrichment-fails.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.setattr(
+        graph_service,
+        "source_evidence_adapter",
+        _FakeSourceEvidenceAdapter(payloads={}, fail_on_calls={0}),
+    )
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/high-risk/5201")
+
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert detail["code"] == "HIGH_RISK_ENRICHMENT_UNAVAILABLE"
+    assert detail["unavailable_count"] == 1
+
+
 def test_query_helper_filters_same_attribute_type(tmp_path):
     # @covers duckdb_graph_query.same_attribute_filter
     # @level integration
