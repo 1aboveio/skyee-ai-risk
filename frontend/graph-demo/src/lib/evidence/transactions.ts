@@ -311,7 +311,7 @@ export async function getTransactionList(
     const createTime = formatDate(row.CREATE_TIME) ?? new Date().toISOString();
 
     return {
-      id: row.PAY_ORDER_ID,
+      id: String(row.PAY_ORDER_ID),
       custId: row.CUST_ID,
       orderNo: row.FX_BIZ_ORDER_NO ?? String(row.PAY_ORDER_ID),
       direction: "OUTBOUND" as const,
@@ -336,7 +336,7 @@ export async function getTransactionList(
     const createTime = formatDate(row.CREATE_TIME) ?? new Date().toISOString();
 
     return {
-      id: row.COLL_ORDER_ID,
+      id: String(row.COLL_ORDER_ID),
       custId: row.CUST_ID,
       orderNo: null,
       direction: "INBOUND" as const,
