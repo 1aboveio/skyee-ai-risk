@@ -7,6 +7,8 @@
 
 ---
 
+> Serving note: ADR-0006 supersedes the product serving path in this proposal. The current link-analysis product serves from the DuckDB `association_attribute_links` snapshot, not from `dwd_graph_edges`. The graph edge tables described here remain useful for warehouse analytics, offline graph exports, compatibility jobs, and future graph products, but they are not required for the current Association Link Lookup serving contract.
+
 ## 1. Overview
 
 The graph table design enables relationship discovery between customers based on shared attributes. This is used for:

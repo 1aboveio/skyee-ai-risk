@@ -54,4 +54,48 @@ data/skyee_graph.next.duckdb  # rebuilt candidate database
 
 The graph query service opens the live DuckDB database read-only. Its query-time dependency is the local DuckDB file plus any online source evidence database calls used for live enrichment.
 
+## Operational Entry Point
+
+The repository refresh entry point is:
+
+```bash
+scripts/refresh_remote_graph_duckdb.sh
+```
+
+It expects `HDFS_LINKS_DIR` to point at a clean parquet export of `association_attribute_links`, not at raw Hudi table storage. The script copies that export locally and runs:
+
+```bash
+python scripts/duckdb_snapshot_refresh.py replace-association \
+  /path/to/association_attribute_links/*.parquet \
+  --live-db-path data/skyee_graph.duckdb
+```
+
+The refresh command validates required columns, enforces the configured minimum row count, builds optional lookup indexes, and promotes the complete candidate DuckDB file over the live snapshot only after validation succeeds.
+
+## Verification Gates
+
+The blocking CI gate is `.github/workflows/association-serving.yml`.
+
+It runs the DuckDB service and snapshot tests:
+
+```bash
+uv run \
+  --with duckdb==1.0.0 \
+  --with fastapi \
+  --with httpx \
+  --with pytest \
+  --with typer \
+  python -m pytest -q \
+    tests/test_duckdb_graph_service.py \
+    tests/test_duckdb_snapshot_refresh.py
+```
+
+It also runs the graph-demo frontend gates:
+
+```bash
+pnpm build
+pnpm lint
+pnpm test:e2e -- graph-demo.spec.ts workbench.spec.ts
+```
+
 If the Association Link Lookup grows beyond DuckDB snapshot limits, the same logical contract can move to HBase or another key-value serving store by materializing the same customer-to-attribute and attribute-to-customer access paths.
