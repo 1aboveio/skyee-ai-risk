@@ -2,7 +2,7 @@
   "runSlug": "association-inverted-index-serving",
   "skill": "resolve-prd",
   "createdAt": "2026-06-14T08:25:50Z",
-  "updatedAt": "2026-06-14T08:36:32Z",
+  "updatedAt": "2026-06-14T08:45:31Z",
   "models": {
     "implementation": "gpt-5.3-codex",
     "review": "gpt-5.4",
@@ -27,9 +27,9 @@
     {
       "id": "#30",
       "title": "DuckDB Attribute Link Lookup Core",
-      "status": "in-progress",
-      "pr": null,
-      "branch": null,
+      "status": "in-review",
+      "pr": "#36",
+      "branch": "issue-30-attribute-link-core",
       "lastVerdict": null,
       "reviewRounds": 0,
       "blocker": null,
