@@ -50,5 +50,8 @@ describe("resolveLocale", () => {
     expect(resolveLocale(undefined, undefined)).toBe(defaultLocale);
     expect(resolveLocale(undefined, null)).toBe(defaultLocale);
     expect(resolveLocale(null, undefined)).toBe(defaultLocale);
+    expect(resolveLocale(undefined, "eng")).toBe(defaultLocale);
+    expect(resolveLocale(undefined, "english")).toBe(defaultLocale);
+    expect(resolveLocale(undefined, "zhongwen")).toBe(defaultLocale);
   });
 });

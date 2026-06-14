@@ -7,16 +7,6 @@ export function isLocale(value: unknown): value is Locale {
   return value === "en" || value === "zh-CN";
 }
 
-const chinesePrimaryLanguages = new Set([
-  "zh",
-  "zh-cn",
-  "zh-hans",
-  "zh-hk",
-  "zh-tw",
-]);
-
-const englishPrimaryLanguages = new Set(["en", "en-us", "en-gb"]);
-
 function parsePrimaryLanguage(header: string): string {
   return header
     .split(",")[0]
@@ -34,12 +24,13 @@ export function resolveLocale(
   }
 
   const primary = acceptLanguage ? parsePrimaryLanguage(acceptLanguage) : "";
+  const primarySubtag = primary.split("-")[0];
 
-  if (primary.startsWith("zh") || chinesePrimaryLanguages.has(primary)) {
+  if (primarySubtag === "zh") {
     return "zh-CN";
   }
 
-  if (primary.startsWith("en") || englishPrimaryLanguages.has(primary)) {
+  if (primarySubtag === "en") {
     return "en";
   }
 
