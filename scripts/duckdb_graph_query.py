@@ -36,6 +36,16 @@ ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE = {
     "store_url": "same_store_url",
     "ip": "same_ip",
 }
+ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE = {
+    "mobile_phone": "SAME_PHONE",
+    "email": "SAME_EMAIL",
+    "business_name": "SAME_BUSINESS_NAME",
+    "person_name": "SAME_PERSON_NAME",
+    "id_no": "SAME_ID_NO",
+    "address": "SAME_ADDRESS",
+    "store_url": "SAME_STORE_URL",
+    "ip": "SAME_IP",
+}
 ALLOWED_SAME_ATTRIBUTE_TYPES = set(ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.values())
 ASSOCIATION_LINK_COLUMNS = [
     "src_attr_type",
@@ -200,6 +210,12 @@ def _derive_same_attribute_type(attribute_type: str | None) -> str | None:
     return ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.get(attribute_type)
 
 
+def _derive_legacy_edge_type(attribute_type: str | None) -> str | None:
+    if not attribute_type:
+        return None
+    return ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE.get(attribute_type)
+
+
 def _customer_lookup_base_sql() -> tuple[str, str]:
     return (
         """
@@ -339,8 +355,9 @@ def query_association_neighbors(
 
     for row in rows:
         row_same_type = _derive_same_attribute_type(row["shared_attr_type"])
+        row_edge_type = _derive_legacy_edge_type(row["shared_attr_type"])
         row["same_attribute_type"] = row_same_type or row["shared_attr_type"]
-        row["edge_type"] = row_same_type or row["shared_attr_type"]
+        row["edge_type"] = row_edge_type or row["shared_attr_type"]
         row["edge_value"] = row["shared_attr_value"]
         row["edge_id"] = f"{cust_id}:{row['neighbor_cust_id']}:{row['shared_attr_type']}:{row['shared_attr_value']}"
     return rows

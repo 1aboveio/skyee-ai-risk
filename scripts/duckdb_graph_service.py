@@ -31,6 +31,16 @@ ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE = {
     "store_url": "same_store_url",
     "ip": "same_ip",
 }
+ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE = {
+    "mobile_phone": "SAME_PHONE",
+    "email": "SAME_EMAIL",
+    "business_name": "SAME_BUSINESS_NAME",
+    "person_name": "SAME_PERSON_NAME",
+    "id_no": "SAME_ID_NO",
+    "address": "SAME_ADDRESS",
+    "store_url": "SAME_STORE_URL",
+    "ip": "SAME_IP",
+}
 
 ALLOWED_SAME_ATTRIBUTE_TYPES = set(ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.values())
 SAME_ATTRIBUTE_BY_ATTRIBUTE = {v: k for k, v in ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.items()}
@@ -216,6 +226,12 @@ def _derive_same_attribute_type(attribute_type: str | None) -> str | None:
     return ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.get(attribute_type)
 
 
+def _derive_legacy_edge_type(attribute_type: str | None) -> str | None:
+    if not attribute_type:
+        return None
+    return ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE.get(attribute_type)
+
+
 def _load_neighbor_metadata(cust_ids: list[int]) -> dict[int, dict[str, Any]]:
     if not cust_ids:
         return {}
@@ -303,6 +319,49 @@ def _require_graph_nodes():
         con.close()
 
 
+def _legacy_edge_degree(cust_id: int) -> int:
+    rows = _legacy_query(
+        ["graph_edges"],
+        """
+        SELECT COUNT(DISTINCT neighbor_cust_id) AS node_degree
+        FROM (
+            SELECT target_cust_id AS neighbor_cust_id
+            FROM graph_edges
+            WHERE source_cust_id = ?
+            UNION ALL
+            SELECT source_cust_id AS neighbor_cust_id
+            FROM graph_edges
+            WHERE target_cust_id = ?
+        ) neighbors
+        """,
+        [cust_id, cust_id],
+        "PATH_TRAVERSAL_UNAVAILABLE",
+        "Path traversal requires the legacy graph_edges table.",
+    )
+    if not rows:
+        return 0
+    return int(rows[0]["node_degree"] or 0)
+
+
+def _assert_legacy_path_expandable(cust_id: int) -> int:
+    degree = _legacy_edge_degree(cust_id)
+    max_degree = get_max_query_degree()
+    if degree > max_degree:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "NODE_DEGREE_TOO_HIGH",
+                "message": (
+                    "Customer has too many graph neighbors for interactive expansion."
+                ),
+                "cust_id": cust_id,
+                "node_degree": degree,
+                "max_degree": max_degree,
+            },
+        )
+    return degree
+
+
 def _build_neighbor_rows(cust_id: int, same_attribute_type: str | None = None) -> list[dict[str, Any]]:
     shared_attr_filter: str | None = None
     if same_attribute_type is not None:
@@ -344,9 +403,10 @@ def _build_neighbor_rows(cust_id: int, same_attribute_type: str | None = None) -
     linked_rows: list[dict[str, Any]] = []
     for row in rows:
         same_attribute = _derive_same_attribute_type(row["shared_attr_type"])
+        legacy_edge_type = _derive_legacy_edge_type(row["shared_attr_type"])
         result = {
             **row,
-            "edge_type": same_attribute or row["shared_attr_type"],
+            "edge_type": legacy_edge_type or row["shared_attr_type"],
             "same_attribute_type": same_attribute or row["shared_attr_type"],
             "edge_value": row["shared_attr_value"],
             "edge_id": f"{cust_id}:{row['neighbor_cust_id']}:{row['shared_attr_type']}:{row['shared_attr_value']}",
@@ -637,6 +697,8 @@ def path(
     max_depth: int = Query(4, ge=1, le=6),
     limit: int = Query(10, ge=1, le=100),
 ):
+    _assert_legacy_path_expandable(source_cust_id)
+    _assert_legacy_path_expandable(target_cust_id)
     return _legacy_query(
         ["graph_edges"],
         """

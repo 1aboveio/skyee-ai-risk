@@ -262,8 +262,11 @@ def test_neighbor_lookup_returns_two_hop_customer_links_only(tmp_path, monkeypat
     assert neighbors == {1002, 1004}
     assert 1003 not in neighbors
 
-    assert all(item["edge_type"] == item["same_attribute_type"] for item in links)
-    assert all(item["same_attribute_type"].startswith("same_") for item in links)
+    assert {item["edge_type"] for item in links} == {"SAME_PHONE", "SAME_EMAIL"}
+    assert {item["same_attribute_type"] for item in links} == {
+        "same_mobile_phone",
+        "same_email",
+    }
     assert all(item["source_cust_id"] == 1001 for item in links)
 
     with TestClient(graph_service.app) as client:
@@ -298,6 +301,7 @@ def test_neighbor_lookup_preserves_multiple_evidence_for_same_customer(tmp_path,
         links = _neighbors(client, 2001)
     assert len(links) == 2
     assert {item["same_attribute_type"] for item in links} == {"same_mobile_phone", "same_email"}
+    assert {item["edge_type"] for item in links} == {"SAME_PHONE", "SAME_EMAIL"}
     assert len({item["neighbor_cust_id"] for item in links}) == 1
 
 
@@ -412,6 +416,7 @@ def test_query_helper_filters_same_attribute_type(tmp_path):
     assert len(links) == 1
     assert links[0]["neighbor_cust_id"] == 6003
     assert links[0]["same_attribute_type"] == "same_email"
+    assert links[0]["edge_type"] == "SAME_EMAIL"
 
 
 def test_query_helper_rejects_invalid_same_attribute_type(tmp_path):
@@ -529,3 +534,25 @@ def test_path_returns_explicit_unavailable_without_graph_edges(tmp_path, monkeyp
 
     assert response.status_code == 501
     assert response.json()["detail"]["code"] == "PATH_TRAVERSAL_UNAVAILABLE"
+
+
+def test_path_preserves_legacy_degree_guard(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.path_legacy_degree_guard
+    # @level integration
+    db_path = tmp_path / "graph-path-guard.duckdb"
+    _create_snapshot(db_path, [])
+    _create_graph_edges(
+        db_path,
+        [
+            {"edge_id": 1, "source_cust_id": 9101, "target_cust_id": 9102},
+            {"edge_id": 2, "source_cust_id": 9102, "target_cust_id": 9103},
+        ],
+    )
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.setenv("GRAPH_MAX_QUERY_DEGREE", "0")
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/path/9101/9103?max_depth=2")
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "NODE_DEGREE_TOO_HIGH"
