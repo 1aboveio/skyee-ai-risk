@@ -65,7 +65,12 @@ class DwdTransactionEtl(Etl):
         self.src_pay_order = self.spark.table(f"{db}.stg_pmp_pay_order")
         self.src_pay_details = self.spark.table(f"{db}.stg_pmp_pay_details")
         self.src_coll_order = self.spark.table(f"{db}.stg_pmp_coll_order")
-        return self._with_forex(self._pay_rows().unionByName(self._collection_rows()))
+        return self._with_forex(
+            self._pay_rows().unionByName(
+                self._collection_rows(),
+                allowMissingColumns=True,
+            )
+        )
 
     @staticmethod
     def _is_active(alias: str) -> Column:
