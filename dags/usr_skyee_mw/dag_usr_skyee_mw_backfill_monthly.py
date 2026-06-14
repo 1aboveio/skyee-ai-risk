@@ -1,10 +1,14 @@
 """
-Airflow DAG: Backfill large stg_* tables monthly.
+Airflow DAG: Backfill large stg_* tables and graph edges monthly.
 
 Schedule: @monthly from 2016-09-01
 Catchup: enabled
 
 Tables: pmp_coll_order, cust_user_login_log, pmp_pay_details, pmp_pay_order
+
+Graph:
+    dwd_graph_edge_monthly is rebuilt for the same monthly window.
+    dwd_graph_edges is refreshed by the daily DAG from monthly evidence.
 
 Variables:
     MYSQL_DB_URL_SECRET - MySQL JDBC URL with credentials
@@ -44,7 +48,7 @@ with DAG(
     start = EmptyOperator(task_id="start")
     end = EmptyOperator(task_id="end")
 
-    tasks = [
+    stg_tasks = [
         SparkSubmitOperator(
             task_id=f"stg_{table}",
             name=f"usr_skyee_mw.backfill.monthly.stg.{table}.{{{{ ds }}}}",
@@ -61,4 +65,19 @@ with DAG(
         for table in TABLES
     ]
 
-    start >> tasks >> end
+    graph_edge_monthly = SparkSubmitOperator(
+        task_id="dwd_graph_edge_monthly",
+        name="usr_skyee_mw.backfill.monthly.dwd.graph_edge_monthly.{{ ds }}",
+        application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
+        conn_id="spark_default",
+        application_args=[
+            "--start-date", "{{ ds }}",
+            "--end-date", "{{ next_ds }}",
+            "--bulk",
+            "--max-degree", "100",
+            "--target", "monthly",
+        ],
+        verbose=True,
+    )
+
+    start >> stg_tasks >> graph_edge_monthly >> end

@@ -12,7 +12,7 @@ Two association graph tables are maintained:
     first_seen can move backward without moving the Hudi record partition.
 
 Usage:
-    python dwd_graph_edges.py [--spark-remote <spark_connect_url>] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--bulk/--per-day] [--max-degree 100] [--snapshot-hudi-mode upsert]
+    python dwd_graph_edges.py [--spark-remote <spark_connect_url>] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--bulk/--per-day] [--max-degree 100] [--snapshot-hudi-mode upsert] [--target all|monthly|snapshot]
 """
 
 import sys
@@ -492,25 +492,31 @@ def main(
     bulk: Annotated[bool, typer.Option("--bulk/--per-day")] = True,
     max_degree: Annotated[int, typer.Option("--max-degree")] = MAX_DEGREE,
     snapshot_hudi_mode: Annotated[str, typer.Option("--snapshot-hudi-mode")] = "upsert",
+    target: Annotated[str, typer.Option("--target")] = "all",
 ):
-    spark = create_spark_session(spark_remote)
-    etl = DwdGraphEdgesEtl(
-        start_date=start_date,
-        end_date=end_date,
-        bulk=bulk,
-        max_degree=max_degree,
-    )
-    etl.spark = spark
-    etl()
+    if target not in {"all", "monthly", "snapshot"}:
+        raise typer.BadParameter("--target must be one of: all, monthly, snapshot")
 
-    snapshot = DwdGraphEdgesSnapshotEtl(
-        start_date=start_date,
-        end_date=end_date,
-        bulk=bulk,
-        hudi_mode_override=snapshot_hudi_mode,
-    )
-    snapshot.spark = spark
-    snapshot()
+    spark = create_spark_session(spark_remote)
+    if target in {"all", "monthly"}:
+        etl = DwdGraphEdgesEtl(
+            start_date=start_date,
+            end_date=end_date,
+            bulk=bulk,
+            max_degree=max_degree,
+        )
+        etl.spark = spark
+        etl()
+
+    if target in {"all", "snapshot"}:
+        snapshot = DwdGraphEdgesSnapshotEtl(
+            start_date=start_date,
+            end_date=end_date,
+            bulk=bulk,
+            hudi_mode_override=snapshot_hudi_mode,
+        )
+        snapshot.spark = spark
+        snapshot()
     spark.stop()
 
 

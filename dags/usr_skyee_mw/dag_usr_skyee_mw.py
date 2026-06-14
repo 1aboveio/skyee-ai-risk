@@ -90,9 +90,9 @@ with DAG(
         verbose=True,
     )
 
-    graph_edges = SparkSubmitOperator(
-        task_id="dwd_graph_edges",
-        name="usr_skyee_mw.dwd.graph_edges.{{ ds }}",
+    graph_edge_monthly = SparkSubmitOperator(
+        task_id="dwd_graph_edge_monthly",
+        name="usr_skyee_mw.dwd.graph_edge_monthly.{{ ds }}",
         application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
         conn_id="spark_default",
         application_args=[
@@ -100,6 +100,20 @@ with DAG(
             "--end-date", "{{ next_ds }}",
             "--bulk",
             "--max-degree", "100",
+            "--target", "monthly",
+        ],
+        verbose=True,
+    )
+
+    graph_edges = SparkSubmitOperator(
+        task_id="dwd_graph_edges",
+        name="usr_skyee_mw.dwd.graph_edges.{{ ds }}",
+        application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
+        conn_id="spark_default",
+        application_args=[
+            "--bulk",
+            "--snapshot-hudi-mode", "insert_overwrite_table",
+            "--target", "snapshot",
         ],
         verbose=True,
     )
@@ -155,7 +169,7 @@ with DAG(
     )
 
     stg_tasks >> reconcile_mysql_to_stg
-    reconcile_mysql_to_stg >> graph_edges >> graph_nodes
+    reconcile_mysql_to_stg >> graph_edge_monthly >> graph_edges >> graph_nodes
     reconcile_mysql_to_stg >> dwd_customer >> dwd_transaction
     dwd_transaction >> reconcile_stg_to_dwd_transaction
     [graph_nodes, reconcile_stg_to_dwd_transaction] >> end
