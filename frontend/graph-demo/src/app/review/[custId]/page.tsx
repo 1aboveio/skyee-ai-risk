@@ -1,5 +1,6 @@
 import { getGraphIdentitySession } from "@/lib/auth/identity-session";
 import { redirect } from "next/navigation";
+import { AppShell } from "@/components/app/app-shell";
 import { getReviewHistory } from "@/lib/review/store";
 import { WorkbenchPanel } from "@/components/review/workbench-panel";
 import { ReviewHistory } from "@/components/review/review-history";
@@ -112,121 +113,123 @@ export default async function ReviewWorkbenchPage({
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Header with cust_id search */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 space-y-3">
-          <h1 className="text-2xl font-bold tracking-tight">
-            Customer Risk Review Workbench
-          </h1>
-          <CustomerSearchInput currentCustId={custId} />
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="font-mono">
-              {custId}
-            </Badge>
+    <AppShell active="review" session={session}>
+      <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-5 md:px-6 md:py-8">
+        {/* Header with cust_id search */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 space-y-3">
+            <h1 className="text-2xl font-bold tracking-tight">
+              Customer Risk Review Workbench
+            </h1>
+            <CustomerSearchInput currentCustId={custId} />
+            <div className="flex items-center gap-3">
+              <Badge variant="outline" className="font-mono">
+                {custId}
+              </Badge>
+              {activeSession && (
+                <>
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <User className="h-4 w-4" />
+                    {activeSession.reviewerEmail}
+                  </div>
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    Session: {activeSession.contextType}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+          <SaveSnapshotButton custId={custId} evidenceData={currentEvidence} />
+        </div>
+
+        {/* Decision Panel - shown below header for all review contexts */}
+        <DecisionPanel
+          custId={custId}
+          reviewContext={reviewContext}
+          evidenceData={currentEvidence}
+        />
+
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Evidence Panels - Left side (2 columns) */}
+          <div className="lg:col-span-2 space-y-6">
+            <CustomerProfilePanel custId={custId} />
+
+            <RiskSignalsPanel custId={custId} />
+
+            <TransactionSummaryPanel custId={custId} />
+
+            <TransactionListPanel custId={custId} />
+
+            <RiskGraphPanel custId={custId} />
+
+            {/* Derived Panels - assemble from server-fetched evidence */}
+            <EvidenceTimelinePanel
+              profile={customerProfileData}
+              riskSignals={riskSignalsData ?? []}
+              transactions={transactions}
+              transactionSummary={transactionSummaryData}
+              graphData={null}
+              reviewHistory={snapshotData}
+            />
+
+            <EvidenceGapsPanel
+              profile={customerProfileData}
+              riskSignals={riskSignalsData ?? []}
+              transactionSummary={transactionSummaryData}
+              graphData={null}
+              reviewHistory={snapshotData}
+            />
+
+            <AiInvestigationInputPanel
+              profile={customerProfileData}
+              riskSignals={riskSignalsData ?? []}
+              transactionSummary={transactionSummaryData}
+              graphData={null}
+            />
+          </div>
+
+          {/* Review History - Right side */}
+          <div className="space-y-6">
+            <WorkbenchPanel
+              title="Review History"
+              loading={!reviewHistory && !historyError}
+              error={historyError}
+              empty={initialSnapshots?.length === 0}
+              emptyMessage="No review sessions recorded yet."
+            >
+              <ReviewHistory custId={custId} initialSnapshots={initialSnapshots} />
+            </WorkbenchPanel>
+
             {activeSession && (
-              <>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <User className="h-4 w-4" />
-                  {activeSession.reviewerEmail}
-                </div>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  Session: {activeSession.contextType}
-                </div>
-              </>
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">
+                    Active Session
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Context</span>
+                    <Badge variant="secondary">{activeSession.contextType}</Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Status</span>
+                    <Badge variant="default">{activeSession.status}</Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Started</span>
+                    <span>
+                      {new Date(activeSession.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
         </div>
-        <SaveSnapshotButton custId={custId} evidenceData={currentEvidence} />
       </div>
-
-      {/* Decision Panel - shown below header for all review contexts */}
-      <DecisionPanel
-        custId={custId}
-        reviewContext={reviewContext}
-        evidenceData={currentEvidence}
-      />
-
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Evidence Panels - Left side (2 columns) */}
-        <div className="lg:col-span-2 space-y-6">
-          <CustomerProfilePanel custId={custId} />
-
-          <RiskSignalsPanel custId={custId} />
-
-          <TransactionSummaryPanel custId={custId} />
-
-          <TransactionListPanel custId={custId} />
-
-          <RiskGraphPanel custId={custId} />
-
-          {/* Derived Panels - assemble from server-fetched evidence */}
-          <EvidenceTimelinePanel
-            profile={customerProfileData}
-            riskSignals={riskSignalsData ?? []}
-            transactions={transactions}
-            transactionSummary={transactionSummaryData}
-            graphData={null}
-            reviewHistory={snapshotData}
-          />
-
-          <EvidenceGapsPanel
-            profile={customerProfileData}
-            riskSignals={riskSignalsData ?? []}
-            transactionSummary={transactionSummaryData}
-            graphData={null}
-            reviewHistory={snapshotData}
-          />
-
-          <AiInvestigationInputPanel
-            profile={customerProfileData}
-            riskSignals={riskSignalsData ?? []}
-            transactionSummary={transactionSummaryData}
-            graphData={null}
-          />
-        </div>
-
-        {/* Review History - Right side */}
-        <div className="space-y-6">
-          <WorkbenchPanel
-            title="Review History"
-            loading={!reviewHistory && !historyError}
-            error={historyError}
-            empty={initialSnapshots?.length === 0}
-            emptyMessage="No review sessions recorded yet."
-          >
-            <ReviewHistory custId={custId} initialSnapshots={initialSnapshots} />
-          </WorkbenchPanel>
-
-          {activeSession && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">
-                  Active Session
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Context</span>
-                  <Badge variant="secondary">{activeSession.contextType}</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Status</span>
-                  <Badge variant="default">{activeSession.status}</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Started</span>
-                  <span>
-                    {new Date(activeSession.createdAt).toLocaleDateString()}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-    </div>
+    </AppShell>
   );
 }

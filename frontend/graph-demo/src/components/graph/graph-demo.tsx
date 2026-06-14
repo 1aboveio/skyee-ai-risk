@@ -8,7 +8,6 @@ import {
   InfoIcon,
   LanguagesIcon,
   Link2Icon,
-  LogOutIcon,
   NetworkIcon,
   RefreshCcwIcon,
   SearchIcon,
@@ -66,7 +65,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { GraphIdentitySession } from "@/lib/auth/identity-session";
 import {
   getEdgeAnnotation,
   sameAttributeTypeLabels,
@@ -111,8 +109,6 @@ type TranslationKey =
   | "search"
   | "searchFailed"
   | "selected"
-  | "signedInAs"
-  | "signOut"
   | "strength"
   | "strong"
   | "suspend"
@@ -150,8 +146,6 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     search: "Search",
     searchFailed: "Search failed",
     selected: "selected",
-    signedInAs: "Signed in as",
-    signOut: "Sign out",
     strength: "Strength",
     strong: "Strong",
     suspend: "Suspend",
@@ -188,8 +182,6 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     search: "查询",
     searchFailed: "查询失败",
     selected: "已选",
-    signedInAs: "当前登录",
-    signOut: "退出登录",
     strength: "强度",
     strong: "强关联",
     suspend: "挂起",
@@ -252,7 +244,6 @@ function CustomerSearch({
   includeWeak,
   isLoading,
   locale,
-  session,
   source,
   onCustIdChange,
   onIncludeWeakChange,
@@ -263,7 +254,6 @@ function CustomerSearch({
   includeWeak: boolean;
   isLoading: boolean;
   locale: Locale;
-  session: GraphIdentitySession;
   source: GraphSearchResult["source"] | null;
   onCustIdChange: (value: string) => void;
   onIncludeWeakChange: (value: boolean) => void;
@@ -284,10 +274,6 @@ function CustomerSearch({
         <CardDescription>{t.relationshipSearch}</CardDescription>
         <CardAction>
           <div className="flex items-center gap-2">
-            <div className="hidden min-w-0 flex-col text-right text-xs text-muted-foreground sm:flex">
-              <span>{t.signedInAs}</span>
-              <span className="max-w-48 truncate text-foreground">{session.user.email}</span>
-            </div>
             <Button
               type="button"
               variant="outline"
@@ -296,16 +282,6 @@ function CustomerSearch({
             >
               <LanguagesIcon data-icon="inline-start" />
               {t.language}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              nativeButton={false}
-              render={<a href="/auth/logout" />}
-            >
-              <LogOutIcon data-icon="inline-start" />
-              {t.signOut}
             </Button>
             <Tooltip>
               <TooltipTrigger render={<Badge variant="outline" />}>
@@ -755,7 +731,7 @@ function LoadingPanel() {
   );
 }
 
-export function GraphDemo({ session }: { session: GraphIdentitySession }) {
+export function GraphDemo() {
   const [custId, setCustId] = useState(initialCustomerId);
   const [includeWeak, setIncludeWeak] = useState(true);
   const [selectedTypeFilters, setSelectedTypeFilters] = useState<string[]>([]);
@@ -793,14 +769,20 @@ export function GraphDemo({ session }: { session: GraphIdentitySession }) {
   const t = translations[locale];
 
   return (
-    <main className="min-h-screen bg-background">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 p-4 md:p-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 md:px-6 md:py-8">
+      <section className="border-b pb-5">
+        <Badge variant="outline">Graph Module</Badge>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight">Graph Network Search</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          Search a customer ID to inspect direct network evidence and high-risk relationship context.
+        </p>
+      </section>
+
         <CustomerSearch
           custId={custId}
           includeWeak={includeWeak}
           isLoading={isLoading}
           locale={locale}
-          session={session}
           source={result?.source ?? null}
           onCustIdChange={setCustId}
           onIncludeWeakChange={setIncludeWeak}
@@ -897,7 +879,6 @@ export function GraphDemo({ session }: { session: GraphIdentitySession }) {
         ) : (
           <LoadingPanel />
         )}
-      </div>
-    </main>
+    </div>
   );
 }
