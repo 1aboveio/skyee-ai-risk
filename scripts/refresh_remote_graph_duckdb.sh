@@ -24,10 +24,12 @@ mkdir -p "$(dirname "${LOCAL_SNAPSHOT_DIR}")"
 hdfs dfs -test -d "${HDFS_LINKS_DIR}"
 hdfs dfs -get "${HDFS_LINKS_DIR}" "${LOCAL_SNAPSHOT_DIR}"
 
-"${REPO_DIR}/.uv-bin/uv" run \
+cd "${REPO_DIR}"
+
+PYTHONPATH="${REPO_DIR}${PYTHONPATH:+:${PYTHONPATH}}" "${REPO_DIR}/.uv-bin/uv" run \
   --with duckdb==1.0.0 \
   --with typer \
-  python "${REPO_DIR}/scripts/duckdb_snapshot_refresh.py" replace-association \
+  python -m scripts.duckdb_snapshot_refresh replace-association \
     "${LOCAL_SNAPSHOT_DIR}"/*.parquet \
     --live-db-path "${DB_PATH}" \
     --minimum-rows "${MINIMUM_ROWS}" \

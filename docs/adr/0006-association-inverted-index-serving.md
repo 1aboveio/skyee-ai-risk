@@ -65,16 +65,21 @@ scripts/refresh_remote_graph_duckdb.sh
 It expects `HDFS_LINKS_DIR` to point at a clean parquet export of `association_attribute_links`, not at raw Hudi table storage. The script copies that export locally and runs:
 
 ```bash
-python scripts/duckdb_snapshot_refresh.py replace-association \
+python -m scripts.duckdb_snapshot_refresh replace-association \
   /path/to/association_attribute_links/*.parquet \
   --live-db-path data/skyee_graph.duckdb
 ```
 
 The refresh command validates required columns, enforces the configured minimum row count, builds optional lookup indexes, and promotes the complete candidate DuckDB file over the live snapshot only after validation succeeds.
 
-## Verification Gates
+## Verification Workflow
 
-The blocking CI gate is `.github/workflows/association-serving.yml`.
+The required verification workflow for Association Link Lookup changes is
+`.github/workflows/association-serving.yml`. The workflow runs on pull requests
+and on `dev` pushes. Repository branch-protection/ruleset enforcement is tracked
+in [#42](https://github.com/1aboveio/skyee-ai-risk/issues/42); until that is
+configured, this workflow is a required project gate but not a GitHub-enforced
+blocking status check.
 
 It runs the DuckDB service and snapshot tests:
 
