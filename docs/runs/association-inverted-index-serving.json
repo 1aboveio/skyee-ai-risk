@@ -2,7 +2,7 @@
   "runSlug": "association-inverted-index-serving",
   "skill": "resolve-prd",
   "createdAt": "2026-06-14T08:25:50Z",
-  "updatedAt": "2026-06-14T09:30:45Z",
+  "updatedAt": "2026-06-14T10:14:47Z",
   "models": {
     "implementation": "gpt-5.3-codex",
     "review": "gpt-5.4",
@@ -42,11 +42,11 @@
     {
       "id": "#31",
       "title": "Same-Attribute Filters, Provenance, Fanout",
-      "status": "in-progress",
-      "pr": null,
+      "status": "merge-ready",
+      "pr": "#38",
       "branch": "issue-31-same-attribute",
-      "lastVerdict": null,
-      "reviewRounds": 0,
+      "lastVerdict": "PASS",
+      "reviewRounds": 2,
       "blocker": null,
       "oracleConsults": [],
       "worker": "019ec577-68be-7332-af0c-2a512073919b"
@@ -54,11 +54,11 @@
     {
       "id": "#32",
       "title": "DuckDB Snapshot Replacement Pipeline",
-      "status": "in-progress",
-      "pr": null,
+      "status": "merge-ready",
+      "pr": "#37",
       "branch": "issue-32-snapshot-replacement",
-      "lastVerdict": null,
-      "reviewRounds": 0,
+      "lastVerdict": "PASS",
+      "reviewRounds": 3,
       "blocker": null,
       "oracleConsults": [],
       "worker": "019ec577-9fc4-78d0-90bb-2dd8e1da9114"
@@ -66,11 +66,11 @@
     {
       "id": "#33",
       "title": "Live Enrichment Boundary for Link Lookup",
-      "status": "in-progress",
-      "pr": null,
+      "status": "merge-ready",
+      "pr": "#39",
       "branch": "issue-33-live-enrichment",
-      "lastVerdict": null,
-      "reviewRounds": 0,
+      "lastVerdict": "PASS",
+      "reviewRounds": 5,
       "blocker": null,
       "oracleConsults": [],
       "worker": "019ec577-d7dd-7783-81f3-5ec4e2df1786"
@@ -83,7 +83,7 @@
       "branch": null,
       "lastVerdict": null,
       "reviewRounds": 0,
-      "blocker": "Blocked by #31 and #33",
+      "blocker": "Waiting on merge or integration branch for #31 and #33",
       "oracleConsults": []
     },
     {
@@ -94,7 +94,7 @@
       "branch": null,
       "lastVerdict": null,
       "reviewRounds": 0,
-      "blocker": "Blocked by #32 and #34",
+      "blocker": "Waiting on #32 and #34",
       "oracleConsults": []
     }
   ],
