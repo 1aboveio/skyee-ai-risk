@@ -239,6 +239,7 @@ def test_replace_association_cli_promotes_snapshot(tmp_path):
     result = RUNNER.invoke(
         duckdb_snapshot_refresh.app,
         [
+            "replace-association",
             str(candidate_source),
             "--live-db-path",
             str(live_db),

@@ -24,7 +24,15 @@ DEFAULT_MIN_ROWS = 0
 TABLE_NAME = graph_query.ASSOCIATION_ATTRIBUTE_LINK_TABLE
 
 
-app = typer.Typer(help="Build and atomically promote DuckDB association snapshots.")
+app = typer.Typer(
+    help="Build and atomically promote DuckDB association snapshots.",
+    invoke_without_command=False,
+)
+
+
+@app.callback()
+def main():
+    """DuckDB association snapshot refresh commands."""
 
 
 def _candidate_path(db_path: str) -> str:
