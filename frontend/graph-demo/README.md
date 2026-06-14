@@ -43,3 +43,15 @@ Override substitutions when needed:
 gcloud builds submit --config=cloudbuild.yaml . \
   --substitutions=_GRAPH_QUERY_BASE_URL=https://graph-query.example.com
 ```
+
+## Verification
+
+The Association Link Lookup CI gate runs the same graph-demo checks locally:
+
+```bash
+pnpm build
+pnpm lint
+pnpm test:e2e -- graph-demo.spec.ts workbench.spec.ts
+```
+
+`GRAPH_QUERY_BASE_URL` should point at the DuckDB graph query service. The Playwright graph tests start a local mock graph query service and exercise the app's `/api/graph/search` route against that service.

@@ -90,15 +90,15 @@
 
 | Requirement/Journey | ACs | Test Case/File | Status |
 |---|---|---|---|
-| Association Link Lookup two-hop behavior | AC1, AC2, AC3, AC4, AC21 / J1, J3 | To be implemented | Required |
-| Same-attribute filter behavior | AC5, AC18 / J2 | To be implemented | Required |
-| Provenance and annotation behavior | AC6, AC19 / J1, J6 | To be implemented | Required |
-| Derived result semantics and no required pairwise edge table | AC7, AC8, AC20 / J3 | To be implemented | Required |
-| Fanout and failure behavior | AC9, AC10, AC16 / J4 | To be implemented | Required |
-| Read-only DuckDB serving and snapshot replacement | AC11, AC12, AC13, AC14 / J5 | To be implemented | Required |
-| Live enrichment boundary | AC15, AC16 / J1, J4 | To be implemented | Required |
-| Frontend compatibility and presentation | AC17, AC18, AC19 / J1, J2, J6 | To be implemented | Required |
-| CI/review enforcement | AC22 | To be implemented | Required |
+| Association Link Lookup two-hop behavior | AC1, AC2, AC3, AC4, AC21 / J1, J3 | `tests/test_duckdb_graph_service.py` | Implemented |
+| Same-attribute filter behavior | AC5, AC18 / J2 | `tests/test_duckdb_graph_service.py`; `frontend/graph-demo/e2e/graph-demo.spec.ts` | Implemented |
+| Provenance and annotation behavior | AC6, AC19 / J1, J6 | `tests/test_duckdb_graph_service.py`; `frontend/graph-demo/e2e/graph-demo.spec.ts`; `frontend/graph-demo/e2e/workbench.spec.ts` | Implemented |
+| Derived result semantics and no required pairwise edge table | AC7, AC8, AC20 / J3 | `tests/test_duckdb_graph_service.py`; ADR-0006 | Implemented |
+| Fanout and failure behavior | AC9, AC10, AC16 / J4 | `tests/test_duckdb_graph_service.py`; `frontend/graph-demo/e2e/graph-demo.spec.ts` | Partial: legacy degree guard and partial-warning display are covered; dedicated `/neighbors` high-fanout, missing snapshot, and enrichment-failure contract tests remain to be added by the serving/enrichment slices. |
+| Read-only DuckDB serving and snapshot replacement | AC11, AC12, AC13, AC14 / J5 | `tests/test_duckdb_graph_service.py`; `tests/test_duckdb_snapshot_refresh.py` | Implemented |
+| Live enrichment boundary | AC15, AC16 / J1, J4 | `tests/test_duckdb_graph_service.py`; `frontend/graph-demo/e2e/graph-demo.spec.ts` | Partial: frontend partial-enrichment presentation is covered; batched live Source Evidence Database enrichment is owned by the live-enrichment slice and is not implemented in this PR. |
+| Frontend compatibility and presentation | AC17, AC18, AC19 / J1, J2, J6 | `frontend/graph-demo/e2e/graph-demo.spec.ts`; `frontend/graph-demo/e2e/workbench.spec.ts` | Implemented |
+| CI/review enforcement | AC22 | `.github/workflows/association-serving.yml`; [#42](https://github.com/1aboveio/skyee-ai-risk/issues/42) | Partial: workflow is implemented and runs on PR/dev; GitHub-required status enforcement is tracked in #42. |
 
 ## Test Skipping
 
