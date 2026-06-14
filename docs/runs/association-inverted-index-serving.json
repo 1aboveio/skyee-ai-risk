@@ -2,7 +2,7 @@
   "runSlug": "association-inverted-index-serving",
   "skill": "resolve-prd",
   "createdAt": "2026-06-14T08:25:50Z",
-  "updatedAt": "2026-06-14T11:39:55Z",
+  "updatedAt": "2026-06-14T12:49:30Z",
   "models": {
     "implementation": "gpt-5.3-codex",
     "review": "gpt-5.4",
@@ -90,13 +90,21 @@
     {
       "id": "#35",
       "title": "DAG, CI, and Docs Integration for Association Inverted Index Serving",
-      "status": "queued",
-      "pr": null,
-      "branch": null,
-      "lastVerdict": null,
-      "reviewRounds": 0,
+      "status": "merge-ready",
+      "pr": "#41",
+      "branch": "issue-35-dag-ci-docs",
+      "lastVerdict": "PASS",
+      "reviewRounds": 2,
       "blocker": null,
-      "oracleConsults": []
+      "oracleConsults": [],
+      "ci": {
+        "run": "27499206139",
+        "status": "pass",
+        "checks": [
+          "DuckDB serving tests",
+          "Graph demo checks"
+        ]
+      }
     }
   ],
   "decisions": [
