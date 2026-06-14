@@ -389,7 +389,7 @@ def _customer_lookup_base_query() -> tuple[str, str]:
             COALESCE(first_source_field, second_source_field) AS edge_source_field,
             COALESCE(second_last_seen, first_last_seen) AS last_seen,
             COALESCE(second_first_seen, first_first_seen) AS first_seen,
-            COALESCE(second_record_count, first_record_count, 0) AS record_count,
+            COALESCE(second_record_count, first_record_count, '0') AS record_count,
             'Strong' AS strength
         FROM linked_neighbors
         """,
