@@ -92,35 +92,9 @@ with DAG(
         verbose=True,
     )
 
-    graph_edge_monthly = SparkSubmitOperator(
-        task_id="dwd_graph_edge_monthly",
-        name=f"usr_skyee_mw.dwd.graph_edge_monthly.{LOCAL_INTERVAL_START}",
-        application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
-        conn_id="spark_default",
-        application_args=[
-            "--start-date", LOCAL_INTERVAL_START,
-            "--end-date", LOCAL_INTERVAL_END,
-            "--bulk",
-            "--max-degree", "100",
-            "--no-use-attr-index",
-            "--write-attr-index",
-            "--target", "monthly",
-        ],
-        verbose=True,
-    )
-
-    graph_edges = SparkSubmitOperator(
-        task_id="dwd_graph_edges",
-        name=f"usr_skyee_mw.dwd.graph_edges.{LOCAL_INTERVAL_START}",
-        application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
-        conn_id="spark_default",
-        application_args=[
-            "--bulk",
-            "--snapshot-hudi-mode", "insert_overwrite_table",
-            "--target", "snapshot",
-        ],
-        verbose=True,
-    )
+    # Temporarily disabled while graph edge generation is paused.
+    graph_edge_monthly = EmptyOperator(task_id="dwd_graph_edge_monthly")
+    graph_edges = EmptyOperator(task_id="dwd_graph_edges")
 
     dwd_customer = SparkSubmitOperator(
         task_id="dwd_customer",
