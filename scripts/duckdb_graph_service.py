@@ -44,6 +44,10 @@ ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE = {
 
 ALLOWED_SAME_ATTRIBUTE_TYPES = set(ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.values())
 SAME_ATTRIBUTE_BY_ATTRIBUTE = {v: k for k, v in ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.items()}
+SAME_ATTRIBUTE_TO_ASSOCIATION_ATTRIBUTE = {
+    same_attribute: attribute_type
+    for attribute_type, same_attribute in ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.items()
+}
 
 app = FastAPI(title="Skyee Association Link Lookup Service")
 
@@ -232,6 +236,12 @@ def _derive_legacy_edge_type(attribute_type: str | None) -> str | None:
     return ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE.get(attribute_type)
 
 
+def _resolve_same_attribute_filter(same_attribute_type: str | None) -> str | None:
+    if same_attribute_type is None:
+        return None
+    return SAME_ATTRIBUTE_TO_ASSOCIATION_ATTRIBUTE.get(same_attribute_type)
+
+
 def _load_neighbor_metadata(cust_ids: list[int]) -> dict[int, dict[str, Any]]:
     if not cust_ids:
         return {}
@@ -408,6 +418,12 @@ def _build_neighbor_rows(cust_id: int, same_attribute_type: str | None = None) -
             **row,
             "edge_type": legacy_edge_type or row["shared_attr_type"],
             "same_attribute_type": same_attribute or row["shared_attr_type"],
+            "attribute_link_type": row["attr_link_type"],
+            "provenance": {
+                "attribute_link_type": row["attr_link_type"],
+                "source_table": row["edge_source"],
+                "source_field": row["edge_source_field"],
+            },
             "edge_value": row["shared_attr_value"],
             "edge_id": f"{cust_id}:{row['neighbor_cust_id']}:{row['shared_attr_type']}:{row['shared_attr_value']}",
         }
@@ -419,73 +435,64 @@ def _build_neighbor_rows(cust_id: int, same_attribute_type: str | None = None) -
 
 
 def _count_neighbors(cust_id: int, same_attribute_type: str | None = None) -> int:
+    if same_attribute_type is not None:
+        same_attribute_type = same_attribute_type.strip()
+        if not same_attribute_type:
+            raise ValueError("same_attribute_type cannot be empty.")
+    same_attribute = _resolve_same_attribute_filter(same_attribute_type)
+    if same_attribute_type is not None and same_attribute is None:
+        raise ValueError(f"Unsupported same_attribute_type: {same_attribute_type}.")
+
+    pre_sql, _ = _customer_lookup_base_query()
+    where_clause = (
+        "WHERE shared_attr_type = ?"
+        if same_attribute is not None
+        else ""
+    )
+    params: list[Any] = [str(cust_id), str(cust_id), str(cust_id)]
+    if same_attribute is not None:
+        params.append(same_attribute)
+
     rows = _query(
         f"""
-        WITH source_attributes AS (
-            SELECT DISTINCT
-                CASE
-                    WHEN a.src_attr_type = 'customer' THEN a.dst_attr_type
-                    ELSE a.src_attr_type
-                END AS shared_attr_type,
-                CASE
-                    WHEN a.src_attr_type = 'customer' THEN CAST(a.dst_attr_value AS VARCHAR)
-                    ELSE CAST(a.src_attr_value AS VARCHAR)
-                END AS shared_attr_value
-            FROM association_attribute_links AS a
-            WHERE
-                (a.src_attr_type = 'customer' AND CAST(a.src_attr_value AS VARCHAR) = CAST(? AS VARCHAR))
-                OR
-                (a.dst_attr_type = 'customer' AND CAST(a.dst_attr_value AS VARCHAR) = CAST(? AS VARCHAR))
-        ),
-        linked_neighbors AS (
-            SELECT DISTINCT
-                CASE
-                    WHEN b.src_attr_type = 'customer'
-                        THEN CAST(b.src_attr_value AS VARCHAR)
-                    WHEN b.dst_attr_type = 'customer'
-                        THEN CAST(b.dst_attr_value AS VARCHAR)
-                    ELSE NULL
-                END AS source_cust_id,
-                CASE
-                    WHEN b.src_attr_type = 'customer'
-                        THEN CAST(b.src_attr_value AS VARCHAR)
-                    WHEN b.dst_attr_type = 'customer'
-                        THEN CAST(b.dst_attr_value AS VARCHAR)
-                    ELSE NULL
-                END AS neighbor_cust_id,
-                sa.shared_attr_type
-            FROM source_attributes AS sa
-            JOIN association_attribute_links AS b
-                ON (
-                    b.src_attr_type = sa.shared_attr_type
-                    AND CAST(b.src_attr_value AS VARCHAR) = sa.shared_attr_value
-                    AND b.dst_attr_type = 'customer'
-                )
-                OR (
-                    b.dst_attr_type = sa.shared_attr_type
-                    AND CAST(b.dst_attr_value AS VARCHAR) = sa.shared_attr_value
-                    AND b.src_attr_type = 'customer'
-                )
-            WHERE
-                source_cust_id <> CAST(? AS VARCHAR)
-                AND neighbor_cust_id IS NOT NULL
-                AND TRY_CAST(neighbor_cust_id AS BIGINT) IS NOT NULL
-        )
-        SELECT COUNT(*) AS count
-        FROM (
-            SELECT DISTINCT CAST(neighbor_cust_id AS VARCHAR) AS neighbor_cust_id
-            FROM linked_neighbors
-        ) distinct_neighbors
+        {pre_sql}
+        SELECT
+            COUNT(DISTINCT CAST(neighbor_cust_id AS VARCHAR)) AS neighbor_count
+        FROM linked_neighbors
+        {where_clause}
         """,
-        [str(cust_id), str(cust_id), str(cust_id)],
+        params,
     )
-    if not rows:
-        return 0
-    if same_attribute_type is None:
-        return int(rows[0]["count"] or 0)
-    # Count only after filtering to keep filter semantics aligned with `/neighbors`.
-    rows = _build_neighbor_rows(cust_id, same_attribute_type)
-    return len({str(row["neighbor_cust_id"]) for row in rows if row["same_attribute_type"] == same_attribute_type})
+    return int(rows[0]["neighbor_count"] or 0) if rows else 0
+
+
+def _count_attribute_fanout(cust_id: int, same_attribute_type: str | None = None) -> dict[str, int]:
+    pre_sql, _ = _customer_lookup_base_query()
+    where_clause = (
+        "WHERE shared_attr_type = ?"
+        if same_attribute_type is not None
+        else ""
+    )
+    params: list[Any] = [str(cust_id), str(cust_id), str(cust_id)]
+    if same_attribute_type is not None:
+        params.append(same_attribute_type)
+    rows = _query(
+        f"""
+        {pre_sql}
+        SELECT
+            shared_attr_type,
+            COUNT(DISTINCT CAST(neighbor_cust_id AS VARCHAR)) AS neighbor_count
+        FROM linked_neighbors
+        {where_clause}
+        GROUP BY shared_attr_type
+        """,
+        params,
+    )
+    return {
+        str(row["shared_attr_type"]): int(row["neighbor_count"] or 0)
+        for row in rows
+        if row["shared_attr_type"] is not None
+    }
 
 
 def assert_expandable(cust_id: int) -> int:
@@ -505,6 +512,72 @@ def assert_expandable(cust_id: int) -> int:
             },
         )
     return degree
+
+
+def assert_expandable_attribute_fanout(
+    cust_id: int,
+    same_attribute_type: str | None = None,
+) -> int:
+    same_attribute = _resolve_same_attribute_filter(same_attribute_type)
+    if same_attribute_type is not None:
+        if same_attribute is None:
+            allowed_values = ", ".join(sorted(ALLOWED_SAME_ATTRIBUTE_TYPES))
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_SAME_ATTRIBUTE_TYPE",
+                    "message": "Unsupported same_attribute_type.",
+                    "same_attribute_type": same_attribute_type,
+                    "allowed_values": allowed_values,
+                },
+            )
+        fanouts = _count_attribute_fanout(cust_id, same_attribute)
+        count = fanouts.get(same_attribute, 0)
+        max_degree = get_max_query_degree()
+        if count > max_degree:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "ATTR_FANOUT_TOO_HIGH",
+                    "message": (
+                        "Shared attribute is too broadly shared for interactive expansion."
+                    ),
+                    "cust_id": cust_id,
+                    "association_attribute_type": same_attribute,
+                    "same_attribute_type": same_attribute_type,
+                    "neighbor_count": count,
+                    "max_degree": max_degree,
+                },
+            )
+        return count
+
+    # For unfiltered lookups, guard both total degree and the worst fanout attribute.
+    fanouts = _count_attribute_fanout(cust_id)
+    if fanouts:
+        max_degree = get_max_query_degree()
+        exceeders = [
+            attr for attr, count in fanouts.items() if count > max_degree
+        ]
+        if exceeders:
+            largest = max(exceeders, key=lambda attr: fanouts[attr])
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "ATTR_FANOUT_TOO_HIGH",
+                    "message": (
+                        "One or more shared attributes are too broadly shared "
+                        "for interactive expansion."
+                    ),
+                    "cust_id": cust_id,
+                    "association_attribute_type": largest,
+                    "same_attribute_type": ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.get(
+                        largest
+                    ),
+                    "neighbor_count": fanouts[largest],
+                    "max_degree": max_degree,
+                },
+            )
+    return _count_neighbors(cust_id)
 
 
 @app.get("/health")
@@ -588,6 +661,7 @@ def neighbors(
             status_code=422,
             detail={"code": "INVALID_SAME_ATTRIBUTE_TYPE", "message": "same_attribute_type cannot be empty."},
         )
+    assert_expandable_attribute_fanout(cust_id, same_attribute_type)
     assert_expandable(cust_id)
     rows = _build_neighbor_rows(cust_id, same_attribute_type)
     if limit is not None:
