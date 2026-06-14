@@ -135,6 +135,15 @@ export function buildGraphRedirectUri(requestUrl: string): string {
   return `${getAppBaseUrl(requestUrl)}/auth/callback`;
 }
 
+export function getIdentityLogoutUrl(redirectTo?: string): string {
+  const url = new URL("/logout", getIdentityBaseUrl());
+  url.searchParams.set("client_id", getIdentityClientSlug());
+  if (redirectTo) {
+    url.searchParams.set("redirectTo", redirectTo);
+  }
+  return url.toString();
+}
+
 export function createAuthState(returnTo: string): { state: GraphAuthState; value: string } {
   const state: GraphAuthState = {
     nonce: randomBytes(16).toString("base64url"),

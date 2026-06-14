@@ -1,7 +1,7 @@
 import { AlertTriangleIcon, ArrowRightIcon, ShieldOffIcon } from "lucide-react";
-import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { getIdentityLogoutUrl } from "@/lib/auth/identity-session";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -80,21 +80,19 @@ export default async function AuthErrorPage({
           </div>
         ) : null}
 
-        <div className="mt-6 flex flex-wrap gap-2">
-          <a
-            href="/auth/login?returnTo=/"
+        <form
+          action={getIdentityLogoutUrl("http://localhost:3000/auth/login")}
+          method="get"
+          className="mt-6 flex flex-wrap gap-2"
+        >
+          <button
+            type="submit"
             className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
-            Try again
+            Login with another account
             <ArrowRightIcon className="size-4" />
-          </a>
-          <Link
-            href="/"
-            className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
-          >
-            Back to app
-          </Link>
-        </div>
+          </button>
+        </form>
       </section>
     </main>
   );

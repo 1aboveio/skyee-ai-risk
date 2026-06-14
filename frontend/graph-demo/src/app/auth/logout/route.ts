@@ -7,7 +7,8 @@ import {
 } from "@/lib/auth/identity-session";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const response = NextResponse.redirect(new URL("/auth/login", getAppBaseUrl(request.url)));
+  const returnTo = request.nextUrl.searchParams.get("returnTo") ?? "/";
+  const response = NextResponse.redirect(new URL(returnTo, getAppBaseUrl(request.url)));
   response.cookies.delete(GRAPH_SESSION_COOKIE);
   response.cookies.delete(GRAPH_AUTH_STATE_COOKIE);
   return response;
