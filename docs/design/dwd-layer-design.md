@@ -269,7 +269,7 @@ Identity selection rule:
 | ultimate_debtor_city | varchar(255) | po.SAME_NAME_PAYER_CITY | Actual payer city |
 | ultimate_debtor_postcode | varchar(50) | po.SAME_NAME_PAYER_POSTCODE | Actual payer postcode |
 | **Creditor (Payee)** | | | |
-| creditor_name | varchar(200) | COALESCE(pd.BANK_ACCT_NAME, pd.SUBJECT_NAME) | Payee name (bank account holder, fallback to subject alias) |
+| creditor_name | varchar(200) | pd.BANK_ACCT_NAME | Payee name (bank account holder) |
 | payment_subject_name | varchar(200) | pd.SUBJECT_NAME | Payment subject / order description |
 | creditor_mobile | varchar(50) | pd.MOBILE_NO | Payee mobile |
 | creditor_email | varchar(100) | pd.BENEFICIARY_EMAIL | Payee email |
@@ -294,7 +294,7 @@ Identity selection rule:
 | creditor_agent_code | varchar(50) | pd.BANK_CODE | Payee's bank code |
 | creditor_agent_acct_no | varchar(150) | pd.BANK_ACCT_NO | Payee's bank acct |
 | creditor_agent_acct_name | varchar(200) | pd.bank_acct_name | Payee's bank acct name |
-| creditor_agent_country | varchar(10) | COALESCE(pd.BANK_COUNTRY, pd.COLL_COUNTRY_CD) | Payee's bank country |
+| creditor_agent_country | varchar(10) | pd.BANK_COUNTRY | Payee's bank country |
 | creditor_agent_province | varchar(128) | pd.PROVINCE | Payee's bank province |
 | creditor_agent_city | varchar(128) | pd.CITY | Payee's bank city |
 | creditor_agent_branch_name | varchar(128) | pd.BANK_BRANCH_NAME | Payee's bank branch |
