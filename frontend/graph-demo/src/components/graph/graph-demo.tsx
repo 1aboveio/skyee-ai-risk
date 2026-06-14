@@ -67,7 +67,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { GraphIdentitySession } from "@/lib/auth/identity-session";
-import { edgeAnnotations } from "@/lib/graph/edge-annotations";
+import {
+  getEdgeAnnotation,
+  sameAttributeTypeLabels,
+  sameAttributeTypeLabelsZh,
+} from "@/lib/graph/edge-annotations";
 import { demoCustomers } from "@/lib/graph/mock-data";
 import { fetchGraph } from "@/lib/graph/fetch";
 import { riskVariant, displayName, formatDate, formatMoney, compactId } from "@/lib/graph/utils";
@@ -116,7 +120,8 @@ type TranslationKey =
   | "table"
   | "weak"
   | "weakIncluded"
-  | "strongOnly";
+  | "strongOnly"
+  | "warnings";
 
 const translations: Record<Locale, Record<TranslationKey, string>> = {
   en: {
@@ -155,6 +160,7 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     weak: "Weak",
     weakIncluded: "Weak links included",
     strongOnly: "Strong links only",
+    warnings: "Warnings",
   },
   "zh-CN": {
     accountBalance: "账户余额",
@@ -192,8 +198,28 @@ const translations: Record<Locale, Record<TranslationKey, string>> = {
     weak: "弱关联",
     weakIncluded: "包含弱关联",
     strongOnly: "仅强关联",
+    warnings: "告警",
   },
 };
+
+const v1SameAttributeTypeOptions = Object.keys(sameAttributeTypeLabels).sort();
+
+function primaryEdgeDimension(edge: GraphEdge): string {
+  return edge.sameAttributeType ?? edge.edgeType;
+}
+
+function renderSameAttributeTypeLabel(
+  value: string | undefined,
+  locale: Locale
+): string {
+  if (!value) {
+    return "Unknown";
+  }
+  if (locale === "zh-CN") {
+    return sameAttributeTypeLabelsZh[value] ?? value;
+  }
+  return sameAttributeTypeLabels[value] ?? value;
+}
 
 const initialCustomerId = demoCustomers[0] ?? "1000321";
 
@@ -271,7 +297,13 @@ function CustomerSearch({
               <LanguagesIcon data-icon="inline-start" />
               {t.language}
             </Button>
-            <Button type="button" variant="outline" size="sm" render={<a href="/auth/logout" />}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<a href="/auth/logout" />}
+            >
               <LogOutIcon data-icon="inline-start" />
               {t.signOut}
             </Button>
@@ -334,23 +366,48 @@ type EdgeRow = {
   node: GraphNode | null;
 };
 
-function EdgeInfo({ edgeType, locale }: { edgeType: string; locale: Locale }) {
-  const annotation = edgeAnnotations[edgeType];
+function EdgeInfo({
+  edge,
+  locale,
+}: {
+  edge: GraphEdge;
+  locale: Locale;
+}) {
+  const annotation = getEdgeAnnotation({
+    edgeType: edge.edgeType,
+    sameAttributeType: edge.sameAttributeType,
+  });
+
   if (!annotation) {
     return null;
   }
+
+  const fieldSource = edge.edgeSource?.trim();
+  const fieldName = edge.edgeSourceField?.trim();
+  const hasProvenance = Boolean(fieldSource || fieldName || edge.attributeLinkType);
+
   const title = locale === "zh-CN" ? annotation.titleZh : annotation.title;
   const description = locale === "zh-CN" ? annotation.descriptionZh : annotation.description;
 
   return (
     <Tooltip>
       <TooltipTrigger render={<Button type="button" variant="ghost" size="icon" />}>
+        <span className="sr-only">Provenance</span>
         <InfoIcon data-icon="inline-start" />
       </TooltipTrigger>
       <TooltipContent className="max-w-96">
         <div className="flex flex-col gap-2">
           <div className="font-medium">{title}</div>
           <div>{description}</div>
+          {hasProvenance ? (
+            <div className="text-muted-foreground">
+              <div>
+                {`Attribute link: ${edge.attributeLinkType ?? "derived"}`}
+              </div>
+              {fieldName ? <div>{`Field: ${fieldSource}.${fieldName}`}</div> : null}
+              {!fieldName && fieldSource ? <div>{`Source: ${fieldSource}`}</div> : null}
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-1">
             {annotation.fields.slice(0, 8).map((field) => (
               <Badge key={`${field.table}.${field.column}`} variant="outline">
@@ -368,22 +425,32 @@ function EdgeTable({
   edges,
   nodes,
   locale,
+  selectedTypes,
+  onSelectedTypesChange,
 }: {
   edges: GraphEdge[];
   nodes: GraphNode[];
   locale: Locale;
+  selectedTypes: string[];
+  onSelectedTypesChange: (values: string[]) => void;
 }) {
   const t = translations[locale];
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const nodeById = useMemo(
     () => new Map(nodes.map((node) => [node.custId, node])),
     [nodes]
   );
-  const edgeTypes = useMemo(
-    () => Array.from(new Set(edges.map((edge) => edge.edgeType))).sort(),
-    [edges]
+  const edgeTypeFilters = v1SameAttributeTypeOptions;
+  const edgeTypeLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        edgeTypeFilters.map((edgeType) => [
+          edgeType,
+          renderSameAttributeTypeLabel(edgeType, locale),
+        ])
+      ),
+    [edgeTypeFilters, locale]
   );
   const data = useMemo<EdgeRow[]>(
     () =>
@@ -449,7 +516,7 @@ function EdgeTable({
       },
       {
         id: "edgeType",
-        accessorFn: (row) => row.edge.edgeType,
+        accessorFn: (row) => primaryEdgeDimension(row.edge),
         filterFn: (row, columnId, filterValue) => {
           const values = filterValue as string[];
           return values.length === 0 || values.includes(row.getValue(columnId));
@@ -457,12 +524,13 @@ function EdgeTable({
         header: t.link,
         cell: ({ row }) => {
           const edge = row.original.edge;
+          const edgeType = primaryEdgeDimension(edge);
           return (
             <div className="flex min-w-56 items-start gap-2">
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium">{edge.edgeType}</span>
-                  <EdgeInfo edgeType={edge.edgeType} locale={locale} />
+                  <span className="font-medium">{renderSameAttributeTypeLabel(edgeType, locale)}</span>
+                  <EdgeInfo edge={edge} locale={locale} />
                 </div>
                 <span className="max-w-72 truncate text-muted-foreground">
                   {edge.edgeValue ?? "-"}
@@ -474,7 +542,10 @@ function EdgeTable({
         meta: {
           label: t.linkType,
           variant: "select",
-          options: edgeTypes.map((edgeType) => ({ label: edgeType, value: edgeType })),
+          options: edgeTypeFilters.map((edgeType) => ({
+            label: edgeTypeLabels[edgeType],
+            value: edgeType,
+          })),
         },
       },
       {
@@ -504,7 +575,7 @@ function EdgeTable({
         cell: ({ row }) => formatDate(row.original.edge.lastSeen, locale),
       },
     ],
-    [edgeTypes, locale, t]
+    [edgeTypeFilters, edgeTypeLabels, locale, t]
   );
   const table = useReactTable({
     data,
@@ -524,16 +595,11 @@ function EdgeTable({
     setRowSelection({});
   }, [data, selectedTypes]);
 
-  useEffect(() => {
-    setSelectedTypes((current) => current.filter((edgeType) => edgeTypes.includes(edgeType)));
-  }, [edgeTypes]);
-
   function toggleType(edgeType: string, checked: boolean) {
-    setSelectedTypes((current) =>
-      checked
-        ? Array.from(new Set([...current, edgeType]))
-        : current.filter((value) => value !== edgeType)
-    );
+    const next = checked
+      ? Array.from(new Set([...selectedTypes, edgeType]))
+      : selectedTypes.filter((value) => value !== edgeType);
+    onSelectedTypesChange(next);
   }
 
   function suspendSelected() {
@@ -558,22 +624,38 @@ function EdgeTable({
               <DropdownMenuGroup>
                 <DropdownMenuCheckboxItem
                   checked={selectedTypes.length === 0}
-                  onCheckedChange={() => setSelectedTypes([])}
+                  onCheckedChange={() => onSelectedTypesChange([])}
                 >
                   {t.allTypes}
                 </DropdownMenuCheckboxItem>
-                {edgeTypes.map((edgeType) => (
+                {edgeTypeFilters.map((edgeType) => (
                   <DropdownMenuCheckboxItem
                     key={edgeType}
                     checked={selectedTypes.includes(edgeType)}
                     onCheckedChange={(checked) => toggleType(edgeType, Boolean(checked))}
                   >
-                    {edgeType}
+                    {edgeTypeLabels[edgeType]}
                   </DropdownMenuCheckboxItem>
                 ))}
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          <div className="ml-2 flex flex-wrap gap-2" aria-label="Filter quick pills">
+            {edgeTypeFilters.map((edgeType) => {
+              const checked = selectedTypes.includes(edgeType);
+              return (
+                <Button
+                  key={`filter-${edgeType}`}
+                  type="button"
+                  size="sm"
+                  variant={checked ? "default" : "outline"}
+                  onClick={() => toggleType(edgeType, !checked)}
+                >
+                  {edgeTypeLabels[edgeType]}
+                </Button>
+              );
+            })}
+          </div>
           <Badge variant="outline">
             {selectedCount} {t.selected}
           </Badge>
@@ -676,6 +758,7 @@ function LoadingPanel() {
 export function GraphDemo({ session }: { session: GraphIdentitySession }) {
   const [custId, setCustId] = useState(initialCustomerId);
   const [includeWeak, setIncludeWeak] = useState(true);
+  const [selectedTypeFilters, setSelectedTypeFilters] = useState<string[]>([]);
   const [locale, setLocale] = useState<Locale>("en");
   const [state, setState] = useState<LoadState>({
     status: "idle",
@@ -750,6 +833,19 @@ export function GraphDemo({ session }: { session: GraphIdentitySession }) {
                   <CardDescription>{result.custId}</CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {(result.warnings?.length ?? 0) > 0 ? (
+                    <Alert variant="default" className="mb-3">
+                      <InfoIcon data-icon="inline-start" />
+                      <AlertTitle>{t.warnings}</AlertTitle>
+                      <AlertDescription>
+                        <ul className="list-disc space-y-1 pl-5">
+                          {result.warnings.map((message) => (
+                            <li key={message}>{message}</li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
                   <Tabs defaultValue="graph" className="gap-4">
                     <TabsList>
                       <TabsTrigger value="graph">{t.graph}</TabsTrigger>
@@ -759,7 +855,13 @@ export function GraphDemo({ session }: { session: GraphIdentitySession }) {
                       <GraphCanvas result={result} />
                     </TabsContent>
                     <TabsContent value="table">
-                      <EdgeTable edges={result.edges} nodes={result.nodes} locale={locale} />
+                      <EdgeTable
+                        edges={result.edges}
+                        nodes={result.nodes}
+                        locale={locale}
+                        selectedTypes={selectedTypeFilters}
+                        onSelectedTypesChange={setSelectedTypeFilters}
+                      />
                     </TabsContent>
                   </Tabs>
                 </CardContent>
@@ -775,13 +877,13 @@ export function GraphDemo({ session }: { session: GraphIdentitySession }) {
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-wrap gap-2">
-                      {Array.from(new Set(result.edges.map((edge) => edge.edgeType))).map(
-                        (edgeType) => (
-                          <Badge key={edgeType} variant="secondary">
-                            {edgeType}
-                          </Badge>
-                        )
-                      )}
+                      {Array.from(
+                        new Set(result.edges.map((edge) => primaryEdgeDimension(edge)))
+                      ).map((edgeType) => (
+                        <Badge key={edgeType} variant="secondary">
+                          {renderSameAttributeTypeLabel(edgeType, locale)}
+                        </Badge>
+                      ))}
                     </div>
                     <Separator className="my-4" />
                     <div className="text-muted-foreground">
