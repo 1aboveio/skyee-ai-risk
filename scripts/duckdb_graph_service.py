@@ -41,6 +41,30 @@ ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE = {
     "store_url": "SAME_STORE_URL",
     "ip": "SAME_IP",
 }
+ATTRIBUTE_LINK_TYPE_LABELS = {
+    "LOGIN_ACTIVITY": "Login activity",
+    "CUSTOMER_PROFILE": "Customer profile",
+    "BUSINESS_REGISTRATION": "Business registration",
+    "IDENTITY_DOCUMENT": "Identity document",
+    "TRANSACTION_COUNTERPARTY": "Transaction counterparty",
+}
+SOURCE_TABLE_LABELS = {
+    "network_logs": "Network logs",
+    "customer_profile": "Customer profile",
+    "business_profile": "Business profile",
+    "identity_documents": "Identity documents",
+    "transactions": "Transactions",
+}
+SOURCE_FIELD_LABELS = {
+    "ip_last_seen": "IP address",
+    "mobile_phone": "Mobile phone",
+    "email": "Email",
+    "business_name": "Business name",
+    "person_name": "Person name",
+    "id_no": "Identity number",
+    "address": "Address",
+    "store_url": "Store URL",
+}
 
 ALLOWED_SAME_ATTRIBUTE_TYPES = set(ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.values())
 SAME_ATTRIBUTE_BY_ATTRIBUTE = {v: k for k, v in ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.items()}
@@ -236,6 +260,15 @@ def _derive_legacy_edge_type(attribute_type: str | None) -> str | None:
     return ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE.get(attribute_type)
 
 
+def _display_label(raw_value: Any, labels: dict[str, str]) -> str | None:
+    if raw_value is None:
+        return None
+    text = str(raw_value)
+    if not text:
+        return None
+    return labels.get(text, text.replace("_", " ").title())
+
+
 def _resolve_same_attribute_filter(same_attribute_type: str | None) -> str | None:
     if same_attribute_type is None:
         return None
@@ -421,8 +454,17 @@ def _build_neighbor_rows(cust_id: int, same_attribute_type: str | None = None) -
             "attribute_link_type": row["attr_link_type"],
             "provenance": {
                 "attribute_link_type": row["attr_link_type"],
+                "attribute_link_type_label": _display_label(
+                    row["attr_link_type"],
+                    ATTRIBUTE_LINK_TYPE_LABELS,
+                ),
                 "source_table": row["edge_source"],
+                "source_table_label": _display_label(row["edge_source"], SOURCE_TABLE_LABELS),
                 "source_field": row["edge_source_field"],
+                "source_field_label": _display_label(
+                    row["edge_source_field"],
+                    SOURCE_FIELD_LABELS,
+                ),
             },
             "edge_value": row["shared_attr_value"],
             "edge_id": f"{cust_id}:{row['neighbor_cust_id']}:{row['shared_attr_type']}:{row['shared_attr_value']}",
@@ -662,7 +704,8 @@ def neighbors(
             detail={"code": "INVALID_SAME_ATTRIBUTE_TYPE", "message": "same_attribute_type cannot be empty."},
         )
     assert_expandable_attribute_fanout(cust_id, same_attribute_type)
-    assert_expandable(cust_id)
+    if same_attribute_type is None:
+        assert_expandable(cust_id)
     rows = _build_neighbor_rows(cust_id, same_attribute_type)
     if limit is not None:
         return rows[:limit]
