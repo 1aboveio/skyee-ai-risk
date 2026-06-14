@@ -26,6 +26,10 @@ const TRANSACTION_FLOW_PREFIXES = ["TXN_", "PAYMENT_", "TRANSFER_", "COUNTERPART
  * - Everything else is **unknown** (should be investigated and assigned).
  */
 export function categorizeEdgeType(edgeType: string): EdgeCategory {
+  if (edgeType.startsWith("same_")) {
+    return "shared-attribute";
+  }
+
   if (edgeType.startsWith("SAME_")) {
     return "shared-attribute";
   }

@@ -1,34 +1,230 @@
 #!/usr/bin/env python3
-"""FastAPI service for low-latency customer graph queries backed by DuckDB.
+"""FastAPI service for customer association lookup backed by DuckDB.
 
-Run:
+The service performs a two-hop traversal on the association inverted index:
+customer attribute -> shared attribute -> customer attribute.
+
+Examples:
     GRAPH_DUCKDB_PATH=data/skyee_graph.duckdb \
       uv run --with duckdb==1.0.0 --with fastapi --with uvicorn \
       uvicorn scripts.duckdb_graph_service:app --host 0.0.0.0 --port 8088
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
+from urllib.parse import urlparse
 
 import duckdb
 from fastapi import FastAPI, HTTPException, Query
 
+from scripts.live_enrichment import SourceEvidenceDatabaseAdapter, enrich_neighbor_rows_with_metadata
 
 DEFAULT_DB_PATH = "data/skyee_graph.duckdb"
-GRAPH_DUCKDB_PATH = os.getenv("GRAPH_DUCKDB_PATH", DEFAULT_DB_PATH)
-GRAPH_MAX_QUERY_DEGREE = int(os.getenv("GRAPH_MAX_QUERY_DEGREE", "1000"))
+ASSOCIATION_TABLE = "association_attribute_links"
 
-app = FastAPI(title="Skyee Customer Graph Query Service")
+ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE = {
+    "mobile_phone": "same_mobile_phone",
+    "email": "same_email",
+    "business_name": "same_business_name",
+    "person_name": "same_person_name",
+    "id_no": "same_id_no",
+    "address": "same_address",
+    "store_url": "same_store_url",
+    "ip": "same_ip",
+}
+ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE = {
+    "mobile_phone": "SAME_PHONE",
+    "email": "SAME_EMAIL",
+    "business_name": "SAME_BUSINESS_NAME",
+    "person_name": "SAME_PERSON_NAME",
+    "id_no": "SAME_ID_NO",
+    "address": "SAME_ADDRESS",
+    "store_url": "SAME_STORE_URL",
+    "ip": "SAME_IP",
+}
+ATTRIBUTE_LINK_TYPE_LABELS = {
+    "LOGIN_ACTIVITY": "Login activity",
+    "CUSTOMER_PROFILE": "Customer profile",
+    "BUSINESS_REGISTRATION": "Business registration",
+    "IDENTITY_DOCUMENT": "Identity document",
+    "TRANSACTION_COUNTERPARTY": "Transaction counterparty",
+}
+SOURCE_TABLE_LABELS = {
+    "network_logs": "Network logs",
+    "customer_profile": "Customer profile",
+    "business_profile": "Business profile",
+    "identity_documents": "Identity documents",
+    "transactions": "Transactions",
+}
+SOURCE_FIELD_LABELS = {
+    "ip_last_seen": "IP address",
+    "mobile_phone": "Mobile phone",
+    "email": "Email",
+    "business_name": "Business name",
+    "person_name": "Person name",
+    "id_no": "Identity number",
+    "address": "Address",
+    "store_url": "Store URL",
+}
+
+ALLOWED_SAME_ATTRIBUTE_TYPES = set(ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.values())
+SAME_ATTRIBUTE_BY_ATTRIBUTE = {v: k for k, v in ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.items()}
+SAME_ATTRIBUTE_TO_ASSOCIATION_ATTRIBUTE = {
+    same_attribute: attribute_type
+    for attribute_type, same_attribute in ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.items()
+}
+
+app = FastAPI(title="Skyee Association Link Lookup Service")
 
 
-def query(sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
-    if not os.path.exists(GRAPH_DUCKDB_PATH):
+class NullSourceEvidenceAdapter(SourceEvidenceDatabaseAdapter):
+    def get_customer_profiles(self, customer_ids: list[int]) -> dict[int, dict[str, Any]]:
+        """Return no live enrichment when Source Evidence is not configured."""
+        return {}
+
+
+class MySqlSourceEvidenceAdapter(SourceEvidenceDatabaseAdapter):
+    def __init__(self, connection_url: str) -> None:
+        self.connection_url = connection_url
+
+    def get_customer_profiles(self, customer_ids: list[int]) -> dict[int, dict[str, Any]]:
+        """Load live customer fields from the online Source Evidence MySQL database."""
+        if not customer_ids:
+            return {}
+
+        try:
+            import pymysql
+            import pymysql.cursors
+        except ImportError as exc:
+            raise RuntimeError("pymysql is required for SOURCE_EVIDENCE_MYSQL_URL enrichment") from exc
+
+        parsed = urlparse(self.connection_url)
+        database = parsed.path.lstrip("/")
+        if not parsed.hostname or not parsed.username or not database:
+            raise RuntimeError("SOURCE_EVIDENCE_MYSQL_URL must include host, user, and database")
+
+        placeholders = ", ".join(["%s"] * len(customer_ids))
+        sql = f"""
+            SELECT
+                ci.CUST_ID AS cust_id,
+                ci.CUST_NAME AS cust_name,
+                ci.RISK_LEVEL AS risk_level,
+                ci.HIGH_RISK AS is_high_risk,
+                ci.SANCTIONED AS is_sanctioned,
+                ci.CUST_STATUS AS cust_status,
+                bal.current_balance AS current_balance
+            FROM cust_customer_info ci
+            LEFT JOIN (
+                SELECT CUST_ID, SUM(PEG_BALANCE) AS current_balance
+                FROM cust_collections_acct
+                WHERE CUST_ID IN ({placeholders})
+                GROUP BY CUST_ID
+            ) bal ON bal.CUST_ID = ci.CUST_ID
+            WHERE ci.CUST_ID IN ({placeholders})
+        """
+        query_params = [*customer_ids, *customer_ids]
+        connection = pymysql.connect(
+            host=parsed.hostname,
+            port=parsed.port or 3306,
+            user=parsed.username,
+            password=parsed.password or "",
+            database=database,
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+            read_timeout=5,
+            write_timeout=5,
+        )
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, query_params)
+                rows = cursor.fetchall()
+        finally:
+            connection.close()
+
+        return {int(row["cust_id"]): row for row in rows}
+
+
+class DuckDbGraphNodeSourceEvidenceAdapter(SourceEvidenceDatabaseAdapter):
+    def get_customer_profiles(self, customer_ids: list[int]) -> dict[int, dict[str, Any]]:
+        """Legacy explicit fallback for loading enrichment from DuckDB graph_nodes."""
+        return _load_neighbor_metadata(customer_ids)
+
+
+def create_source_evidence_adapter() -> SourceEvidenceDatabaseAdapter:
+    adapter_mode = os.getenv("SOURCE_EVIDENCE_ADAPTER", "mysql").strip().lower()
+    if adapter_mode == "duckdb_graph_nodes":
+        return DuckDbGraphNodeSourceEvidenceAdapter()
+
+    connection_url = os.getenv("SOURCE_EVIDENCE_MYSQL_URL") or os.getenv("SOURCE_EVIDENCE_DB_URL")
+    if connection_url:
+        return MySqlSourceEvidenceAdapter(connection_url)
+    return NullSourceEvidenceAdapter()
+
+
+source_evidence_adapter: SourceEvidenceDatabaseAdapter = create_source_evidence_adapter()
+
+
+def get_db_path() -> str:
+    return os.getenv("GRAPH_DUCKDB_PATH", DEFAULT_DB_PATH)
+
+
+def get_max_query_degree() -> int:
+    return int(os.getenv("GRAPH_MAX_QUERY_DEGREE", "1000"))
+
+
+def get_enrichment_batch_size() -> int:
+    configured = int(os.getenv("GRAPH_ENRICHMENT_BATCH_SIZE", "100"))
+    return configured if configured > 0 else 100
+
+
+def _snapshot_missing() -> str:
+    return f"DuckDB graph database not found: {get_db_path()}"
+
+
+def _ensure_snapshot_exists():
+    db_path = get_db_path()
+    if not os.path.exists(db_path):
+        raise HTTPException(status_code=503, detail=_snapshot_missing())
+
+
+def _assert_snapshot_schema(con: duckdb.DuckDBPyConnection):
+    rows = con.execute(
+        """
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'main' AND table_name = ?
+        """,
+        [ASSOCIATION_TABLE],
+    ).fetchall()
+    if not rows:
         raise HTTPException(
             status_code=503,
-            detail=f"DuckDB graph database not found: {GRAPH_DUCKDB_PATH}",
+            detail=(
+                f"Association table '{ASSOCIATION_TABLE}' is not available in snapshot. "
+                f"Expected table is required for association lookup."
+            ),
         )
-    con = duckdb.connect(GRAPH_DUCKDB_PATH, read_only=True)
+
+
+def _table_exists(con: duckdb.DuckDBPyConnection, table_name: str) -> bool:
+    row = con.execute(
+        """
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'main' AND table_name = ?
+        """,
+        [table_name],
+    ).fetchone()
+    return row is not None
+
+
+def _query(sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
+    _ensure_snapshot_exists()
+    con = duckdb.connect(get_db_path(), read_only=True)
     try:
+        _assert_snapshot_schema(con)
         result = con.execute(sql, params or [])
         columns = [desc[0] for desc in result.description]
         return [dict(zip(columns, row)) for row in result.fetchall()]
@@ -36,23 +232,287 @@ def query(sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         con.close()
 
 
-def node_degree(cust_id: int) -> int:
-    rows = query(
+def _legacy_query(
+    required_tables: list[str],
+    sql: str,
+    params: list[Any] | None,
+    unavailable_code: str,
+    unavailable_message: str,
+) -> list[dict[str, Any]]:
+    _ensure_snapshot_exists()
+    con = duckdb.connect(get_db_path(), read_only=True)
+    try:
+        missing = [table for table in required_tables if not _table_exists(con, table)]
+        if missing:
+            raise HTTPException(
+                status_code=501,
+                detail={
+                    "code": unavailable_code,
+                    "message": unavailable_message,
+                    "missing_tables": missing,
+                },
+            )
+        result = con.execute(sql, params or [])
+        columns = [desc[0] for desc in result.description]
+        return [dict(zip(columns, row)) for row in result.fetchall()]
+    finally:
+        con.close()
+
+
+def _customer_lookup_base_query() -> tuple[str, str]:
+    return (
         """
-        SELECT COALESCE(node_degree, 0) AS node_degree
-        FROM graph_node_degrees
-        WHERE cust_id = ?
+        WITH source_attributes AS (
+            SELECT DISTINCT
+                CASE
+                    WHEN a.src_attr_type = 'customer' THEN a.dst_attr_type
+                    ELSE a.src_attr_type
+                END AS shared_attr_type,
+                CASE
+                    WHEN a.src_attr_type = 'customer' THEN CAST(a.dst_attr_value AS VARCHAR)
+                    ELSE CAST(a.src_attr_value AS VARCHAR)
+                END AS shared_attr_value,
+                a.attr_link_type AS first_link_type,
+                a.source_table AS first_source_table,
+                a.source_field AS first_source_field,
+                a.first_seen AS first_first_seen,
+                a.last_seen AS first_last_seen,
+                a.record_count AS first_record_count
+            FROM association_attribute_links AS a
+            WHERE
+                (a.src_attr_type = 'customer' AND CAST(a.src_attr_value AS VARCHAR) = CAST(? AS VARCHAR))
+                OR
+                (a.dst_attr_type = 'customer' AND CAST(a.dst_attr_value AS VARCHAR) = CAST(? AS VARCHAR))
+        ),
+        linked_neighbors AS (
+            SELECT DISTINCT
+                CASE
+                    WHEN b.src_attr_type = 'customer'
+                        THEN CAST(b.src_attr_value AS VARCHAR)
+                    WHEN b.dst_attr_type = 'customer'
+                        THEN CAST(b.dst_attr_value AS VARCHAR)
+                    ELSE NULL
+                END AS neighbor_cust_id,
+                sa.shared_attr_type,
+                sa.shared_attr_value,
+                sa.first_link_type,
+                sa.first_source_table,
+                sa.first_source_field,
+                sa.first_first_seen,
+                sa.first_last_seen,
+                sa.first_record_count,
+                b.source_table AS second_source_table,
+                b.source_field AS second_source_field,
+                b.first_seen AS second_first_seen,
+                b.last_seen AS second_last_seen,
+                b.record_count AS second_record_count
+            FROM source_attributes AS sa
+            JOIN association_attribute_links AS b
+                ON (
+                    b.src_attr_type = sa.shared_attr_type
+                    AND CAST(b.src_attr_value AS VARCHAR) = sa.shared_attr_value
+                    AND b.dst_attr_type = 'customer'
+                )
+                OR (
+                    b.dst_attr_type = sa.shared_attr_type
+                    AND CAST(b.dst_attr_value AS VARCHAR) = sa.shared_attr_value
+                    AND b.src_attr_type = 'customer'
+                )
+            WHERE
+                neighbor_cust_id <> CAST(? AS VARCHAR)
+                AND neighbor_cust_id IS NOT NULL
+                AND TRY_CAST(neighbor_cust_id AS BIGINT) IS NOT NULL
+        )
         """,
-        [cust_id],
+        """
+        SELECT
+            TRY_CAST(neighbor_cust_id AS BIGINT) AS neighbor_cust_id,
+            CAST(? AS BIGINT) AS source_cust_id,
+            TRY_CAST(neighbor_cust_id AS BIGINT) AS target_cust_id,
+            shared_attr_type,
+            shared_attr_value,
+            first_link_type AS attr_link_type,
+            COALESCE(first_source_table, second_source_table) AS edge_source,
+            COALESCE(first_source_field, second_source_field) AS edge_source_field,
+            COALESCE(second_last_seen, first_last_seen) AS last_seen,
+            COALESCE(second_first_seen, first_first_seen) AS first_seen,
+            COALESCE(second_record_count, first_record_count, 0) AS record_count,
+            'Strong' AS strength
+        FROM linked_neighbors
+        """,
+    )
+
+
+def _derive_same_attribute_type(attribute_type: str | None) -> str | None:
+    if not attribute_type:
+        return None
+    return ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.get(attribute_type)
+
+
+def _derive_legacy_edge_type(attribute_type: str | None) -> str | None:
+    if not attribute_type:
+        return None
+    return ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE.get(attribute_type)
+
+
+def _display_label(raw_value: Any, labels: dict[str, str]) -> str | None:
+    if raw_value is None:
+        return None
+    text = str(raw_value)
+    if not text:
+        return None
+    return labels.get(text, text.replace("_", " ").title())
+
+
+def _resolve_same_attribute_filter(same_attribute_type: str | None) -> str | None:
+    if same_attribute_type is None:
+        return None
+    return SAME_ATTRIBUTE_TO_ASSOCIATION_ATTRIBUTE.get(same_attribute_type)
+
+
+def _load_neighbor_metadata(cust_ids: list[int]) -> dict[int, dict[str, Any]]:
+    if not cust_ids:
+        return {}
+
+    _ensure_snapshot_exists()
+    con = duckdb.connect(get_db_path(), read_only=True)
+    try:
+        if not _table_exists(con, "graph_nodes"):
+            return {}
+
+        has_degrees = _table_exists(con, "graph_node_degrees")
+        degree_join = (
+            "LEFT JOIN graph_node_degrees d ON d.cust_id = n.cust_id"
+            if has_degrees
+            else ""
+        )
+        degree_expr = (
+            "COALESCE(d.node_degree, 0) AS node_degree"
+            if has_degrees
+            else "0 AS node_degree"
+        )
+        result = con.execute(
+            f"""
+            SELECT
+                n.cust_id,
+                n.cust_name,
+                n.risk_level,
+                n.is_high_risk,
+                n.is_sanctioned,
+                n.current_balance,
+                n.confirmed_risk_status,
+                n.confirmed_risk_type,
+                {degree_expr}
+            FROM graph_nodes n
+            {degree_join}
+            WHERE n.cust_id IN (SELECT UNNEST(?))
+            """,
+            [cust_ids],
+        )
+        columns = [desc[0] for desc in result.description]
+        return {int(row[0]): dict(zip(columns, row)) for row in result.fetchall()}
+    finally:
+        con.close()
+
+
+def _apply_neighbor_metadata(
+    rows: list[dict[str, Any]],
+    adapter: SourceEvidenceDatabaseAdapter | None = None,
+) -> list[dict[str, Any]]:
+    return enrich_neighbor_rows_with_metadata(
+        rows=rows,
+        adapter=adapter or source_evidence_adapter,
+        batch_size=get_enrichment_batch_size(),
+    )
+
+
+def _has_legacy_graph_nodes() -> bool:
+    _ensure_snapshot_exists()
+    con = duckdb.connect(get_db_path(), read_only=True)
+    try:
+        return _table_exists(con, "graph_nodes")
+    finally:
+        con.close()
+
+
+def _raise_high_risk_unavailable() -> None:
+    raise HTTPException(
+        status_code=503,
+        detail={
+            "code": "HIGH_RISK_ENRICHMENT_UNAVAILABLE",
+            "message": (
+                "High-risk neighbor lookup requires configured Source Evidence "
+                "enrichment or explicit legacy graph_nodes metadata."
+            ),
+        },
+    )
+
+
+def _high_risk_enrichment_adapter() -> SourceEvidenceDatabaseAdapter:
+    if isinstance(source_evidence_adapter, NullSourceEvidenceAdapter):
+        if _has_legacy_graph_nodes():
+            return DuckDbGraphNodeSourceEvidenceAdapter()
+        _raise_high_risk_unavailable()
+
+    if isinstance(source_evidence_adapter, DuckDbGraphNodeSourceEvidenceAdapter):
+        _ensure_snapshot_exists()
+        con = duckdb.connect(get_db_path(), read_only=True)
+        try:
+            if not _table_exists(con, "graph_nodes"):
+                _raise_high_risk_unavailable()
+        finally:
+            con.close()
+    return source_evidence_adapter
+
+
+def _assert_high_risk_rows_enriched(rows: list[dict[str, Any]]) -> None:
+    unavailable = [
+        row
+        for row in rows
+        if row.get("enrichment_status") in {"partial", "unavailable"}
+    ]
+    if unavailable:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "HIGH_RISK_ENRICHMENT_UNAVAILABLE",
+                "message": (
+                    "High-risk neighbor lookup requires complete Source Evidence "
+                    "enrichment before risk filtering."
+                ),
+                "unavailable_count": len(unavailable),
+            },
+        )
+
+
+def _legacy_edge_degree(cust_id: int) -> int:
+    rows = _legacy_query(
+        ["graph_edges"],
+        """
+        SELECT COUNT(DISTINCT neighbor_cust_id) AS node_degree
+        FROM (
+            SELECT target_cust_id AS neighbor_cust_id
+            FROM graph_edges
+            WHERE source_cust_id = ?
+            UNION ALL
+            SELECT source_cust_id AS neighbor_cust_id
+            FROM graph_edges
+            WHERE target_cust_id = ?
+        ) neighbors
+        """,
+        [cust_id, cust_id],
+        "PATH_TRAVERSAL_UNAVAILABLE",
+        "Path traversal requires the legacy graph_edges table.",
     )
     if not rows:
         return 0
     return int(rows[0]["node_degree"] or 0)
 
 
-def assert_expandable(cust_id: int) -> int:
-    degree = node_degree(cust_id)
-    if degree > GRAPH_MAX_QUERY_DEGREE:
+def _assert_legacy_path_expandable(cust_id: int) -> int:
+    degree = _legacy_edge_degree(cust_id)
+    max_degree = get_max_query_degree()
+    if degree > max_degree:
         raise HTTPException(
             status_code=422,
             detail={
@@ -62,150 +522,367 @@ def assert_expandable(cust_id: int) -> int:
                 ),
                 "cust_id": cust_id,
                 "node_degree": degree,
-                "max_degree": GRAPH_MAX_QUERY_DEGREE,
+                "max_degree": max_degree,
             },
         )
     return degree
 
 
+def _build_neighbor_rows(cust_id: int, same_attribute_type: str | None = None) -> list[dict[str, Any]]:
+    shared_attr_filter: str | None = None
+    if same_attribute_type is not None:
+        shared_attr_filter = SAME_ATTRIBUTE_BY_ATTRIBUTE.get(same_attribute_type)
+        if shared_attr_filter is None:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_SAME_ATTRIBUTE_TYPE",
+                    "message": "Unsupported same_attribute_type.",
+                    "same_attribute_type": same_attribute_type,
+                    "allowed_values": sorted(ALLOWED_SAME_ATTRIBUTE_TYPES),
+                },
+            )
+
+    pre_sql, select_sql = _customer_lookup_base_query()
+    where_clause = ""
+    params: list[Any] = [
+        str(cust_id),
+        str(cust_id),
+        str(cust_id),
+        str(cust_id),
+    ]
+    if shared_attr_filter is not None:
+        where_clause = "WHERE shared_attr_type = ?"
+        params.append(shared_attr_filter)
+
+    order_clause = "ORDER BY COALESCE(last_seen, first_seen) DESC NULLS LAST, shared_attr_type, neighbor_cust_id"
+    rows = _query(
+        f"""
+        {pre_sql}
+        {select_sql}
+        {where_clause}
+        {order_clause}
+        """,
+        params,
+    )
+
+    linked_rows: list[dict[str, Any]] = []
+    for row in rows:
+        same_attribute = _derive_same_attribute_type(row["shared_attr_type"])
+        legacy_edge_type = _derive_legacy_edge_type(row["shared_attr_type"])
+        result = {
+            **row,
+            "edge_type": legacy_edge_type or row["shared_attr_type"],
+            "same_attribute_type": same_attribute or row["shared_attr_type"],
+            "attribute_link_type": row["attr_link_type"],
+            "provenance": {
+                "attribute_link_type": row["attr_link_type"],
+                "attribute_link_type_label": _display_label(
+                    row["attr_link_type"],
+                    ATTRIBUTE_LINK_TYPE_LABELS,
+                ),
+                "source_table": row["edge_source"],
+                "source_table_label": _display_label(row["edge_source"], SOURCE_TABLE_LABELS),
+                "source_field": row["edge_source_field"],
+                "source_field_label": _display_label(
+                    row["edge_source_field"],
+                    SOURCE_FIELD_LABELS,
+                ),
+            },
+            "edge_value": row["shared_attr_value"],
+            "edge_id": f"{cust_id}:{row['neighbor_cust_id']}:{row['shared_attr_type']}:{row['shared_attr_value']}",
+        }
+        if same_attribute is None and shared_attr_filter is not None:
+            continue
+        linked_rows.append(result)
+
+    return linked_rows
+
+
+def _count_neighbors(cust_id: int, same_attribute_type: str | None = None) -> int:
+    if same_attribute_type is not None:
+        same_attribute_type = same_attribute_type.strip()
+        if not same_attribute_type:
+            raise ValueError("same_attribute_type cannot be empty.")
+    same_attribute = _resolve_same_attribute_filter(same_attribute_type)
+    if same_attribute_type is not None and same_attribute is None:
+        raise ValueError(f"Unsupported same_attribute_type: {same_attribute_type}.")
+
+    pre_sql, _ = _customer_lookup_base_query()
+    where_clause = (
+        "WHERE shared_attr_type = ?"
+        if same_attribute is not None
+        else ""
+    )
+    params: list[Any] = [str(cust_id), str(cust_id), str(cust_id)]
+    if same_attribute is not None:
+        params.append(same_attribute)
+
+    rows = _query(
+        f"""
+        {pre_sql}
+        SELECT
+            COUNT(DISTINCT CAST(neighbor_cust_id AS VARCHAR)) AS neighbor_count
+        FROM linked_neighbors
+        {where_clause}
+        """,
+        params,
+    )
+    return int(rows[0]["neighbor_count"] or 0) if rows else 0
+
+
+def _count_attribute_fanout(cust_id: int, same_attribute_type: str | None = None) -> dict[str, int]:
+    pre_sql, _ = _customer_lookup_base_query()
+    where_clause = (
+        "WHERE shared_attr_type = ?"
+        if same_attribute_type is not None
+        else ""
+    )
+    params: list[Any] = [str(cust_id), str(cust_id), str(cust_id)]
+    if same_attribute_type is not None:
+        params.append(same_attribute_type)
+    rows = _query(
+        f"""
+        {pre_sql}
+        SELECT
+            shared_attr_type,
+            COUNT(DISTINCT CAST(neighbor_cust_id AS VARCHAR)) AS neighbor_count
+        FROM linked_neighbors
+        {where_clause}
+        GROUP BY shared_attr_type
+        """,
+        params,
+    )
+    return {
+        str(row["shared_attr_type"]): int(row["neighbor_count"] or 0)
+        for row in rows
+        if row["shared_attr_type"] is not None
+    }
+
+
+def assert_expandable(cust_id: int) -> int:
+    degree = _count_neighbors(cust_id)
+    max_degree = get_max_query_degree()
+    if degree > max_degree:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "NODE_DEGREE_TOO_HIGH",
+                "message": (
+                    "Customer has too many graph neighbors for interactive expansion."
+                ),
+                "cust_id": cust_id,
+                "node_degree": degree,
+                "max_degree": max_degree,
+            },
+        )
+    return degree
+
+
+def assert_expandable_attribute_fanout(
+    cust_id: int,
+    same_attribute_type: str | None = None,
+) -> int:
+    same_attribute = _resolve_same_attribute_filter(same_attribute_type)
+    if same_attribute_type is not None:
+        if same_attribute is None:
+            allowed_values = ", ".join(sorted(ALLOWED_SAME_ATTRIBUTE_TYPES))
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_SAME_ATTRIBUTE_TYPE",
+                    "message": "Unsupported same_attribute_type.",
+                    "same_attribute_type": same_attribute_type,
+                    "allowed_values": allowed_values,
+                },
+            )
+        fanouts = _count_attribute_fanout(cust_id, same_attribute)
+        count = fanouts.get(same_attribute, 0)
+        max_degree = get_max_query_degree()
+        if count > max_degree:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "ATTR_FANOUT_TOO_HIGH",
+                    "message": (
+                        "Shared attribute is too broadly shared for interactive expansion."
+                    ),
+                    "cust_id": cust_id,
+                    "association_attribute_type": same_attribute,
+                    "same_attribute_type": same_attribute_type,
+                    "neighbor_count": count,
+                    "max_degree": max_degree,
+                },
+            )
+        return count
+
+    # For unfiltered lookups, guard both total degree and the worst fanout attribute.
+    fanouts = _count_attribute_fanout(cust_id)
+    if fanouts:
+        max_degree = get_max_query_degree()
+        exceeders = [
+            attr for attr, count in fanouts.items() if count > max_degree
+        ]
+        if exceeders:
+            largest = max(exceeders, key=lambda attr: fanouts[attr])
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "ATTR_FANOUT_TOO_HIGH",
+                    "message": (
+                        "One or more shared attributes are too broadly shared "
+                        "for interactive expansion."
+                    ),
+                    "cust_id": cust_id,
+                    "association_attribute_type": largest,
+                    "same_attribute_type": ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.get(
+                        largest
+                    ),
+                    "neighbor_count": fanouts[largest],
+                    "max_degree": max_degree,
+                },
+            )
+    return _count_neighbors(cust_id)
+
+
 @app.get("/health")
 def health():
+    db_path = get_db_path()
+    exists = os.path.exists(db_path)
+    has_assoc_table = False
+    if exists:
+        con = duckdb.connect(db_path, read_only=True)
+        try:
+            has_rows = con.execute(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'main' AND table_name = ?
+                """,
+                [ASSOCIATION_TABLE],
+            ).fetchone()
+            has_assoc_table = has_rows is not None
+        finally:
+            con.close()
     return {
-        "status": "ok",
-        "db_path": GRAPH_DUCKDB_PATH,
-        "max_query_degree": GRAPH_MAX_QUERY_DEGREE,
+        "status": "ok" if has_assoc_table else "degraded",
+        "db_path": db_path,
+        "max_query_degree": get_max_query_degree(),
+        "has_association_attribute_links": has_assoc_table,
     }
 
 
 @app.get("/stats")
 def stats():
     return {
-        "counts": query(
+        "counts": _query(
             """
-            SELECT 'nodes' AS item, COUNT(*) AS count FROM graph_nodes
-            UNION ALL
-            SELECT 'edges' AS item, COUNT(*) AS count FROM graph_edges
-            """
+            SELECT
+                'association_attribute_links' AS item,
+                COUNT(*) AS count
+            FROM association_attribute_links
+            """,
         ),
-        "edge_types": query(
+        "attribute_types": _query(
             """
-            SELECT edge_type, strength, COUNT(*) AS edge_count
-            FROM graph_edges
-            GROUP BY edge_type, strength
-            ORDER BY edge_count DESC
-            """
+            SELECT
+                shared_attr_type AS item,
+                COUNT(*) AS count
+            FROM (
+                SELECT
+                    CASE
+                        WHEN a.src_attr_type = 'customer' THEN a.dst_attr_type
+                        ELSE a.src_attr_type
+                    END AS shared_attr_type
+                FROM association_attribute_links AS a
+                WHERE
+                    (a.src_attr_type = 'customer' AND a.src_attr_type IS NOT NULL)
+                    OR
+                    (a.dst_attr_type = 'customer' AND a.dst_attr_type IS NOT NULL)
+            )
+            WHERE shared_attr_type IS NOT NULL
+            GROUP BY shared_attr_type
+            ORDER BY count DESC
+            """,
         ),
     }
 
 
 @app.get("/degree/{cust_id}")
 def degree(cust_id: int):
-    return {"cust_id": cust_id, "node_degree": node_degree(cust_id)}
+    return {"cust_id": cust_id, "node_degree": _count_neighbors(cust_id)}
 
 
 @app.get("/neighbors/{cust_id}")
-def neighbors(cust_id: int, limit: int = Query(50, ge=1, le=500)):
-    assert_expandable(cust_id)
-    return query(
-        """
-        WITH incident_edges AS (
-            SELECT target_cust_id AS neighbor_cust_id, *
-            FROM graph_edges
-            WHERE source_cust_id = ?
-            UNION ALL
-            SELECT source_cust_id AS neighbor_cust_id, *
-            FROM graph_edges
-            WHERE target_cust_id = ?
+def neighbors(
+    cust_id: int,
+    limit: int = Query(50, ge=1, le=500),
+    same_attribute_type: str | None = Query(default=None),
+):
+    if same_attribute_type is not None:
+        same_attribute_type = same_attribute_type.strip()
+    if same_attribute_type is not None and not same_attribute_type:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_SAME_ATTRIBUTE_TYPE", "message": "same_attribute_type cannot be empty."},
         )
-        SELECT
-            e.neighbor_cust_id,
-            e.edge_id,
-            e.source_cust_id,
-            e.target_cust_id,
-            n.cust_name,
-            n.risk_level,
-            n.is_high_risk,
-            n.is_sanctioned,
-            n.current_balance,
-            n.confirmed_risk_status,
-            n.confirmed_risk_type,
-            COALESCE(d.node_degree, 0) AS node_degree,
-            e.edge_type,
-            e.edge_source,
-            e.strength,
-            e.edge_value,
-            e.record_count,
-            e.first_seen,
-            e.last_seen
-        FROM incident_edges e
-        LEFT JOIN graph_nodes n ON n.cust_id = e.neighbor_cust_id
-        LEFT JOIN graph_node_degrees d ON d.cust_id = e.neighbor_cust_id
-        ORDER BY CASE e.strength WHEN 'Strong' THEN 0 ELSE 1 END, e.last_seen DESC
-        LIMIT ?
-        """,
-        [cust_id, cust_id, limit],
-    )
+    assert_expandable_attribute_fanout(cust_id, same_attribute_type)
+    if same_attribute_type is None:
+        assert_expandable(cust_id)
+    rows = _build_neighbor_rows(cust_id, same_attribute_type)
+    if limit is not None:
+        rows = rows[:limit]
+
+    return _apply_neighbor_metadata(rows)
 
 
 @app.get("/high-risk/{cust_id}")
 def high_risk(cust_id: int, limit: int = Query(50, ge=1, le=500)):
+    enrichment_adapter = _high_risk_enrichment_adapter()
     assert_expandable(cust_id)
-    return query(
-        """
-        WITH incident_edges AS (
-            SELECT target_cust_id AS neighbor_cust_id, *
-            FROM graph_edges
-            WHERE source_cust_id = ?
-            UNION ALL
-            SELECT source_cust_id AS neighbor_cust_id, *
-            FROM graph_edges
-            WHERE target_cust_id = ?
-        )
-        SELECT DISTINCT
-            n.cust_id,
-            n.cust_name,
-            n.risk_level,
-            n.is_high_risk,
-            n.is_sanctioned,
-            n.current_balance,
-            n.confirmed_risk_status,
-            n.confirmed_risk_type,
-            e.edge_type,
-            e.strength,
-            e.edge_value
-        FROM incident_edges e
-        JOIN graph_nodes n ON n.cust_id = e.neighbor_cust_id
-        WHERE n.risk_level IN ('HIGH', 'MEDIUM_HIGH')
-           OR n.is_high_risk = 'Y'
-           OR n.is_sanctioned = 'Y'
-        ORDER BY CASE e.strength WHEN 'Strong' THEN 0 ELSE 1 END, n.cust_id
-        LIMIT ?
-        """,
-        [cust_id, cust_id, limit],
-    )
+    rows = _apply_neighbor_metadata(_build_neighbor_rows(cust_id), enrichment_adapter)
+    _assert_high_risk_rows_enriched(rows)
+    rows = [
+        row
+        for row in rows
+        if row.get("risk_level") in {"HIGH", "MEDIUM_HIGH"}
+        or row.get("is_high_risk") in {"Y", "true", "1", True}
+        or row.get("is_sanctioned") in {"Y", "true", "1", True}
+    ]
+    return [
+        {
+            "cust_id": row["neighbor_cust_id"],
+            "cust_name": row.get("cust_name"),
+            "risk_level": row.get("risk_level"),
+            "is_high_risk": row.get("is_high_risk"),
+            "is_sanctioned": row.get("is_sanctioned"),
+            "current_balance": row.get("current_balance"),
+            "confirmed_risk_status": row.get("confirmed_risk_status"),
+            "confirmed_risk_type": row.get("confirmed_risk_type"),
+            "edge_type": row.get("edge_type"),
+            "strength": row.get("strength"),
+            "edge_value": row.get("edge_value"),
+        }
+        for row in rows[:limit]
+    ]
 
 
 @app.get("/shared/{source_cust_id}/{target_cust_id}")
 def shared(source_cust_id: int, target_cust_id: int, limit: int = Query(50, ge=1, le=500)):
-    low, high = sorted((source_cust_id, target_cust_id))
-    return query(
-        """
-        SELECT edge_type, edge_source, strength, edge_value, record_count, first_seen, last_seen
-        FROM graph_edges
-        WHERE source_cust_id = ? AND target_cust_id = ?
-        ORDER BY CASE strength WHEN 'Strong' THEN 0 ELSE 1 END, last_seen DESC
-        LIMIT ?
-        """,
-        [low, high, limit],
-    )
+    rows = [
+        row
+        for row in _build_neighbor_rows(source_cust_id)
+        if row["neighbor_cust_id"] == target_cust_id
+    ]
+    return _apply_neighbor_metadata(rows[:limit])
 
 
 @app.get("/confirmed-risk/{cust_id}")
 def confirmed_risk(cust_id: int):
-    """Check if a customer is in the Confirmed Risk Registry."""
-    rows = query(
+    rows = _legacy_query(
+        ["graph_nodes", "confirmed_risk_registry"],
         """
-        SELECT 
+        SELECT
             n.cust_id,
             n.cust_name,
             n.cust_type,
@@ -220,6 +897,8 @@ def confirmed_risk(cust_id: int):
         WHERE n.cust_id = ? AND n.confirmed_risk_status IS NOT NULL
         """,
         [cust_id],
+        "CONFIRMED_RISK_REGISTRY_UNAVAILABLE",
+        "Confirmed-risk lookup requires graph_nodes and confirmed_risk_registry tables.",
     )
     if not rows:
         return {
@@ -232,10 +911,10 @@ def confirmed_risk(cust_id: int):
 
 @app.get("/confirmed-risk")
 def list_confirmed_risk(limit: int = Query(100, ge=1, le=1000)):
-    """List all customers in the Confirmed Risk Registry."""
-    return query(
+    return _legacy_query(
+        ["graph_nodes", "confirmed_risk_registry"],
         """
-        SELECT 
+        SELECT
             n.cust_id,
             n.cust_name,
             n.cust_type,
@@ -249,6 +928,8 @@ def list_confirmed_risk(limit: int = Query(100, ge=1, le=1000)):
         LIMIT ?
         """,
         [limit],
+        "CONFIRMED_RISK_REGISTRY_UNAVAILABLE",
+        "Confirmed-risk listing requires graph_nodes and confirmed_risk_registry tables.",
     )
 
 
@@ -259,9 +940,10 @@ def path(
     max_depth: int = Query(4, ge=1, le=6),
     limit: int = Query(10, ge=1, le=100),
 ):
-    assert_expandable(source_cust_id)
-    assert_expandable(target_cust_id)
-    return query(
+    _assert_legacy_path_expandable(source_cust_id)
+    _assert_legacy_path_expandable(target_cust_id)
+    return _legacy_query(
+        ["graph_edges"],
         """
         WITH RECURSIVE undirected AS (
             SELECT source_cust_id AS from_id, target_cust_id AS to_id
@@ -296,4 +978,6 @@ def path(
         LIMIT ?
         """,
         [source_cust_id, source_cust_id, source_cust_id, max_depth, target_cust_id, limit],
+        "PATH_TRAVERSAL_UNAVAILABLE",
+        "Path traversal requires the legacy graph_edges table.",
     )

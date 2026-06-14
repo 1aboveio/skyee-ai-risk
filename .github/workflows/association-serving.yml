@@ -1,0 +1,90 @@
+name: Association Serving
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/association-serving.yml"
+      - "scripts/duckdb_graph_query.py"
+      - "scripts/duckdb_graph_service.py"
+      - "scripts/duckdb_snapshot_refresh.py"
+      - "scripts/refresh_remote_graph_duckdb.sh"
+      - "tests/test_duckdb_graph_service.py"
+      - "tests/test_duckdb_snapshot_refresh.py"
+      - "frontend/graph-demo/**"
+      - "docs/adr/0006-association-inverted-index-serving.md"
+      - "docs/tests/2026-06-14-association-inverted-index-serving-criteria.md"
+  push:
+    branches:
+      - dev
+
+jobs:
+  duckdb-serving:
+    name: DuckDB serving tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Smoke refresh CLI import path
+        run: |
+          uv run \
+            --with duckdb==1.0.0 \
+            --with typer \
+            python -m scripts.duckdb_snapshot_refresh --help
+      - name: Run service and snapshot tests
+        run: |
+          uv run \
+            --with duckdb==1.0.0 \
+            --with fastapi \
+            --with httpx \
+            --with pytest \
+            --with typer \
+            python -m pytest -q \
+              tests/test_duckdb_graph_service.py \
+              tests/test_duckdb_snapshot_refresh.py
+
+  graph-demo:
+    name: Graph demo checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: graph_demo
+          POSTGRES_PASSWORD: graph_demo
+          POSTGRES_DB: graph_demo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: frontend/graph-demo
+    env:
+      DATABASE_URL: postgres://graph_demo:graph_demo@localhost:5432/graph_demo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/graph-demo/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Lint
+        run: pnpm lint
+      - name: Prepare E2E database
+        run: |
+          pnpm exec prisma db push
+          pnpm exec tsx e2e/helpers/seed.ts
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run graph demo and workbench e2e
+        run: pnpm test:e2e -- graph-demo.spec.ts workbench.spec.ts

@@ -13,7 +13,7 @@ Examples:
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import duckdb
 import typer
@@ -25,6 +25,46 @@ PRESTO_USER = "jonas"
 PRESTO_CATALOG = "hive"
 PRESTO_SCHEMA = "usr_skyee_mw"
 DEFAULT_DB_PATH = "data/skyee_graph.duckdb"
+ASSOCIATION_ATTRIBUTE_LINK_TABLE = "association_attribute_links"
+ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE = {
+    "mobile_phone": "same_mobile_phone",
+    "email": "same_email",
+    "business_name": "same_business_name",
+    "person_name": "same_person_name",
+    "id_no": "same_id_no",
+    "address": "same_address",
+    "store_url": "same_store_url",
+    "ip": "same_ip",
+}
+ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE = {
+    "mobile_phone": "SAME_PHONE",
+    "email": "SAME_EMAIL",
+    "business_name": "SAME_BUSINESS_NAME",
+    "person_name": "SAME_PERSON_NAME",
+    "id_no": "SAME_ID_NO",
+    "address": "SAME_ADDRESS",
+    "store_url": "SAME_STORE_URL",
+    "ip": "SAME_IP",
+}
+ALLOWED_SAME_ATTRIBUTE_TYPES = set(ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.values())
+SAME_ATTRIBUTE_TO_ASSOCIATION_ATTRIBUTE = {
+    same_attribute: attribute_type
+    for attribute_type, same_attribute in ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.items()
+}
+ASSOCIATION_LINK_COLUMNS = [
+    "src_attr_type",
+    "src_attr_value",
+    "src_attr_hash",
+    "dst_attr_type",
+    "dst_attr_value",
+    "dst_attr_hash",
+    "attr_link_type",
+    "source_table",
+    "source_field",
+    "first_seen",
+    "last_seen",
+    "record_count",
+]
 
 NODE_COLUMNS = [
     "cust_id",
@@ -136,7 +176,191 @@ def create_schema(con: duckdb.DuckDBPyConnection, replace: bool):
             dt DATE
         )
         """
+        )
+
+
+def create_association_schema(con: duckdb.DuckDBPyConnection, replace: bool):
+    if replace:
+        con.execute(f"DROP TABLE IF EXISTS {ASSOCIATION_ATTRIBUTE_LINK_TABLE}")
+    con.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {ASSOCIATION_ATTRIBUTE_LINK_TABLE} (
+            {', '.join(f'{col} VARCHAR' for col in ASSOCIATION_LINK_COLUMNS)}
+        )
+        """
     )
+
+
+def create_association_indexes(con: duckdb.DuckDBPyConnection):
+    con.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{ASSOCIATION_ATTRIBUTE_LINK_TABLE}_src_type_value "
+        f"ON {ASSOCIATION_ATTRIBUTE_LINK_TABLE}(src_attr_type, src_attr_value)"
+    )
+    con.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{ASSOCIATION_ATTRIBUTE_LINK_TABLE}_dst_type_value "
+        f"ON {ASSOCIATION_ATTRIBUTE_LINK_TABLE}(dst_attr_type, dst_attr_value)"
+    )
+
+
+def _rows_as_dicts(con: duckdb.DuckDBPyConnection, sql: str, params: list | None = None):
+    result = con.execute(sql, params or [])
+    columns = [desc[0] for desc in result.description]
+    return [dict(zip(columns, row)) for row in result.fetchall()]
+
+
+def _derive_same_attribute_type(attribute_type: str | None) -> str | None:
+    if not attribute_type:
+        return None
+    return ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.get(attribute_type)
+
+
+def _derive_legacy_edge_type(attribute_type: str | None) -> str | None:
+    if not attribute_type:
+        return None
+    return ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE.get(attribute_type)
+
+
+def _resolve_same_attribute_filter(same_attribute_type: str | None) -> str | None:
+    if same_attribute_type is None:
+        return None
+    return SAME_ATTRIBUTE_TO_ASSOCIATION_ATTRIBUTE.get(same_attribute_type)
+
+
+def _customer_lookup_base_sql() -> tuple[str, str]:
+    return (
+        """
+        WITH source_attributes AS (
+            SELECT DISTINCT
+                CASE
+                    WHEN a.src_attr_type = 'customer' THEN a.dst_attr_type
+                    ELSE a.src_attr_type
+                END AS shared_attr_type,
+                CASE
+                    WHEN a.src_attr_type = 'customer' THEN CAST(a.dst_attr_value AS VARCHAR)
+                    ELSE CAST(a.src_attr_value AS VARCHAR)
+                END AS shared_attr_value,
+                a.attr_link_type AS first_link_type,
+                a.source_table AS first_source_table,
+                a.source_field AS first_source_field,
+                a.first_seen AS first_first_seen,
+                a.last_seen AS first_last_seen,
+                a.record_count AS first_record_count
+            FROM association_attribute_links AS a
+            WHERE
+                (a.src_attr_type = 'customer' AND CAST(a.src_attr_value AS VARCHAR) = CAST(? AS VARCHAR))
+                OR
+                (a.dst_attr_type = 'customer' AND CAST(a.dst_attr_value AS VARCHAR) = CAST(? AS VARCHAR))
+        ),
+        linked_neighbors AS (
+            SELECT DISTINCT
+                CASE
+                    WHEN b.src_attr_type = 'customer'
+                        THEN CAST(b.src_attr_value AS VARCHAR)
+                    WHEN b.dst_attr_type = 'customer'
+                        THEN CAST(b.dst_attr_value AS VARCHAR)
+                    ELSE NULL
+                END AS neighbor_cust_id,
+                sa.shared_attr_type,
+                sa.shared_attr_value,
+                sa.first_link_type,
+                sa.first_source_table,
+                sa.first_source_field,
+                sa.first_first_seen,
+                sa.first_last_seen,
+                sa.first_record_count,
+                b.source_table AS second_source_table,
+                b.source_field AS second_source_field,
+                b.first_seen AS second_first_seen,
+                b.last_seen AS second_last_seen,
+                b.record_count AS second_record_count
+            FROM source_attributes AS sa
+            JOIN association_attribute_links AS b
+                ON (
+                    b.src_attr_type = sa.shared_attr_type
+                    AND CAST(b.src_attr_value AS VARCHAR) = sa.shared_attr_value
+                    AND b.dst_attr_type = 'customer'
+                )
+                OR (
+                    b.dst_attr_type = sa.shared_attr_type
+                    AND CAST(b.dst_attr_value AS VARCHAR) = sa.shared_attr_value
+                    AND b.src_attr_type = 'customer'
+                )
+            WHERE
+                CAST(
+                    CASE
+                        WHEN b.src_attr_type = 'customer'
+                            THEN CAST(b.src_attr_value AS VARCHAR)
+                        WHEN b.dst_attr_type = 'customer'
+                            THEN CAST(b.dst_attr_value AS VARCHAR)
+                        ELSE NULL
+                    END AS VARCHAR
+                ) <> CAST(? AS VARCHAR)
+        )
+        """,
+        """
+        SELECT
+            CAST(neighbor_cust_id AS BIGINT) AS neighbor_cust_id,
+            CAST(? AS BIGINT) AS source_cust_id,
+            CAST(neighbor_cust_id AS BIGINT) AS target_cust_id,
+            shared_attr_type,
+            shared_attr_value,
+            first_link_type AS attr_link_type,
+            COALESCE(first_source_table, second_source_table) AS edge_source,
+            COALESCE(first_source_field, second_source_field) AS edge_source_field,
+            COALESCE(second_last_seen, first_last_seen) AS last_seen,
+            COALESCE(second_first_seen, first_first_seen) AS first_seen,
+            COALESCE(second_record_count, first_record_count, '0') AS record_count,
+            'Strong' AS strength
+        FROM linked_neighbors
+        """,
+    )
+
+
+def query_association_neighbors(
+    con: duckdb.DuckDBPyConnection,
+    cust_id: int,
+    same_attribute_type: str | None = None,
+    limit: int | None = 1000,
+) -> list[dict[str, Any]]:
+    same_attribute = _resolve_same_attribute_filter(same_attribute_type)
+    if same_attribute_type is not None and same_attribute is None:
+        allowed = ", ".join(sorted(ALLOWED_SAME_ATTRIBUTE_TYPES))
+        raise ValueError(
+            f"Unsupported same_attribute_type: {same_attribute_type}. "
+            f"Allowed values: {allowed}"
+        )
+
+    pre_sql, select_sql = _customer_lookup_base_sql()
+    where_clause = ""
+    params: list[Any] = [str(cust_id), str(cust_id), str(cust_id), cust_id]
+    if same_attribute is not None:
+        where_clause = "WHERE shared_attr_type = ?"
+        params.append(same_attribute)
+    if limit is not None:
+        params.append(limit)
+        order_and_limit = "ORDER BY COALESCE(last_seen, first_seen) DESC NULLS LAST, shared_attr_type, neighbor_cust_id LIMIT ?"
+    else:
+        order_and_limit = "ORDER BY COALESCE(last_seen, first_seen) DESC NULLS LAST, shared_attr_type, neighbor_cust_id"
+
+    rows = _rows_as_dicts(
+        con,
+        f"""
+        {pre_sql}
+        {select_sql}
+        {where_clause}
+        {order_and_limit}
+        """,
+        params,
+    )
+
+    for row in rows:
+        row_same_type = _derive_same_attribute_type(row["shared_attr_type"])
+        row_edge_type = _derive_legacy_edge_type(row["shared_attr_type"])
+        row["same_attribute_type"] = row_same_type or row["shared_attr_type"]
+        row["edge_type"] = row_edge_type or row["shared_attr_type"]
+        row["edge_value"] = row["shared_attr_value"]
+        row["edge_id"] = f"{cust_id}:{row['neighbor_cust_id']}:{row['shared_attr_type']}:{row['shared_attr_value']}"
+    return rows
 
 
 def create_indexes(con: duckdb.DuckDBPyConnection):
@@ -298,6 +522,80 @@ def sync(
 
 def print_query(con: duckdb.DuckDBPyConnection, sql: str, params: list, limit: int):
     echo_rows(rows_as_dicts(con, sql, params + [limit]))
+
+
+@app.command("sync-association-links")
+def sync_association_links(
+    links_path: str = typer.Option(..., "--links-path"),
+    db_path: str = typer.Option(DEFAULT_DB_PATH, "--db-path"),
+    replace: bool = typer.Option(True, "--replace/--append"),
+    build_indexes: bool = typer.Option(True, "--build-indexes/--no-build-indexes"),
+):
+    """Build local DuckDB from association attribute-link parquet snapshots."""
+    con = duckdb_connection(db_path)
+    create_association_schema(con, replace=replace)
+    typer.echo("loading association_attribute_links", err=True)
+    con.execute(
+        f"""
+        INSERT INTO {ASSOCIATION_ATTRIBUTE_LINK_TABLE} (
+            src_attr_type, src_attr_value, src_attr_hash, dst_attr_type,
+            dst_attr_value, dst_attr_hash, attr_link_type, source_table,
+            source_field, first_seen, last_seen, record_count
+        )
+        SELECT
+            src_attr_type, src_attr_value, src_attr_hash, dst_attr_type,
+            dst_attr_value, dst_attr_hash, attr_link_type, source_table,
+            source_field, first_seen, last_seen, record_count
+        FROM read_parquet(?)
+        """,
+        [links_path],
+    )
+    if build_indexes:
+        typer.echo("creating lookup indexes", err=True)
+        create_association_indexes(con)
+    counts = rows_as_dicts(
+        con,
+        f"SELECT COUNT(*) AS count FROM {ASSOCIATION_ATTRIBUTE_LINK_TABLE}",
+    )
+    echo_rows(counts)
+    con.close()
+
+
+@app.command("neighbors-association")
+def neighbors_association(
+    cust_id: int,
+    db_path: str = typer.Option(DEFAULT_DB_PATH, "--db-path"),
+    same_attribute_type: str | None = typer.Option(None, "--same-attribute-type"),
+    limit: int = typer.Option(50, "--limit"),
+):
+    """List two-hop association neighbors for a customer."""
+    con = duckdb_connection(db_path)
+    rows = query_association_neighbors(
+        con,
+        cust_id=cust_id,
+        same_attribute_type=same_attribute_type,
+        limit=limit,
+    )
+    echo_rows(rows)
+    con.close()
+
+
+@app.command("stats-association")
+def stats_association(db_path: str = typer.Option(DEFAULT_DB_PATH, "--db-path")):
+    """Show association-link snapshot counts."""
+    con = duckdb_connection(db_path)
+    echo_rows(
+        rows_as_dicts(
+            con,
+            f"""
+            SELECT
+                'association_attribute_links' AS item,
+                COUNT(*) AS count
+            FROM {ASSOCIATION_ATTRIBUTE_LINK_TABLE}
+            """
+        )
+    )
+    con.close()
 
 
 @app.command()
