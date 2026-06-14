@@ -77,6 +77,7 @@ def _create_graph_nodes(path: Path, rows: list[dict]) -> None:
         """
         CREATE TABLE graph_nodes (
             cust_id BIGINT,
+            cust_type VARCHAR,
             cust_name VARCHAR,
             risk_level VARCHAR,
             is_high_risk VARCHAR,
@@ -98,14 +99,15 @@ def _create_graph_nodes(path: Path, rows: list[dict]) -> None:
     con.executemany(
         """
         INSERT INTO graph_nodes (
-            cust_id, cust_name, risk_level, is_high_risk, is_sanctioned,
+            cust_id, cust_type, cust_name, risk_level, is_high_risk, is_sanctioned,
             current_balance, confirmed_risk_status, confirmed_risk_type
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
                 row["cust_id"],
+                row.get("cust_type", "COMPANY"),
                 row["cust_name"],
                 row["risk_level"],
                 row["is_high_risk"],
@@ -120,6 +122,90 @@ def _create_graph_nodes(path: Path, rows: list[dict]) -> None:
     con.executemany(
         "INSERT INTO graph_node_degrees (cust_id, node_degree) VALUES (?, ?)",
         [(row["cust_id"], row.get("node_degree", 0)) for row in rows],
+    )
+    con.close()
+
+
+def _create_confirmed_risk_registry(path: Path, rows: list[dict]) -> None:
+    con = duckdb.connect(str(path))
+    con.execute("DROP TABLE IF EXISTS confirmed_risk_registry")
+    con.execute(
+        """
+        CREATE TABLE confirmed_risk_registry (
+            subject_id BIGINT,
+            source_file VARCHAR,
+            source_label VARCHAR,
+            source_bad_type VARCHAR,
+            ingested_at TIMESTAMP
+        )
+        """
+    )
+    con.executemany(
+        """
+        INSERT INTO confirmed_risk_registry (
+            subject_id, source_file, source_label, source_bad_type, ingested_at
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                row["subject_id"],
+                row["source_file"],
+                row["source_label"],
+                row["source_bad_type"],
+                row["ingested_at"],
+            )
+            for row in rows
+        ],
+    )
+    con.close()
+
+
+def _create_graph_edges(path: Path, rows: list[dict]) -> None:
+    con = duckdb.connect(str(path))
+    con.execute("DROP TABLE IF EXISTS graph_edges")
+    con.execute(
+        """
+        CREATE TABLE graph_edges (
+            edge_id BIGINT,
+            source_cust_id BIGINT,
+            target_cust_id BIGINT,
+            edge_type VARCHAR,
+            edge_value VARCHAR,
+            edge_source VARCHAR,
+            strength VARCHAR,
+            first_seen TIMESTAMP,
+            last_seen TIMESTAMP,
+            record_count INTEGER,
+            dt DATE
+        )
+        """
+    )
+    timestamp = datetime(2026, 6, 1)
+    con.executemany(
+        """
+        INSERT INTO graph_edges (
+            edge_id, source_cust_id, target_cust_id, edge_type, edge_value,
+            edge_source, strength, first_seen, last_seen, record_count, dt
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                row["edge_id"],
+                row["source_cust_id"],
+                row["target_cust_id"],
+                row.get("edge_type", "SAME_EMAIL"),
+                row.get("edge_value", "value"),
+                row.get("edge_source", "source"),
+                row.get("strength", "Strong"),
+                timestamp,
+                timestamp,
+                row.get("record_count", 1),
+                timestamp.date(),
+            )
+            for row in rows
+        ],
     )
     con.close()
 
@@ -348,3 +434,98 @@ def test_query_helper_rejects_invalid_same_attribute_type(tmp_path):
             )
     finally:
         con.close()
+
+
+def test_confirmed_risk_uses_legacy_registry_when_available(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.confirmed_risk_legacy_registry
+    # @level integration
+    db_path = tmp_path / "graph-confirmed-risk.duckdb"
+    _create_snapshot(db_path, [])
+    _create_graph_nodes(
+        db_path,
+        [
+            {
+                "cust_id": 8001,
+                "cust_type": "COMPANY",
+                "cust_name": "Confirmed Customer",
+                "risk_level": "HIGH",
+                "is_high_risk": "Y",
+                "is_sanctioned": "N",
+                "current_balance": 50.0,
+                "confirmed_risk_status": "confirmed",
+                "confirmed_risk_type": "bad_customer",
+            }
+        ],
+    )
+    _create_confirmed_risk_registry(
+        db_path,
+        [
+            {
+                "subject_id": 8001,
+                "source_file": "case.xlsx",
+                "source_label": "bad_customer",
+                "source_bad_type": "fraud",
+                "ingested_at": datetime(2026, 6, 1),
+            }
+        ],
+    )
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/confirmed-risk/8001")
+        listing = client.get("/confirmed-risk?limit=10")
+
+    assert response.status_code == 200
+    assert response.json()["cust_id"] == 8001
+    assert response.json()["source_bad_type"] == "fraud"
+    assert listing.status_code == 200
+    assert listing.json()[0]["cust_id"] == 8001
+
+
+def test_confirmed_risk_returns_explicit_unavailable_without_registry(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.confirmed_risk_legacy_unavailable
+    # @level integration
+    db_path = tmp_path / "graph-no-registry.duckdb"
+    _create_snapshot(db_path, [])
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/confirmed-risk/8001")
+
+    assert response.status_code == 501
+    assert response.json()["detail"]["code"] == "CONFIRMED_RISK_REGISTRY_UNAVAILABLE"
+
+
+def test_path_uses_legacy_multihop_edges_when_available(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.path_legacy_graph_edges
+    # @level integration
+    db_path = tmp_path / "graph-path.duckdb"
+    _create_snapshot(db_path, [])
+    _create_graph_edges(
+        db_path,
+        [
+            {"edge_id": 1, "source_cust_id": 9001, "target_cust_id": 9002},
+            {"edge_id": 2, "source_cust_id": 9002, "target_cust_id": 9003},
+        ],
+    )
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/path/9001/9003?max_depth=2&limit=10")
+
+    assert response.status_code == 200
+    assert response.json()[0] == {"path_text": "9001 -> 9002 -> 9003", "depth": 2}
+
+
+def test_path_returns_explicit_unavailable_without_graph_edges(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.path_legacy_unavailable
+    # @level integration
+    db_path = tmp_path / "graph-no-edges.duckdb"
+    _create_snapshot(db_path, [])
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/path/9001/9003?max_depth=2")
+
+    assert response.status_code == 501
+    assert response.json()["detail"]["code"] == "PATH_TRAVERSAL_UNAVAILABLE"

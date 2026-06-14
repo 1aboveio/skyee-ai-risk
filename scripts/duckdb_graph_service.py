@@ -99,6 +99,33 @@ def _query(sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         con.close()
 
 
+def _legacy_query(
+    required_tables: list[str],
+    sql: str,
+    params: list[Any] | None,
+    unavailable_code: str,
+    unavailable_message: str,
+) -> list[dict[str, Any]]:
+    _ensure_snapshot_exists()
+    con = duckdb.connect(get_db_path(), read_only=True)
+    try:
+        missing = [table for table in required_tables if not _table_exists(con, table)]
+        if missing:
+            raise HTTPException(
+                status_code=501,
+                detail={
+                    "code": unavailable_code,
+                    "message": unavailable_message,
+                    "missing_tables": missing,
+                },
+            )
+        result = con.execute(sql, params or [])
+        columns = [desc[0] for desc in result.description]
+        return [dict(zip(columns, row)) for row in result.fetchall()]
+    finally:
+        con.close()
+
+
 def _customer_lookup_base_query() -> tuple[str, str]:
     return (
         """
@@ -549,16 +576,58 @@ def shared(source_cust_id: int, target_cust_id: int, limit: int = Query(50, ge=1
 
 @app.get("/confirmed-risk/{cust_id}")
 def confirmed_risk(cust_id: int):
-    return {
-        "cust_id": cust_id,
-        "confirmed_risk_status": None,
-        "message": "Association Lookup no longer stores confirmed risk in DuckDB snapshot.",
-    }
+    rows = _legacy_query(
+        ["graph_nodes", "confirmed_risk_registry"],
+        """
+        SELECT
+            n.cust_id,
+            n.cust_name,
+            n.cust_type,
+            n.confirmed_risk_status,
+            n.confirmed_risk_type,
+            r.source_file,
+            r.source_label,
+            r.source_bad_type,
+            r.ingested_at
+        FROM graph_nodes n
+        LEFT JOIN confirmed_risk_registry r ON n.cust_id = r.subject_id
+        WHERE n.cust_id = ? AND n.confirmed_risk_status IS NOT NULL
+        """,
+        [cust_id],
+        "CONFIRMED_RISK_REGISTRY_UNAVAILABLE",
+        "Confirmed-risk lookup requires graph_nodes and confirmed_risk_registry tables.",
+    )
+    if not rows:
+        return {
+            "cust_id": cust_id,
+            "confirmed_risk_status": None,
+            "message": "Customer not found in Confirmed Risk Registry",
+        }
+    return rows[0]
 
 
 @app.get("/confirmed-risk")
 def list_confirmed_risk(limit: int = Query(100, ge=1, le=1000)):
-    return []
+    return _legacy_query(
+        ["graph_nodes", "confirmed_risk_registry"],
+        """
+        SELECT
+            n.cust_id,
+            n.cust_name,
+            n.cust_type,
+            n.confirmed_risk_status,
+            n.confirmed_risk_type,
+            r.source_file,
+            r.source_bad_type
+        FROM graph_nodes n
+        JOIN confirmed_risk_registry r ON n.cust_id = r.subject_id
+        ORDER BY n.cust_id
+        LIMIT ?
+        """,
+        [limit],
+        "CONFIRMED_RISK_REGISTRY_UNAVAILABLE",
+        "Confirmed-risk listing requires graph_nodes and confirmed_risk_registry tables.",
+    )
 
 
 @app.get("/path/{source_cust_id}/{target_cust_id}")
@@ -568,11 +637,42 @@ def path(
     max_depth: int = Query(4, ge=1, le=6),
     limit: int = Query(10, ge=1, le=100),
 ):
-    # V1 intentionally performs only one customer -> shared attribute -> customer hop.
-    _ = max_depth
-    if source_cust_id == target_cust_id:
-        return [{"path_text": f"{source_cust_id} -> {target_cust_id}", "depth": 0}]
-    shared_rows = _build_neighbor_rows(source_cust_id)
-    if any(row["neighbor_cust_id"] == target_cust_id for row in shared_rows):
-        return [{"path_text": f"{source_cust_id} -> {target_cust_id}", "depth": 1}]
-    return []
+    return _legacy_query(
+        ["graph_edges"],
+        """
+        WITH RECURSIVE undirected AS (
+            SELECT source_cust_id AS from_id, target_cust_id AS to_id
+            FROM graph_edges
+            UNION ALL
+            SELECT target_cust_id AS from_id, source_cust_id AS to_id
+            FROM graph_edges
+        ),
+        paths(node_id, path_text, path_key, depth) AS (
+            SELECT
+                to_id,
+                CAST(? AS VARCHAR) || ' -> ' || CAST(to_id AS VARCHAR),
+                ',' || CAST(? AS VARCHAR) || ',' || CAST(to_id AS VARCHAR) || ',',
+                1
+            FROM undirected
+            WHERE from_id = ?
+            UNION ALL
+            SELECT
+                u.to_id,
+                p.path_text || ' -> ' || CAST(u.to_id AS VARCHAR),
+                p.path_key || CAST(u.to_id AS VARCHAR) || ',',
+                p.depth + 1
+            FROM paths p
+            JOIN undirected u ON u.from_id = p.node_id
+            WHERE p.depth < ?
+              AND instr(p.path_key, ',' || CAST(u.to_id AS VARCHAR) || ',') = 0
+        )
+        SELECT path_text, depth
+        FROM paths
+        WHERE node_id = ?
+        ORDER BY depth
+        LIMIT ?
+        """,
+        [source_cust_id, source_cust_id, source_cust_id, max_depth, target_cust_id, limit],
+        "PATH_TRAVERSAL_UNAVAILABLE",
+        "Path traversal requires the legacy graph_edges table.",
+    )

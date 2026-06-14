@@ -2,7 +2,7 @@
   "runSlug": "association-inverted-index-serving",
   "skill": "resolve-prd",
   "createdAt": "2026-06-14T08:25:50Z",
-  "updatedAt": "2026-06-14T09:00:34Z",
+  "updatedAt": "2026-06-14T09:11:48Z",
   "models": {
     "implementation": "gpt-5.3-codex",
     "review": "gpt-5.4",
@@ -31,10 +31,11 @@
       "pr": "#36",
       "branch": "issue-30-attribute-link-core",
       "lastVerdict": "NEEDS_CHANGES",
-      "reviewRounds": 2,
+      "reviewRounds": 3,
       "blocker": null,
       "oracleConsults": [
-        "Skipped after second NEEDS_CHANGES because remaining finding was a mechanical same_attribute_type validation bug with direct regression coverage."
+        "Skipped after second NEEDS_CHANGES because remaining finding was a mechanical same_attribute_type validation bug with direct regression coverage.",
+        "gpt-5.5 advised preserving legacy /confirmed-risk and /path behavior conditionally when legacy tables exist, returning explicit 501 when optional legacy tables are unavailable."
       ],
       "worker": "019ec545-b6c7-76c3-a935-052f2bad9565"
     },
