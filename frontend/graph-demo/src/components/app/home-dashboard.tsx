@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   ArrowRightIcon,
@@ -7,12 +9,12 @@ import {
   SearchIcon,
   ShieldCheckIcon,
 } from "lucide-react";
-
 import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { GraphIdentitySession } from "@/lib/auth/identity-session";
-import { t, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
 import type { DictionaryKey } from "@/lib/i18n/keys";
+import { useLocale } from "@/lib/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 
 type ModuleConfig = {
@@ -52,7 +54,9 @@ const workflowItems: DictionaryKey[] = [
   "adHocInvestigation",
 ];
 
-export function HomeDashboard({ session, locale }: { session: GraphIdentitySession; locale: Locale }) {
+export function HomeDashboard({ session }: { session: GraphIdentitySession }) {
+  const { locale } = useLocale();
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 md:px-6 md:py-8">
       <section className="flex flex-col gap-4 border-b pb-6 md:flex-row md:items-end md:justify-between">

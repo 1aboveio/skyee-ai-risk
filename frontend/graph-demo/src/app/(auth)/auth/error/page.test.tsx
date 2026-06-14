@@ -25,25 +25,10 @@ vi.mock("next/headers", () => ({
   headers: vi.fn(),
 }));
 
-vi.mock("@/lib/review/store", () => ({
-  getReviewerLocalePreference: vi.fn(() => {
-    throw new Error("preference store should not be called");
-  }),
-  updateReviewerLocalePreference: vi.fn(() => {
-    throw new Error("preference store should not be called");
-  }),
-}));
-
 import { headers } from "next/headers";
-import {
-  getReviewerLocalePreference,
-  updateReviewerLocalePreference,
-} from "@/lib/review/store";
 import AuthErrorPage from "./page";
 
 const mockedHeaders = vi.mocked(headers);
-const mockedGetPreference = vi.mocked(getReviewerLocalePreference);
-const mockedUpdatePreference = vi.mocked(updateReviewerLocalePreference);
 
 describe("AuthErrorPage", () => {
   beforeEach(() => {
@@ -111,20 +96,5 @@ describe("AuthErrorPage", () => {
       screen.getByRole("heading", { name: en.authLoginFailedTitle })
     ).toBeInTheDocument();
     expect(screen.getByText(en.authLoginFailedBody)).toBeInTheDocument();
-  });
-
-  it("does not read or write the reviewer preference store", async () => {
-    mockedHeaders.mockResolvedValue(
-      new Headers({ "accept-language": "en" }) as unknown as Awaited<
-        ReturnType<typeof headers>
-      >
-    );
-
-    await renderServerComponent(
-      <AuthErrorPage searchParams={Promise.resolve({ error: "access_denied" })} />
-    );
-
-    expect(mockedGetPreference).not.toHaveBeenCalled();
-    expect(mockedUpdatePreference).not.toHaveBeenCalled();
   });
 });

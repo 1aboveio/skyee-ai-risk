@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   ClipboardCheckIcon,
@@ -7,11 +9,11 @@ import {
   ShieldCheckIcon,
   type LucideIcon,
 } from "lucide-react";
-
 import { Badge } from "@/components/ui/badge";
 import type { GraphIdentitySession } from "@/lib/auth/identity-session";
-import { t, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
 import type { DictionaryKey } from "@/lib/i18n/keys";
+import { useLocale } from "@/lib/i18n/locale-provider";
 import { cn } from "@/lib/utils";
 import { LanguageSwitcher } from "./language-switcher";
 
@@ -34,13 +36,12 @@ export function AppShell({
   active,
   children,
   session,
-  locale,
 }: {
   active: AppModule;
   children: React.ReactNode;
   session: GraphIdentitySession;
-  locale: Locale;
 }) {
+  const { locale } = useLocale();
   return (
     <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-sidebar-border bg-sidebar lg:flex lg:flex-col">
