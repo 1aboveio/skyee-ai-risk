@@ -52,7 +52,7 @@ export interface TransactionFilters {
 interface PayOrderRow extends mysql.RowDataPacket {
   PAY_ORDER_ID: string;
   CUST_ID: string;
-  ORDER_NO: string | null;
+  FX_BIZ_ORDER_NO: string | null;
   SETTLE_AMT: number | string | null;
   SETTLE_CURR_CD: string | null;
   PAYMENT_STATUS: string | null;
@@ -135,7 +135,7 @@ export async function getTransactionSummary(
   // No pmp_pay_details — those are line items and would double-count.
   const [payOrders, collOrders] = await Promise.all([
     query<PayOrderRow[]>(
-      `SELECT PAY_ORDER_ID, CUST_ID, ORDER_NO, SETTLE_AMT, SETTLE_CURR_CD,
+      `SELECT PAY_ORDER_ID, CUST_ID, FX_BIZ_ORDER_NO, SETTLE_AMT, SETTLE_CURR_CD,
               PAYMENT_STATUS, PAYMENT_TIME, NAME, CREATE_TIME
        FROM pmp_pay_order
        WHERE CUST_ID = ?`,
@@ -282,7 +282,7 @@ export async function getTransactionList(
     skipPayOrders
       ? Promise.resolve([] as PayOrderRow[])
       : query<PayOrderRow[]>(
-          `SELECT PAY_ORDER_ID, CUST_ID, ORDER_NO, SETTLE_AMT, SETTLE_CURR_CD,
+          `SELECT PAY_ORDER_ID, CUST_ID, FX_BIZ_ORDER_NO, SETTLE_AMT, SETTLE_CURR_CD,
                   PAYMENT_STATUS, PAYMENT_TIME, NAME, CREATE_TIME
            FROM pmp_pay_order
            ${payWhere}
@@ -313,7 +313,7 @@ export async function getTransactionList(
     return {
       id: row.PAY_ORDER_ID,
       custId: row.CUST_ID,
-      orderNo: row.ORDER_NO,
+      orderNo: row.FX_BIZ_ORDER_NO ?? String(row.PAY_ORDER_ID),
       direction: "OUTBOUND" as const,
       amount,
       currency,

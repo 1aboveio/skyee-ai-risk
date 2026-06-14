@@ -2,7 +2,7 @@
   "runSlug": "workbench-epic",
   "skill": "resolve-issues",
   "createdAt": "2026-06-14T00:00:00Z",
-  "updatedAt": "2026-06-14T00:00:00Z",
+  "updatedAt": "2026-06-14T06:00:00Z",
   "models": {
     "implementation": "mimo-v2.5-pro",
     "review": "kimi-for-coding",
@@ -12,15 +12,15 @@
   "iteration": 1,
   "epic": "#9",
   "units": [
-    { "id": "slice-1", "title": "Workbench shell with ad hoc snapshot", "status": "queued", "pr": null, "branch": null, "lastVerdict": null, "reviewRounds": 0, "blocker": null, "dependsOn": [], "oracleConsults": [] },
-    { "id": "slice-2", "title": "Source-backed Customer Profile and Risk Signals panels", "status": "queued", "pr": null, "branch": null, "lastVerdict": null, "reviewRounds": 0, "blocker": "depends on slice-1", "dependsOn": ["slice-1"], "oracleConsults": [] },
-    { "id": "slice-3", "title": "Forex Rate Service with cached daily rates", "status": "queued", "pr": null, "branch": null, "lastVerdict": null, "reviewRounds": 0, "blocker": "depends on slice-1", "dependsOn": ["slice-1"], "oracleConsults": [] },
-    { "id": "slice-4", "title": "Transaction Summary and cursor-backed Transaction List", "status": "queued", "pr": null, "branch": null, "lastVerdict": null, "reviewRounds": 0, "blocker": "depends on slice-2, slice-3", "dependsOn": ["slice-2", "slice-3"], "oracleConsults": [] },
-    { "id": "slice-5", "title": "Dice UI transaction table filters with SWR cache", "status": "queued", "pr": null, "branch": null, "lastVerdict": null, "reviewRounds": 0, "blocker": "depends on slice-4", "dependsOn": ["slice-4"], "oracleConsults": [] },
-    { "id": "slice-6", "title": "Risk Graph panel in the Review Evidence Package", "status": "queued", "pr": null, "branch": null, "lastVerdict": null, "reviewRounds": 0, "blocker": "depends on slice-1", "dependsOn": ["slice-1"], "oracleConsults": [] },
-    { "id": "slice-7", "title": "Workflow Human Review decisions with mandatory notes", "status": "queued", "pr": null, "branch": null, "lastVerdict": null, "reviewRounds": 0, "blocker": "depends on slice-1, slice-2, slice-4", "dependsOn": ["slice-1", "slice-2", "slice-4"], "oracleConsults": [] },
-    { "id": "slice-8", "title": "Evidence Timeline, Evidence Gaps, and AI Investigation Input panels", "status": "queued", "pr": null, "branch": null, "lastVerdict": null, "reviewRounds": 0, "blocker": "depends on slice-2, slice-4, slice-6", "dependsOn": ["slice-2", "slice-4", "slice-6"], "oracleConsults": [] },
-    { "id": "slice-9", "title": "End-to-end audit and regression coverage", "status": "queued", "pr": null, "branch": null, "lastVerdict": null, "reviewRounds": 0, "blocker": "depends on slice-5, slice-7, slice-8", "dependsOn": ["slice-5", "slice-7", "slice-8"], "oracleConsults": [] }
+    { "id": "slice-1", "title": "Workbench shell with ad hoc snapshot", "status": "merge-ready", "pr": "#19", "branch": "issue-10-workbench-shell", "lastVerdict": "APPROVE", "reviewRounds": 3, "blocker": null, "dependsOn": [], "oracleConsults": [] },
+    { "id": "slice-2", "title": "Source-backed Customer Profile and Risk Signals panels", "status": "merge-ready", "pr": "#21", "branch": "issue-15-customer-profile-risk-signals", "lastVerdict": "APPROVE", "reviewRounds": 3, "blocker": null, "dependsOn": ["slice-1"], "oracleConsults": [] },
+    { "id": "slice-3", "title": "Forex Rate Service with cached daily rates", "status": "merge-ready", "pr": "#22", "branch": "issue-14-forex-rate-service", "lastVerdict": "APPROVE", "reviewRounds": 2, "blocker": null, "dependsOn": ["slice-1"], "oracleConsults": [] },
+    { "id": "slice-4", "title": "Transaction Summary and cursor-backed Transaction List", "status": "merge-ready", "pr": "#23", "branch": "issue-16-transaction-summary-list", "lastVerdict": "APPROVE", "reviewRounds": 2, "blocker": null, "dependsOn": ["slice-2", "slice-3"], "oracleConsults": [] },
+    { "id": "slice-5", "title": "Dice UI transaction table filters with SWR cache", "status": "merge-ready", "pr": "#24", "branch": "issue-18-dice-ui-filters", "lastVerdict": "APPROVE", "reviewRounds": 2, "blocker": null, "dependsOn": ["slice-4"], "oracleConsults": [] },
+    { "id": "slice-6", "title": "Risk Graph panel in the Review Evidence Package", "status": "merge-ready", "pr": "#20", "branch": "issue-13-risk-graph-panel", "lastVerdict": "APPROVE", "reviewRounds": 2, "blocker": null, "dependsOn": ["slice-1"], "oracleConsults": [] },
+    { "id": "slice-7", "title": "Workflow Human Review decisions with mandatory notes", "status": "merge-ready", "pr": "#25", "branch": "issue-17-workflow-human-review", "lastVerdict": "APPROVE", "reviewRounds": 2, "blocker": null, "dependsOn": ["slice-1", "slice-2", "slice-4"], "oracleConsults": [] },
+    { "id": "slice-8", "title": "Evidence Timeline, Evidence Gaps, and AI Investigation Input panels", "status": "merge-ready", "pr": "#26", "branch": "issue-11-evidence-timeline-gaps", "lastVerdict": "APPROVE", "reviewRounds": 2, "blocker": null, "dependsOn": ["slice-2", "slice-4", "slice-6"], "oracleConsults": [] },
+    { "id": "slice-9", "title": "End-to-end audit and regression coverage", "status": "merge-ready", "pr": "#27", "branch": "issue-12-e2e-audit-coverage", "lastVerdict": "APPROVE", "reviewRounds": 2, "blocker": null, "dependsOn": ["slice-5", "slice-7", "slice-8"], "oracleConsults": [] }
   ],
   "decisions": []
 }
