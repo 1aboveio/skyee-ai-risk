@@ -2,9 +2,12 @@
 
 The job intentionally processes one graph attribute at a time. Some source
 tables contain millions of rows, so each attribute is normalized, deduped by
-customer/key, hot-key filtered, paired, and written before the next attribute.
+customer/key, hot-key filtered, and paired independently. Monthly evidence is
+then written in one final Hudi commit.
 
-Two association graph tables are maintained:
+Three association graph tables are maintained:
+  * dwd_graph_attr_index: monthly customer/key attribute index used to avoid
+    repeated raw history scans after bootstrap.
   * dwd_graph_edge_monthly: idempotent monthly edge evidence, partitioned by
     edge_type, edge_source, edge_field, and observed_month for reverse backfill
     overwrite without clobbering other specs.
@@ -12,12 +15,13 @@ Two association graph tables are maintained:
     first_seen can move backward without moving the Hudi record partition.
 
 Usage:
-    python dwd_graph_edges.py [--spark-remote <spark_connect_url>] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--bulk/--per-day] [--max-degree 100] [--snapshot-hudi-mode upsert] [--target all|monthly|snapshot]
+    python dwd_graph_edges.py [--spark-remote <spark_connect_url>] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--bulk/--per-day] [--max-degree 100] [--use-attr-index/--no-use-attr-index] [--write-attr-index/--no-write-attr-index] [--snapshot-hudi-mode upsert] [--target all|monthly|snapshot]
 """
 
 import sys
 import os
 from typing import Optional
+from functools import reduce
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -45,6 +49,7 @@ from pyspark.sql.functions import (
     max as spark_max,
     sum as spark_sum,
 )
+from pyspark.sql.utils import AnalysisException
 from typing_extensions import Annotated
 import typer
 import logging
@@ -55,6 +60,28 @@ logger = logging.getLogger(__name__)
 # A key with degree 100 already produces 4,950 pairs, so the default is
 # deliberately conservative and can be raised per backfill if needed.
 MAX_DEGREE = int(os.getenv("GRAPH_MAX_DEGREE", "100"))
+
+
+class DwdGraphAttrIndexEtl(Etl):
+    """Monthly shared-attribute index used to avoid repeated raw history scans."""
+
+    src_db = None
+    src_tbl = None
+    dst_db = "usr_skyee_mw"
+    dst_tbl = "dwd_graph_attr_index"
+    id = "attr_month_id"
+    ts = "etl_ts"
+    par_cols = ["edge_type", "edge_source", "edge_field", "observed_month"]
+    path = "/user/hive/warehouse/usr_skyee_mw.db/dwd_graph_attr_index"
+    table_type = "hudi_table"
+    hudi_mode = "insert_overwrite"
+    concurrency_mode = "SINGLE_WRITER"
+
+    def extract(self, start_date: str = None, end_date: str = None) -> DataFrame:
+        return self.spark.createDataFrame([], "attr_month_id long")
+
+    def transform(self, df: DataFrame) -> DataFrame:
+        raise NotImplementedError("DwdGraphAttrIndexEtl only loads prepared frames.")
 
 
 class DwdGraphEdgesEtl(Etl):
@@ -72,9 +99,21 @@ class DwdGraphEdgesEtl(Etl):
     hudi_mode = "insert_overwrite"
     concurrency_mode = "SINGLE_WRITER"
 
-    def __init__(self, *args, max_degree: int = MAX_DEGREE, **kwargs):
+    def __init__(
+        self,
+        *args,
+        max_degree: int = MAX_DEGREE,
+        use_attr_index: bool = True,
+        write_attr_index: bool = True,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.max_degree = max_degree
+        self.use_attr_index = use_attr_index
+        self.write_attr_index = write_attr_index
+        self._attr_index_df = None
+        self._attr_index_specs = set()
+        self._attr_index_loaded = False
 
     def extract(self, start_date: str = None, end_date: str = None) -> DataFrame:
         db = "usr_skyee_mw"
@@ -191,12 +230,26 @@ class DwdGraphEdgesEtl(Etl):
             .agg(
                 first("edge_value", ignorenulls=True).alias("edge_value"),
                 spark_min("create_time").alias("create_time"),
-                spark_max("create_time").alias("_latest_create_time"),
                 spark_max("lst_upd_time").alias("lst_upd_time"),
                 spark_max(coalesce(col("create_time"), col("lst_upd_time"))).alias(
                     "_change_time"
                 ),
                 spark_sum(lit(1)).cast("int").alias("_record_count"),
+            )
+        )
+
+    @staticmethod
+    def _aggregate_precounted(attrs: DataFrame) -> DataFrame:
+        return (
+            attrs.groupBy("cust_id", "_join_key", "edge_type", "edge_source", "strength")
+            .agg(
+                first("edge_value", ignorenulls=True).alias("edge_value"),
+                spark_min("create_time").alias("create_time"),
+                spark_max("lst_upd_time").alias("lst_upd_time"),
+                spark_max(coalesce(col("create_time"), col("lst_upd_time"))).alias(
+                    "_change_time"
+                ),
+                spark_sum(col("_record_count")).cast("int").alias("_record_count"),
             )
         )
 
@@ -326,6 +379,113 @@ class DwdGraphEdgesEtl(Etl):
             )
         )
 
+    def _finish_attr_index_rows(self, attrs: DataFrame, edge_field: str) -> DataFrame:
+        observed_ts = coalesce(col("_change_time"), col("create_time"), col("lst_upd_time"))
+        rows = attrs.withColumn(
+            "observed_month",
+            when(observed_ts.isNull(), lit("unknown")).otherwise(
+                date_format(observed_ts, "yyyy-MM")
+            ),
+        ).withColumn("edge_field", lit(edge_field))
+
+        return (
+            rows.withColumn(
+                "attr_id",
+                xxhash64(
+                    col("edge_type"),
+                    col("edge_source"),
+                    col("edge_field"),
+                    col("_join_key"),
+                    col("cust_id").cast("string"),
+                ),
+            )
+            .withColumn(
+                "attr_month_id",
+                xxhash64(col("attr_id").cast("string"), col("observed_month")),
+            )
+            .withColumn("join_key_hash", xxhash64(col("_join_key")))
+            .withColumn("dt", observed_ts.cast("date"))
+            .withColumn("etl_ts", current_timestamp())
+            .select(
+                "attr_month_id",
+                "attr_id",
+                col("cust_id").cast("long").alias("cust_id"),
+                col("_join_key").alias("join_key"),
+                "join_key_hash",
+                "edge_value",
+                "strength",
+                col("create_time").alias("first_seen"),
+                col("lst_upd_time").alias("last_seen"),
+                col("_record_count").cast("int").alias("record_count"),
+                "dt",
+                "etl_ts",
+                "edge_type",
+                "edge_source",
+                "edge_field",
+                "observed_month",
+            )
+        )
+
+    def _load_attr_index(self):
+        if not self.use_attr_index or self._attr_index_loaded:
+            return
+
+        self._attr_index_loaded = True
+        try:
+            source_index_df = self.spark.table("usr_skyee_mw.dwd_graph_attr_index")
+        except AnalysisException:
+            logger.info("dwd_graph_attr_index not found; using raw history fallback")
+            self._attr_index_df = None
+            self._attr_index_specs = set()
+            return
+
+        self._attr_index_specs = {
+            (row.edge_type, row.edge_source, row.edge_field)
+            for row in source_index_df.select("edge_type", "edge_source", "edge_field")
+            .distinct()
+            .collect()
+        }
+        index_df = source_index_df
+        if self.start_date:
+            index_df = index_df.filter(col("dt") < lit(self.start_date).cast("date"))
+        elif self.end_date:
+            index_df = index_df.filter(col("dt") < lit(self.end_date).cast("date"))
+
+        self._attr_index_df = index_df.cache()
+        logger.info("Loaded attr index specs: %s", len(self._attr_index_specs))
+
+    def _attrs_from_index(
+        self,
+        edge_type: str,
+        edge_source: str,
+        edge_field: str,
+    ) -> DataFrame | None:
+        self._load_attr_index()
+        if self._attr_index_df is None:
+            return None
+        if (edge_type, edge_source, edge_field) not in self._attr_index_specs:
+            return None
+
+        return (
+            self._attr_index_df.filter(
+                (col("edge_type") == edge_type)
+                & (col("edge_source") == edge_source)
+                & (col("edge_field") == edge_field)
+            )
+            .select(
+                col("join_key").alias("_join_key"),
+                col("cust_id").cast("long").alias("cust_id"),
+                "edge_type",
+                "edge_source",
+                "strength",
+                "edge_value",
+                col("first_seen").alias("create_time"),
+                col("last_seen").alias("lst_upd_time"),
+                col("record_count").cast("int").alias("_record_count"),
+                coalesce(col("last_seen"), col("first_seen")).alias("_change_time"),
+            )
+        )
+
     def _process_attr_spec(
         self,
         src_df: DataFrame,
@@ -339,7 +499,7 @@ class DwdGraphEdgesEtl(Etl):
         cust_expr: Column = None,
         create_expr: Column = None,
         update_expr: Column = None,
-    ):
+    ) -> tuple[DataFrame, DataFrame]:
         logger.info("Processing %s/%s/%s", edge_type, edge_source, src_label)
         if self.start_date:
             changed_src = self._filter_source_window(
@@ -361,29 +521,47 @@ class DwdGraphEdgesEtl(Etl):
                 create_expr=create_expr,
                 update_expr=update_expr,
             )
+            changed_attrs = self._dedupe(changed_attrs)
+            index_attrs = changed_attrs
             changed_keys = changed_attrs.select(
                 "_join_key", "edge_type", "edge_source"
             ).distinct()
 
-            as_of_src = self._filter_source_window(
-                src_df,
-                create_expr=create_expr,
-                update_expr=update_expr,
-                end_date=self.end_date,
-            )
-            attrs = self._normalize_attrs(
-                as_of_src,
-                value_expr,
-                key_expr,
-                edge_type,
-                edge_source,
-                strength,
-                src_filter=src_filter,
-                cust_expr=cust_expr,
-                create_expr=create_expr,
-                update_expr=update_expr,
-            ).join(changed_keys, on=["_join_key", "edge_type", "edge_source"], how="left_semi")
-            attrs = self._dedupe(attrs)
+            indexed_attrs = self._attrs_from_index(edge_type, edge_source, src_label)
+            if indexed_attrs is None:
+                as_of_src = self._filter_source_window(
+                    src_df,
+                    create_expr=create_expr,
+                    update_expr=update_expr,
+                    end_date=self.end_date,
+                )
+                attrs = self._normalize_attrs(
+                    as_of_src,
+                    value_expr,
+                    key_expr,
+                    edge_type,
+                    edge_source,
+                    strength,
+                    src_filter=src_filter,
+                    cust_expr=cust_expr,
+                    create_expr=create_expr,
+                    update_expr=update_expr,
+                ).join(
+                    changed_keys,
+                    on=["_join_key", "edge_type", "edge_source"],
+                    how="left_semi",
+                )
+                attrs = self._dedupe(attrs)
+            else:
+                indexed_attrs = indexed_attrs.join(
+                    changed_keys,
+                    on=["_join_key", "edge_type", "edge_source"],
+                    how="left_semi",
+                )
+                attrs = self._aggregate_precounted(
+                    indexed_attrs.unionByName(changed_attrs)
+                )
+
             new_attrs = attrs.filter(col("_change_time") >= self.start_date)
             if self.end_date:
                 new_attrs = new_attrs.filter(col("_change_time") < self.end_date)
@@ -402,6 +580,7 @@ class DwdGraphEdgesEtl(Etl):
             )
             attrs = self._dedupe(attrs)
             new_attrs = None
+            index_attrs = attrs
 
         attrs = self._filter_hot_keys(attrs, self.max_degree)
         if new_attrs is not None:
@@ -411,6 +590,7 @@ class DwdGraphEdgesEtl(Etl):
                 how="left_semi",
             )
 
+        attr_rows = self._finish_attr_index_rows(index_attrs, src_label)
         edges = self._generate_pairs(
             attrs,
             edge_type,
@@ -419,8 +599,14 @@ class DwdGraphEdgesEtl(Etl):
             new_attrs=new_attrs,
         )
         edges = self._finish_monthly_edges(edges, src_label)
-        self.load(edges)
         logger.info("Done %s/%s/%s", edge_type, edge_source, src_label)
+        return edges, attr_rows
+
+    @staticmethod
+    def _union_frames(frames: list[DataFrame]) -> DataFrame | None:
+        if not frames:
+            return None
+        return reduce(lambda left, right: left.unionByName(right), frames)
 
     def process(self):
         self.extract(self.start_date, self.end_date)
@@ -498,6 +684,9 @@ class DwdGraphEdgesEtl(Etl):
             (self.src_login, "login_ip", col("login_ip"), self._exact_key(col("login_ip")), "SAME_IP", "stg_cust_user_login_log", "Weak", None, None, None, None),
         ]
 
+        edge_frames = []
+        attr_index_frames = []
+
         for (
             src_df,
             src_label,
@@ -511,7 +700,7 @@ class DwdGraphEdgesEtl(Etl):
             create_expr,
             update_expr,
         ) in specs:
-            self._process_attr_spec(
+            edges, attr_rows = self._process_attr_spec(
                 src_df,
                 src_label,
                 value_expr,
@@ -524,6 +713,25 @@ class DwdGraphEdgesEtl(Etl):
                 create_expr=create_expr,
                 update_expr=update_expr,
             )
+            edge_frames.append(edges)
+            if self.write_attr_index:
+                attr_index_frames.append(attr_rows)
+
+        attr_index_df = self._union_frames(attr_index_frames)
+        if attr_index_df is not None:
+            attr_index = DwdGraphAttrIndexEtl(
+                start_date=self.start_date,
+                end_date=self.end_date,
+                bulk=self.bulk,
+            )
+            attr_index.spark = self.spark
+            attr_index.load(attr_index_df)
+
+        edges_df = self._union_frames(edge_frames)
+        if edges_df is not None:
+            self.load(edges_df)
+        if self._attr_index_df is not None:
+            self._attr_index_df.unpersist()
 
     def transform(self, df: DataFrame) -> DataFrame:
         """Not used — process() handles batching directly."""
@@ -595,6 +803,8 @@ def main(
     end_date: Annotated[str, typer.Option("--end-date")] = None,
     bulk: Annotated[bool, typer.Option("--bulk/--per-day")] = True,
     max_degree: Annotated[int, typer.Option("--max-degree")] = MAX_DEGREE,
+    use_attr_index: Annotated[bool, typer.Option("--use-attr-index/--no-use-attr-index")] = True,
+    write_attr_index: Annotated[bool, typer.Option("--write-attr-index/--no-write-attr-index")] = True,
     snapshot_hudi_mode: Annotated[str, typer.Option("--snapshot-hudi-mode")] = "upsert",
     target: Annotated[str, typer.Option("--target")] = "all",
 ):
@@ -608,6 +818,8 @@ def main(
             end_date=end_date,
             bulk=bulk,
             max_degree=max_degree,
+            use_attr_index=use_attr_index,
+            write_attr_index=write_attr_index,
         )
         etl.spark = spark
         etl()

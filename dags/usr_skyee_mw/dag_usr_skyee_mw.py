@@ -24,6 +24,8 @@ default_args = {
 
 # Scripts path
 SCRIPTS_PATH = "/opt/airflow/dags/usr_skyee_mw/python"
+LOCAL_INTERVAL_START = "{{ data_interval_start.in_timezone('Asia/Shanghai').strftime('%Y-%m-%d') }}"
+LOCAL_INTERVAL_END = "{{ data_interval_end.in_timezone('Asia/Shanghai').strftime('%Y-%m-%d') }}"
 
 # Tables to sync
 TABLES = [
@@ -59,13 +61,13 @@ with DAG(
     for table in TABLES:
         sync_task = SparkSubmitOperator(
             task_id=f"stg_{table}",
-            name=f"usr_skyee_mw.stg.{table}.{{{{ ds }}}}",
+            name=f"usr_skyee_mw.stg.{table}.{LOCAL_INTERVAL_START}",
             application=f"{SCRIPTS_PATH}/stg_{table}.py",
             conn_id="spark_default",
             application_args=[
                 "--url", "jdbc:mysql://{{ var.value.MYSQL_DB_URL_SECRET }}",
-                "--start-date", "{{ ds }}",
-                "--end-date", "{{ next_ds }}",
+                "--start-date", LOCAL_INTERVAL_START,
+                "--end-date", LOCAL_INTERVAL_END,
                 "--bulk",
             ],
             verbose=True,
@@ -76,13 +78,13 @@ with DAG(
 
     reconcile_mysql_to_stg = SparkSubmitOperator(
         task_id="reconcile_mysql_to_stg",
-        name="usr_skyee_mw.dq.mysql_to_stg.{{ ds }}",
+        name=f"usr_skyee_mw.dq.mysql_to_stg.{LOCAL_INTERVAL_START}",
         application=f"{SCRIPTS_PATH}/reconcile_mysql_to_stg.py",
         conn_id="spark_default",
         application_args=[
             "--url", "jdbc:mysql://{{ var.value.MYSQL_DB_URL_SECRET }}",
-            "--start-date", "{{ ds }}",
-            "--end-date", "{{ next_ds }}",
+            "--start-date", LOCAL_INTERVAL_START,
+            "--end-date", LOCAL_INTERVAL_END,
             "--run-id", "{{ run_id }}",
             "--fail-on-mismatch",
             "--write-results",
@@ -92,14 +94,16 @@ with DAG(
 
     graph_edge_monthly = SparkSubmitOperator(
         task_id="dwd_graph_edge_monthly",
-        name="usr_skyee_mw.dwd.graph_edge_monthly.{{ ds }}",
+        name=f"usr_skyee_mw.dwd.graph_edge_monthly.{LOCAL_INTERVAL_START}",
         application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
         conn_id="spark_default",
         application_args=[
-            "--start-date", "{{ ds }}",
-            "--end-date", "{{ next_ds }}",
+            "--start-date", LOCAL_INTERVAL_START,
+            "--end-date", LOCAL_INTERVAL_END,
             "--bulk",
             "--max-degree", "100",
+            "--use-attr-index",
+            "--write-attr-index",
             "--target", "monthly",
         ],
         verbose=True,
@@ -107,7 +111,7 @@ with DAG(
 
     graph_edges = SparkSubmitOperator(
         task_id="dwd_graph_edges",
-        name="usr_skyee_mw.dwd.graph_edges.{{ ds }}",
+        name=f"usr_skyee_mw.dwd.graph_edges.{LOCAL_INTERVAL_START}",
         application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
         conn_id="spark_default",
         application_args=[
@@ -120,7 +124,7 @@ with DAG(
 
     dwd_customer = SparkSubmitOperator(
         task_id="dwd_customer",
-        name="usr_skyee_mw.dwd.customer.{{ ds }}",
+        name=f"usr_skyee_mw.dwd.customer.{LOCAL_INTERVAL_START}",
         application=f"{SCRIPTS_PATH}/dwd_customer.py",
         conn_id="spark_default",
         application_args=[
@@ -131,12 +135,12 @@ with DAG(
 
     dwd_transaction = SparkSubmitOperator(
         task_id="dwd_transaction",
-        name="usr_skyee_mw.dwd.transaction.{{ ds }}",
+        name=f"usr_skyee_mw.dwd.transaction.{LOCAL_INTERVAL_START}",
         application=f"{SCRIPTS_PATH}/dwd_transaction.py",
         conn_id="spark_default",
         application_args=[
-            "--start-date", "{{ ds }}",
-            "--end-date", "{{ next_ds }}",
+            "--start-date", LOCAL_INTERVAL_START,
+            "--end-date", LOCAL_INTERVAL_END,
             "--bulk",
         ],
         verbose=True,
@@ -144,12 +148,12 @@ with DAG(
 
     reconcile_stg_to_dwd_transaction = SparkSubmitOperator(
         task_id="reconcile_stg_to_dwd_transaction",
-        name="usr_skyee_mw.dq.stg_to_dwd_transaction.{{ ds }}",
+        name=f"usr_skyee_mw.dq.stg_to_dwd_transaction.{LOCAL_INTERVAL_START}",
         application=f"{SCRIPTS_PATH}/reconcile_stg_to_dwd_transaction.py",
         conn_id="spark_default",
         application_args=[
-            "--start-date", "{{ ds }}",
-            "--end-date", "{{ next_ds }}",
+            "--start-date", LOCAL_INTERVAL_START,
+            "--end-date", LOCAL_INTERVAL_END,
             "--run-id", "{{ run_id }}",
             "--fail-on-mismatch",
             "--write-results",
@@ -159,7 +163,7 @@ with DAG(
 
     graph_nodes = SparkSubmitOperator(
         task_id="dwd_graph_nodes",
-        name="usr_skyee_mw.dwd.graph_nodes.{{ ds }}",
+        name=f"usr_skyee_mw.dwd.graph_nodes.{LOCAL_INTERVAL_START}",
         application=f"{SCRIPTS_PATH}/dwd_graph_nodes.py",
         conn_id="spark_default",
         application_args=[

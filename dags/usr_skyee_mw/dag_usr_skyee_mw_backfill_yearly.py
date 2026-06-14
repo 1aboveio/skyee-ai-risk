@@ -17,6 +17,8 @@ from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOpe
 from airflow.operators.empty import EmptyOperator
 
 SCRIPTS_PATH = "/opt/airflow/dags/usr_skyee_mw/python"
+LOCAL_INTERVAL_START = "{{ data_interval_start.in_timezone('Asia/Shanghai').strftime('%Y-%m-%d') }}"
+LOCAL_INTERVAL_END = "{{ data_interval_end.in_timezone('Asia/Shanghai').strftime('%Y-%m-%d') }}"
 
 default_args = {
     "owner": "data-team",
@@ -57,13 +59,13 @@ with DAG(
     tasks = [
         SparkSubmitOperator(
             task_id=f"stg_{table}",
-            name=f"usr_skyee_mw.backfill.yearly.stg.{table}.{{{{ ds }}}}",
+            name=f"usr_skyee_mw.backfill.yearly.stg.{table}.{LOCAL_INTERVAL_START}",
             application=f"{SCRIPTS_PATH}/stg_{table}.py",
             conn_id="spark_default",
             application_args=[
                 "--url", "jdbc:mysql://{{ var.value.MYSQL_DB_URL_SECRET }}",
-                "--start-date", "{{ ds }}",
-                "--end-date", "{{ (macros.datetime.strptime(ds, '%Y-%m-%d') + macros.dateutil.relativedelta.relativedelta(years=1)).strftime('%Y-%m-%d') }}",
+                "--start-date", LOCAL_INTERVAL_START,
+                "--end-date", LOCAL_INTERVAL_END,
                 "--bulk",
             ],
             verbose=True,

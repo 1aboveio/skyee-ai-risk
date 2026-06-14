@@ -21,6 +21,8 @@ from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOpe
 from airflow.operators.empty import EmptyOperator
 
 SCRIPTS_PATH = "/opt/airflow/dags/usr_skyee_mw/python"
+LOCAL_INTERVAL_START = "{{ data_interval_start.in_timezone('Asia/Shanghai').strftime('%Y-%m-%d') }}"
+LOCAL_INTERVAL_END = "{{ data_interval_end.in_timezone('Asia/Shanghai').strftime('%Y-%m-%d') }}"
 
 default_args = {
     "owner": "data-team",
@@ -51,13 +53,13 @@ with DAG(
     stg_tasks = [
         SparkSubmitOperator(
             task_id=f"stg_{table}",
-            name=f"usr_skyee_mw.backfill.monthly.stg.{table}.{{{{ ds }}}}",
+            name=f"usr_skyee_mw.backfill.monthly.stg.{table}.{LOCAL_INTERVAL_START}",
             application=f"{SCRIPTS_PATH}/stg_{table}.py",
             conn_id="spark_default",
             application_args=[
                 "--url", "jdbc:mysql://{{ var.value.MYSQL_DB_URL_SECRET }}",
-                "--start-date", "{{ ds }}",
-                "--end-date", "{{ next_ds }}",
+                "--start-date", LOCAL_INTERVAL_START,
+                "--end-date", LOCAL_INTERVAL_END,
                 "--bulk",
             ],
             verbose=True,
@@ -67,14 +69,16 @@ with DAG(
 
     graph_edge_monthly = SparkSubmitOperator(
         task_id="dwd_graph_edge_monthly",
-        name="usr_skyee_mw.backfill.monthly.dwd.graph_edge_monthly.{{ ds }}",
+        name=f"usr_skyee_mw.backfill.monthly.dwd.graph_edge_monthly.{LOCAL_INTERVAL_START}",
         application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
         conn_id="spark_default",
         application_args=[
-            "--start-date", "{{ ds }}",
-            "--end-date", "{{ next_ds }}",
+            "--start-date", LOCAL_INTERVAL_START,
+            "--end-date", LOCAL_INTERVAL_END,
             "--bulk",
             "--max-degree", "100",
+            "--use-attr-index",
+            "--write-attr-index",
             "--target", "monthly",
         ],
         verbose=True,

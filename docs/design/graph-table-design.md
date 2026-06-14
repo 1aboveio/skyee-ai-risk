@@ -107,6 +107,42 @@ Backfill writes this table with partition overwrite. The canonical
 `first_seen = min(first_seen)`, `last_seen = max(last_seen)`, and
 `record_count = sum(record_count)`.
 
+### 2.4 dwd_graph_attr_index (Monthly Attribute Index)
+
+**Purpose:** Reusable shared-attribute index for monthly edge generation.
+
+**Grain:** One row per `(edge_type, edge_source, edge_field, join_key, cust_id, observed_month)`.
+
+| Column | Type | Source | Description |
+|--------|------|--------|-------------|
+| attr_month_id | bigint | Generated | Monthly attribute index record key |
+| attr_id | bigint | Generated | Stable key for `(edge_type, edge_source, edge_field, join_key, cust_id)` |
+| cust_id | bigint | Various | Customer/node owning this attribute |
+| join_key | varchar | Normalized source value | Normalized key used for matching |
+| join_key_hash | bigint | Generated | Hash of `join_key` for diagnostics and future bucketing |
+| edge_value | varchar(500) | Source value | Display value for graph evidence |
+| strength | varchar(10) | Edge spec | Strong / Weak |
+| first_seen | timestamp | MIN(create_time) | Earliest attribute observation in the monthly slice |
+| last_seen | timestamp | MAX(lst_upd_time) | Latest attribute observation in the monthly slice |
+| record_count | int | COUNT | Number of source rows supporting the customer/key in the monthly slice |
+| observed_month | varchar(7) | Derived | `yyyy-MM`, or `unknown` if source timestamps are missing |
+| dt | date | Derived | Observed date |
+| etl_ts | timestamp | ETL runtime | Hudi precombine timestamp |
+| edge_type | varchar(30) | Edge spec | Association edge type |
+| edge_source | varchar(50) | Edge spec | Source table name |
+| edge_field | varchar(100) | Edge spec | Source field/spec |
+
+**Partition:** `edge_type, edge_source, edge_field, observed_month`
+
+The monthly graph job writes changed attributes into this table and uses the
+existing index as the historical side of the join when available. This avoids
+rescanning full raw STG history for every edge field after the index has been
+bootstrapped. The job still falls back to raw history for a spec when the index
+does not yet contain that spec, preserving correctness during bootstrap.
+
+The monthly edge job batches all generated `dwd_graph_edge_monthly` rows into a
+single Hudi write per run instead of committing once per edge field.
+
 ---
 
 ## 3. Edge Types
