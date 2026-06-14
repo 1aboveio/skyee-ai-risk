@@ -264,18 +264,18 @@ export async function getTransactionList(
 
   // Outbound from pmp_pay_order (authoritative header-level records)
   const payWhere = hasCursor
-    ? `WHERE CUST_ID = ? AND (CREATE_TIME, PAY_ORDER_ID) < (?, ?) ${dateFilterClause}`
+    ? `WHERE CUST_ID = ? AND (CREATE_TIME < ? OR (CREATE_TIME = ? AND PAY_ORDER_ID < ?)) ${dateFilterClause}`
     : `WHERE CUST_ID = ? ${dateFilterClause}`;
   const payParams = hasCursor
-    ? [custId, cursorCreateTime, cursorId, ...dateParams, fetchLimit]
+    ? [custId, cursorCreateTime, cursorCreateTime, cursorId, ...dateParams, fetchLimit]
     : [custId, ...dateParams, fetchLimit];
 
   // Inbound from pmp_coll_order
   const collWhere = hasCursor
-    ? `WHERE CUST_ID = ? AND (CREATE_TIME, COLL_ORDER_ID) < (?, ?) ${dateFilterClause}`
+    ? `WHERE CUST_ID = ? AND (CREATE_TIME < ? OR (CREATE_TIME = ? AND COLL_ORDER_ID < ?)) ${dateFilterClause}`
     : `WHERE CUST_ID = ? ${dateFilterClause}`;
   const collParams = hasCursor
-    ? [custId, cursorCreateTime, cursorId, ...dateParams, fetchLimit]
+    ? [custId, cursorCreateTime, cursorCreateTime, cursorId, ...dateParams, fetchLimit]
     : [custId, ...dateParams, fetchLimit];
 
   const [payOrders, collOrders] = await Promise.all([
