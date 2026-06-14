@@ -75,9 +75,9 @@
   <rect class="new" x="1085" y="252" width="380" height="120"/>
   <rect class="scope-tag" x="1072" y="240" width="30" height="22"/>
   <text class="scope-text" x="1087" y="256" text-anchor="middle">F1</text>
-  <text class="box-title" x="1275" y="291" text-anchor="middle">案件来源适配器</text>
-  <text class="box-text" x="1275" y="319" text-anchor="middle">KYC / 规则 / 实地核查 / 内部举报</text>
-  <text class="box-text" x="1275" y="345" text-anchor="middle">专项整治 / RFI / 离线规则 / 图谱关联</text>
+  <text class="box-title" x="1275" y="291" text-anchor="middle">商户案件接入模块</text>
+  <text class="box-text" x="1275" y="319" text-anchor="middle">来源适配：KYC / 规则 / 实地核查 / 内部举报</text>
+  <text class="box-text" x="1275" y="345" text-anchor="middle">商户建案：标准化 / 去重 / 归并 / 图谱关联</text>
 
   <path class="arrow-blue" d="M1018 314 H1085"/>
 
@@ -90,7 +90,7 @@
   <text class="box-text" x="262" y="589" text-anchor="middle">专项触发 / 时间窗排查 / 业务线排查</text>
   <rect class="new" x="290" y="608" width="132" height="34"/>
   <rect class="scope-tag" x="278" y="596" width="30" height="22"/>
-  <text class="scope-text" x="293" y="612" text-anchor="middle">F9</text>
+  <text class="scope-text" x="293" y="612" text-anchor="middle">F6</text>
   <text class="box-text" x="356" y="630" text-anchor="middle">关联图谱触发</text>
 
   <rect class="bau" x="82" y="682" width="360" height="140"/>
@@ -100,26 +100,25 @@
 
   <rect class="new" x="560" y="520" width="300" height="96"/>
   <rect class="scope-tag" x="548" y="508" width="30" height="22"/>
-  <text class="scope-text" x="563" y="524" text-anchor="middle">F2</text>
-  <text class="box-title" x="710" y="555" text-anchor="middle">案件接入层</text>
+  <text class="scope-text" x="563" y="524" text-anchor="middle">F1</text>
+  <text class="box-title" x="710" y="555" text-anchor="middle">商户建案处理</text>
   <text class="box-text" x="710" y="583" text-anchor="middle">触发归一 / 标准化 / 去重 / 归并</text>
 
+  <rect class="source-group" x="915" y="500" width="605" height="280"/>
+  <rect class="scope-tag" x="903" y="488" width="30" height="22"/>
+  <text class="scope-text" x="918" y="504" text-anchor="middle">F2</text>
+  <text class="small" x="944" y="516">案件管理与Workflow模块</text>
+
   <rect class="new" x="985" y="520" width="300" height="96"/>
-  <rect class="scope-tag" x="973" y="508" width="30" height="22"/>
-  <text class="scope-text" x="988" y="524" text-anchor="middle">F3</text>
   <text class="box-title" x="1135" y="555" text-anchor="middle">案件池</text>
   <text class="box-text" x="1135" y="583" text-anchor="middle">优先级 / SLA / 队列 / 分派入口</text>
 
   <rect class="new" x="930" y="660" width="260" height="100"/>
-  <rect class="scope-tag" x="918" y="648" width="30" height="22"/>
-  <text class="scope-text" x="933" y="664" text-anchor="middle">F4</text>
   <text class="box-title" x="1060" y="696" text-anchor="middle">Workflow编排层</text>
   <text class="box-text" x="1060" y="724" text-anchor="middle">状态流转 / 节点审批</text>
   <text class="box-text" x="1060" y="750" text-anchor="middle">ONSITE / REVIEW / EDD</text>
 
   <rect class="new" x="1240" y="660" width="260" height="100"/>
-  <rect class="scope-tag" x="1228" y="648" width="30" height="22"/>
-  <text class="scope-text" x="1243" y="664" text-anchor="middle">F5</text>
   <text class="box-title" x="1370" y="696" text-anchor="middle">Workflow Task Queue</text>
   <text class="box-text" x="1370" y="724" text-anchor="middle">可执行任务队列</text>
   <text class="box-text" x="1370" y="750" text-anchor="middle">调查 / 复核 / 回应 / 反馈</text>
@@ -204,13 +203,13 @@
 
   <rect class="new" x="370" y="1370" width="245" height="88"/>
   <rect class="scope-tag" x="358" y="1358" width="30" height="22"/>
-  <text class="scope-text" x="373" y="1374" text-anchor="middle">F6</text>
+  <text class="scope-text" x="373" y="1374" text-anchor="middle">F3</text>
   <text class="box-title" x="492" y="1404" text-anchor="middle">处置流转模块</text>
   <text class="box-text-tight" x="492" y="1432" text-anchor="middle">ACCEPT / REJECT / ESCALATION</text>
 
   <rect class="new" x="670" y="1370" width="245" height="88"/>
   <rect class="scope-tag" x="658" y="1358" width="30" height="22"/>
-  <text class="scope-text" x="673" y="1374" text-anchor="middle">F7</text>
+  <text class="scope-text" x="673" y="1374" text-anchor="middle">F4</text>
   <text class="box-title" x="792" y="1404" text-anchor="middle">后续任务模块</text>
   <text class="box-text" x="792" y="1432" text-anchor="middle">RFI回应 / 策略反馈</text>
 
@@ -222,7 +221,7 @@
 
   <rect class="new" x="370" y="1500" width="245" height="88"/>
   <rect class="scope-tag" x="358" y="1488" width="30" height="22"/>
-  <text class="scope-text" x="373" y="1504" text-anchor="middle">F8</text>
+  <text class="scope-text" x="373" y="1504" text-anchor="middle">F5</text>
   <text class="box-title" x="492" y="1534" text-anchor="middle">Workflow回写</text>
   <text class="box-text" x="492" y="1562" text-anchor="middle">状态关闭 / SLA / 审计</text>
 

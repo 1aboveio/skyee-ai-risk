@@ -2,11 +2,11 @@
 Sync cust_customer_info from MySQL to Hudi via Spark Connect.
 
 Usage:
-    python sync_cust_customer_info.py --url <mysql_jdbc_url> --spark-remote <spark_connect_url> [options]
+    python sync_cust_customer_info.py --url <mysql_jdbc_url> [--spark-remote <spark_connect_url>] [options]
 
 Options:
     --url           MySQL JDBC URL (required)
-    --spark-remote  Spark Connect server URL (required)
+    --spark-remote  Spark Connect server URL (optional; omit for classic spark-submit mode)
     --start-date    Start date for incremental sync (YYYY-MM-DD)
     --end-date      End date for incremental sync (YYYY-MM-DD)
     --bulk/--per-day  Bulk or per-day processing (default: bulk)
@@ -17,9 +17,9 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from utils.etl import MySqlEtl
-from pyspark.sql import SparkSession
+from utils.etl import MySqlEtl, create_spark_session
 from pyspark.sql.functions import col
+from typing import Optional
 from typing_extensions import Annotated
 import typer
 
@@ -56,13 +56,13 @@ class StgCustCustomerInfoEtl(MySqlEtl):
 
 def main(
     url: Annotated[str, typer.Option("--url")],
-    spark_remote: Annotated[str, typer.Option("--spark-remote")],
+    spark_remote: Annotated[Optional[str], typer.Option("--spark-remote")] = None,
     start_date: Annotated[str, typer.Option("--start-date")] = None,
     end_date: Annotated[str, typer.Option("--end-date")] = None,
     bulk: Annotated[bool, typer.Option("--bulk/--per-day")] = True,
 ):
     # Init Spark Connect session
-    spark = SparkSession.builder.remote(spark_remote).getOrCreate()
+    spark = create_spark_session(spark_remote)
 
     # Run ETL
     etl = StgCustCustomerInfoEtl(

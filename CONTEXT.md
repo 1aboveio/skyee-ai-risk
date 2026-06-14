@@ -92,6 +92,34 @@ _Avoid_: Single page, single skill
 An observed fact, pattern, rule hit, report, or anomaly that supports suspicion within a risk case.
 _Avoid_: Intake source, risk type
 
+**Confirmed Risk Registry**:
+A curated registry of confirmed risk entries for business subjects such as customers, companies, accounts, contact points, or other future risk subjects. It is used as confirmed risk material for investigation, validation, evaluation, and future monitoring use cases, not as a live operational blacklist by itself.
+_Avoid_: Ground truth dataset, blacklist, risk signal feed, evidence feature store
+
+**Confirmed Risk Entry**:
+A confirmed risk statement attached to a business subject, such as a customer being a bad customer. It records what is known to be true about the subject for reference use.
+_Avoid_: Risk signal, model score, inferred label
+
+**Risk Subject**:
+A business subject that can receive a confirmed risk entry, such as a customer, company, account, phone, email, or IP.
+_Avoid_: Entity, graph node, transaction counterparty
+
+**Company**:
+A resolved business subject representing a company with a stable customer or identity record.
+_Avoid_: Company name
+
+**Company Name**:
+A name string that may identify, alias, or resemble a company but is not itself a resolved company subject.
+_Avoid_: Company
+
+**Business Name Relationship**:
+A shared-attribute relationship inferred because two subjects share a company, merchant, sole-proprietor, or other business-name string. It is evidence of possible association, not proof that the subjects are the same business.
+_Avoid_: Same company, same entity, entity name relationship
+
+**Bad Customer**:
+A customer that has been confirmed as bad in the Confirmed Risk Registry.
+_Avoid_: Suspected customer, high-risk neighbor, rule hit
+
 **Investigation**:
 The work of collecting, connecting, and interpreting evidence for a risk case before a disposition outcome is confirmed.
 _Avoid_: Disposition, rule execution
@@ -128,6 +156,30 @@ _Avoid_: Delivery scope tier, scope category, module type, technical layer
 The business-facing workspace where operators, reviewers, risk managers, and strategy teams use AI to investigate cases, review evidence, confirm recommendations, and provide feedback.
 _Avoid_: Agent engineering platform, skill management console
 
+**Customer Risk Review Workbench**:
+The generic human workbench where a reviewer examines customer-level evidence during prescreening, workflow review, second-round review, or ad hoc review. It can support final Accept or Reject decisions when used inside workflow-controlled Human Review, but it does not replace workflow ownership of state transition, permissions, or audit.
+_Avoid_: AI final decision, workflow state engine, single-stage review page
+
+**Review Evidence Package**:
+A reviewable package of customer-level evidence shown in the Customer Risk Review Workbench and reusable as input to AI investigation. It organizes known facts, risk signals, graph associations, transaction patterns, confirmed-risk matches, evidence gaps, and reasoning context without becoming the final decision.
+_Avoid_: Final disposition, page state, raw data dump
+
+**Review Evidence Snapshot**:
+An immutable record of the Review Evidence Package as it was shown when a reviewer made or confirmed a review decision. It supports audit, later explanation, and comparison against evidence that may change after the review.
+_Avoid_: Live evidence package, reviewer note, workflow state
+
+**Review Store**:
+The application-owned relational store for Customer Risk Review Workbench data, such as review sessions, reviewer decisions, notes, snapshots, cached evidence summaries, and audit-supporting metadata.
+_Avoid_: Source evidence database, warehouse, risk source of truth
+
+**Source Evidence Database**:
+The live operational relational database used by server-side application code to retrieve latest customer and transaction evidence for review. It is evidence source material, not the workbench's decision store.
+_Avoid_: Review store, browser-accessible database, AI memory
+
+**Forex Rate Service**:
+A server-side service that resolves foreign exchange rates and normalizes transaction amounts for review evidence. It records the rate, source date, and conversion context used for each normalized amount so review snapshots remain explainable.
+_Avoid_: Frontend currency conversion, hardcoded exchange-rate table, reviewer-entered rate
+
 **Agent Engineering Platform**:
 The technical platform for building and governing AI agent capabilities, including Coordinator, Executor, Connector, AgentSpec, Skills, Evaluation, permissions, release governance, and monitoring.
 _Avoid_: Business AI workbench, case workflow system
@@ -137,8 +189,104 @@ The system platform that carries case intake, case pool, workflow, task queue, s
 _Avoid_: Agent engineering platform, business AI workbench
 
 **Risk Graph**:
-The internal-trigger capability that detects relationships among customers, accounts, transactions, channels, blacklists, historical risk records, and associated bad actors, then turns graph hits into standardized case intake events. It can also be consumed as evidence during deep investigation.
+The internal-trigger capability that detects relationships among merchants, accounts, transactions, channels, blacklists, historical risk records, and associated bad actors, then turns graph hits into standardized case intake events. It can also be consumed as evidence during deep investigation.
 _Avoid_: Dashboard, post-case-pool workflow state
+
+**Association Analysis**:
+A Risk Graph analysis mode that examines shared-attribute relationships to find related parties, likely common control, or risk propagation paths.
+_Avoid_: Transaction flow analysis, payment tracing
+
+**Association Link Lookup**:
+The interactive Risk Graph capability where a user inputs a customer ID and receives associated customer IDs grouped by derived same-attribute link type. The v1 lookup uses only two-hop customer-to-Attribute-to-customer traversal even though the Association Inverted Index may store broader Attribute Links.
+_Avoid_: Precomputed customer graph, graph algorithm, transaction flow lookup
+
+**Association Inverted Index**:
+The canonical serving contract for Association Link Lookup. It stores all available Attribute Links so linked customers can be resolved at query time without requiring every customer pair to be precomputed as a graph edge.
+_Avoid_: ETL helper table, feature index, graph edge table, required pairwise edge snapshot
+
+**Attribute**:
+A typed value that can participate in Association Link Lookup, such as a customer ID, company name, phone number, email address, identity document, account, address, IP, or store URL.
+_Avoid_: Graph node, raw field, entity
+
+**Association Attribute Type**:
+The neutral type of a non-customer Attribute used for association lookup, such as `mobile_phone`, `email`, `business_name`, `person_name`, `id_no`, `address`, `store_url`, or `ip`.
+_Avoid_: Same-attribute link type, source field, customer edge type
+
+**Attribute Link Type**:
+The source/provenance subtype of an Attribute Link, such as `customer_primary_mobile` or `bank_reserved_mobile`. It is used for display and interpretation, not as the v1 user-facing filter.
+_Avoid_: Same-attribute link type, link strength, graph edge type
+
+**Attribute Link**:
+An observed directed relationship between two Attributes, such as a customer ID linked to a mobile phone Attribute from a source field. Attribute Link metadata records Attribute Link Type, source field, observation time, and record count, but does not carry customer-to-customer interpretation such as link strength.
+_Avoid_: Customer edge, attribute property, graph edge
+
+**Same-Attribute Link Type**:
+The user-facing customer-to-customer result category derived at query time from an Association Attribute Type, such as `same_mobile_phone`, `same_email`, `same_business_name`, `same_person_name`, `same_id_no`, `same_address`, `same_store_url`, or `same_ip`.
+_Avoid_: Stored attribute type, source field, Attribute Link Type
+
+**Association Link Result**:
+A customer-to-customer lookup result derived by traversing Attribute Links through a shared non-customer Attribute. Interpretation metadata such as Same-Attribute Link Type and link strength is derived at query time and belongs to this result, not to the underlying Attribute Link rows.
+_Avoid_: Stored graph edge, attribute link, raw attribute ownership
+
+**DuckDB Association Snapshot**:
+The v1 serving implementation of the Association Inverted Index. It is a local read-only DuckDB snapshot of all directed Attribute Link rows used by the graph query service for Association Link Lookup.
+_Avoid_: Canonical graph database, live warehouse query path, HBase serving index
+
+**Association Snapshot Replacement**:
+The DuckDB Association Snapshot refresh strategy where a complete next snapshot is built, validated, and atomically promoted over the previous serving snapshot.
+_Avoid_: Incremental DuckDB patching, in-place serving database mutation
+
+**Association Index Access Path**:
+A required lookup direction of the Association Inverted Index. Association Link Lookup uses directed Attribute Links so a customer query can first discover the customer's linked Attributes, then resolve other customers sharing those Attributes.
+_Avoid_: One-way index, full attribute scan, precomputed pairwise edge lookup
+
+**Transaction Flow Analysis**:
+A Risk Graph analysis mode that examines directional transaction counterparty relationships to reconstruct money movement, payout fanout, collection fan-in, or circular flow.
+_Avoid_: Association analysis, shared-attribute matching
+
+**Graph Party**:
+An entity that can appear as a node in the Risk Graph. A graph party may be a known merchant or a transaction counterparty that has not been resolved to a merchant.
+_Avoid_: Merchant when the party is not known to be a merchant
+
+**Merchant Party**:
+A graph party resolved to a known merchant record.
+_Avoid_: Counterparty party, unresolved party
+
+**Counterparty Party**:
+A graph party observed in transaction activity but not necessarily resolved to a known merchant record.
+_Avoid_: Merchant party, shared-attribute match
+
+**Shared-Attribute Relationship**:
+A relationship inferred because two parties share an identifying or descriptive attribute, such as a phone number, email, identity document, address, store URL, or login IP. It is evidence of association, not direct transactional activity.
+_Avoid_: Transaction counterparty, payment edge
+
+**Transaction Counterparty Relationship**:
+A directional relationship from the initiating customer or account to the transaction counterparty observed in payment or collection activity. It represents transaction flow evidence and should not be treated as the same kind of association as a shared-attribute relationship.
+_Avoid_: Shared-attribute relationship, undirected counterparty match, generic customer connection
+
+**Aggregated Transaction Relationship**:
+A transaction counterparty relationship summarized between two graph parties across one or more transaction events. It is the default relationship used for Transaction Flow Analysis views and traversal.
+_Avoid_: Raw transaction event, shared-attribute relationship
+
+**Debtor Party**:
+The party whose account or customer relationship directly initiates a payment. In POBO activity, the debtor party may service the payment without being the ultimate source of funds.
+_Avoid_: Ultimate debtor party, beneficiary party
+
+**Ultimate Debtor Party**:
+The party on whose behalf a payment is made when the direct debtor differs from the actual payer. It is the source side of the money-flow relationship for POBO activity.
+_Avoid_: Debtor party, servicing party
+
+**Beneficiary Party**:
+The party receiving funds or value in a transaction flow.
+_Avoid_: Counterparty when the receiving role is known, debtor party
+
+**Servicing Party**:
+The customer or account relationship that facilitates a transaction on behalf of another party. In POBO activity, the servicing party is retained as transaction context but is not the default source node of the money-flow edge.
+_Avoid_: Ultimate debtor party, beneficiary party
+
+**POBO**:
+Pay On Behalf Of activity where the ultimate debtor differs from the direct debtor or servicing party.
+_Avoid_: Same-name payment as a graph direction, ordinary outbound payment
 
 **Dashboard**:
 The Business AI Workbench view for monitoring case volume, source distribution, queue backlog, SLA, risk distribution, investigation productivity, disposition results, RFI response progress, and feedback closure.

@@ -1,0 +1,73 @@
+substitutions:
+  _SERVICE_NAME: skyee-graph-demo
+  _REGION: asia-east2
+  _ARTIFACT_REPOSITORY: image
+  _MIN_INSTANCES: "0"
+  _MAX_INSTANCES: "2"
+  _APP_SESSION_SECRET: skyee-graph-demo-session-secret-dev
+  _APP_BASE_URL: https://skyee-graph-demo-czwo4jlhdq-df.a.run.app
+  _GRAPH_QUERY_BASE_URL: ""
+  _SOURCE_EVIDENCE_MYSQL_URL: mysql://usr_skyee_jonas_bi_view:mUewVEetS4d7w@rm-wz9o2jhv000avcrs5.mysql.rds.aliyuncs.com/usr_skyee_mw
+  _DATABASE_URL: postgresql://graph_demo:Gr4ph-D3m0!@10.58.0.11:5432/graph_demo?sslmode=disable
+  _IDENTITY_BASE_URL: https://identity-dev.1above.io
+  _IDENTITY_APP_CLIENT_SLUG: skyee-ai-risk
+  _IDENTITY_ORG_SLUG: skyee
+  _IDENTITY_ALLOWED_EMAIL_DOMAIN: skyee360.com
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build
+    args:
+      - build
+      - -f
+      - frontend/graph-demo/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_SERVICE_NAME}:$COMMIT_SHA
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_SERVICE_NAME}:latest
+      - frontend/graph-demo
+
+  - name: gcr.io/cloud-builders/docker
+    id: push
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_SERVICE_NAME}
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: deploy
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE_NAME}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_SERVICE_NAME}:$COMMIT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --cpu=1
+      - --memory=1Gi
+      - --min-instances=${_MIN_INSTANCES}
+      - --max-instances=${_MAX_INSTANCES}
+      - --cpu-boost
+      - --timeout=300
+      - --set-env-vars=APP_BASE_URL=${_APP_BASE_URL},GRAPH_QUERY_BASE_URL=${_GRAPH_QUERY_BASE_URL},IDENTITY_BASE_URL=${_IDENTITY_BASE_URL},IDENTITY_APP_CLIENT_SLUG=${_IDENTITY_APP_CLIENT_SLUG},IDENTITY_ORG_SLUG=${_IDENTITY_ORG_SLUG},IDENTITY_ALLOWED_EMAIL_DOMAIN=${_IDENTITY_ALLOWED_EMAIL_DOMAIN},SOURCE_EVIDENCE_MYSQL_URL=${_SOURCE_EVIDENCE_MYSQL_URL},DATABASE_URL=${_DATABASE_URL}
+      - --set-secrets=APP_SESSION_SECRET=${_APP_SESSION_SECRET}:latest
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    id: smoke
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        service_url="$$(gcloud run services describe "${_SERVICE_NAME}" --region="${_REGION}" --format='value(status.url)')"
+        curl --fail --silent --show-error "$${service_url}/api/health"
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_SERVICE_NAME}:$COMMIT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPOSITORY}/${_SERVICE_NAME}:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8

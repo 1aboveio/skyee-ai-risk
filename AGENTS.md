@@ -50,3 +50,10 @@
 - **Presto**: `172.16.100.213:9666` (catalog: `hive`, schema: `usr_skyee_mw`)
 - **Spark Connect**: `sc://172.16.100.212:15002`
 - **MySQL**: `rm-wz9o2jhv000avcrs5.mysql.rds.aliyuncs.com/usr_skyee_mw`
+
+## Cloud Build Conventions
+- **Never use `gcloud builds submit`** — always deploy via Cloud Build triggers (push-to-main)
+- Triggers are configured in GCP Console → Cloud Build → Triggers
+- If a trigger doesn't exist, ask the human to create it (requires GitHub connection setup)
+- Cloudbuild files: `frontend/graph-demo/cloudbuild.yaml`
+- Service: `skyee-graph-demo` in `asia-east2`

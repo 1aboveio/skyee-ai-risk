@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+  runtime  = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model DemoSearch {
+  id        String   @id @default(cuid())
+  custId    String
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@index([custId])
+}
+
+model ReviewSession {
+  id            String   @id @default(cuid())
+  custId        String
+  contextType   String   // PRESCREENING, WORKFLOW_HUMAN_REVIEW, SECOND_ROUND, AD_HOC
+  reviewerId    String
+  reviewerEmail String
+  status        String   @default("ACTIVE") // ACTIVE, COMPLETED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  snapshots   ReviewSnapshot[]
+  decisions   ReviewDecision[]
+
+  @@unique([custId, reviewerId, status])
+  @@index([custId])
+  @@index([reviewerId])
+}
+
+model ReviewSnapshot {
+  id            String   @id @default(cuid())
+  sessionId     String
+  session       ReviewSession @relation(fields: [sessionId], references: [id])
+  snapshotType  String   // SNAPSHOT_ONLY, DECISION
+  note          String?  // optional reviewer note
+  evidenceData  Json     // captured panel states
+  fxRatesUsed   Json?    // FX rate metadata used in snapshot
+  createdAt     DateTime @default(now())
+
+  decisions     ReviewDecision[]
+
+  @@index([sessionId])
+}
+
+model ReviewDecision {
+  id            String   @id @default(cuid())
+  sessionId     String
+  session       ReviewSession @relation(fields: [sessionId], references: [id])
+  decisionType  String   // ACCEPT, REJECT
+  note          String   // mandatory reviewer note
+  snapshotId    String?
+  snapshot      ReviewSnapshot? @relation(fields: [snapshotId], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([snapshotId])
+}
+
+model FxRate {
+  id            String   @id @default(cuid())
+  baseCurrency  String   @default("USD")
+  quoteCurrency String
+  rate          Decimal  @db.Decimal(18, 8)
+  rateDate      DateTime @db.Date
+  source        String   @default("dim_forex")
+  createdAt     DateTime @default(now())
+
+  @@unique([baseCurrency, quoteCurrency, rateDate])
+  @@index([quoteCurrency, rateDate])
+}

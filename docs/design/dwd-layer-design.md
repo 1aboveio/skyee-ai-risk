@@ -11,7 +11,8 @@
 
 The DWD (Data Warehouse Detail) layer consolidates and cleanses data from the STG (Staging) layer into business-domain-oriented tables. Unlike STG tables which are 1:1 mirrors of source tables, DWD tables:
 
-- **Denormalize** related data into single, analysis-ready tables
+- **Preserve a clear grain** for each business subject or business event
+- **Join only grain-compatible related data** into the same table
 - **Standardize** field names, data types, and values
 - **Cleanse** nulls, duplicates, and invalid data
 - **Enrich** with derived fields and business logic
@@ -79,13 +80,44 @@ Based on ISO 20022 standard for financial messaging:
 
 ## 4. DWD Table Designs
 
+### 4.0 Grain and Enrichment Boundary
+
+DWD tables are semantic detail tables, not source mirrors and not application
+documents. Each table must have a stable row grain. Related data may be joined
+into a DWD table only when it is grain-compatible with that table.
+
+For `dwd_customer`, the grain is one row per customer. This allows core customer
+fields and one selected current identity record, but it does not allow raw
+one-to-many collections such as accounts, stores, related persons, login events,
+trade orders, or transactions.
+
+Nested arrays or sets of related records are useful for serving APIs and UI
+documents, but they belong in ADS or a separate serving table such as
+`ads_customer_profile_document`, not in canonical DWD customer.
+
+Customer-related table placement:
+
+| Source / Concept | Placement | Reason |
+|------------------|-----------|--------|
+| Customer master fields | `dwd_customer` | Same grain: one row per customer |
+| Selected current enterprise identity | `dwd_customer` | One selected record can enrich company customer |
+| Selected current personal identity | `dwd_customer` | One selected record can enrich personal customer |
+| Full person/enterprise identity records | Keep in STG for now | A DWD copy is not justified unless we standardize identity semantics beyond source fields |
+| Enterprise related persons | Keep in STG for now | Relationship records are mostly source detail unless we standardize roles such as controller, shareholder, director, or UBO |
+| Bank accounts | Keep in STG for now | A renamed DWD table would be a replica unless we define canonical account semantics |
+| Collection accounts | Keep in STG for now | A renamed DWD table would be a replica unless we define canonical collection-account semantics |
+| Stores | Keep in STG for now | A renamed DWD table would be a replica unless we define canonical store/merchant-channel semantics |
+| Login history | Keep in STG or build DWS behavior summaries | Event detail is source-like; behavior aggregation belongs outside DWD |
+| Foreign trade orders | Candidate DWD only if semantically transformed | Useful if joined with logistics and normalized as trade-document semantics |
+| Payments and collections | `dwd_transaction` | Transaction-grained, not customer-grained |
+
 ### 4.1 dwd_customer (Customer Master)
 
-**Purpose:** Consolidated customer profile with contact information and risk attributes.
+**Purpose:** Canonical customer subject with core customer fields and selected current identity context.
 
 **Grain:** One row per customer (CUST_ID)
 
-**Source Tables:** ci (stg_cust_customer_info)
+**Source Tables:** ci (stg_cust_customer_info), selected er/pr identity record
 
 | Column | Type | Source | Description |
 |--------|------|--------|-------------|
@@ -136,12 +168,38 @@ Based on ISO 20022 standard for financial messaging:
 | reg_time | timestamp | ci.REG_TIME | Registration time |
 | first_realname_submit_time | timestamp | ci.FIRST_REALNAME_SUBMIT_TIME | First KYC submit |
 | first_realname_success_time | timestamp | ci.FIRST_REALNAME_SUCCESS_TIME | First KYC success |
+| selected_identity_type | varchar(20) | CASE | PERSON / ENTERPRISE / NONE |
+| selected_identity_id | bigint | pr.ID / er.ID | Selected current identity record ID |
+| verified_name | varchar(200) | pr.NAME / er.ENTERPRISE_NAME | Selected verified customer name |
+| verified_en_name | varchar(255) | pr.EN_NAME / er.EN_NAME | Selected verified English name |
+| verified_country | varchar(10) | pr.COUNTRY / er.REGIST_COUNTRY | Selected identity country |
+| verified_cert_type | varchar(50) | pr.CERT_TYPE / er.CERT_TYPE | Selected identity certificate type |
+| verified_cert_no | varchar(100) | pr.CERT_NO / er.CERT_NO | Selected identity certificate number |
+| verified_cert_address | varchar(500) | pr.CERT_ADDRESS / er.CERT_ADDRESS | Selected identity certificate address |
+| verified_residence_address | varchar(500) | pr.RESIDENCE_ADDRESS / er.RESIDENCE_ADDRESS | Selected identity residence or operating address |
+| company_legal_person_name | varchar(100) | er.LEGAL_PERSON_NAME | Legal representative for company customers |
+| company_business_status | varchar(50) | er.BUSINESS_STATUS | Business status for company customers |
+| company_website_url | varchar(500) | er.COMPANY_WEBSITE_URL | Company website for company customers |
+| identity_selection_method | varchar(30) | CASE | MAIN_RECORD / LATEST_RECORD / NONE |
 | create_user | varchar(100) | ci.CREATE_USER | Created by |
 | create_time | timestamp | ci.CREATE_TIME | Record creation |
 | lst_upd_user | varchar(100) | ci.LST_UPD_USER | Last updated by |
 | lst_upd_time | timestamp | ci.LST_UPD_TIME | Last update |
 | delete_flag | char(1) | ci.DELETE_FLAG | Y / N |
 | dt | date | ci.CREATE_TIME | Partition column |
+
+Identity selection rule:
+
+1. For `COMPANY` customers, select the non-deleted enterprise realname row where
+   `MAIN_RECORD = 'Y'`. If no main record exists, select the latest non-deleted
+   enterprise realname row by `LST_UPD_TIME`, then `ID`.
+2. For `PERSONAL` customers, select the non-deleted person realname row where
+   `MAIN_RECORD = 'Y'`. If no main record exists, select the latest non-deleted
+   person realname row by `LST_UPD_TIME`, then `ID`.
+3. Do not select person realname rows as the company customer's identity. Company
+   related persons remain relationship detail, not customer identity.
+4. Do not join account, store, login, trade order, or transaction detail into
+   `dwd_customer`.
 
 ---
 
@@ -182,6 +240,9 @@ Based on ISO 20022 standard for financial messaging:
 | **Amount** | | | |
 | txn_amount | decimal(15,2) | pd.PAY_TXN_AMT | Transaction amount |
 | txn_currency | varchar(10) | pd.CURRENCY_CD | Transaction currency |
+| txn_amount_cny | decimal(20,6) | pd.PAY_TXN_AMT_CNY / co.COLL_TXN_CNY_AMT | Source-provided CNY amount |
+| use_amount | decimal(20,6) | COALESCE(txn_amount_cny, txn_amount * fx_rate) | Risk-ready CNY amount |
+| fx_rate | decimal(20,8) | dim.dim_forex | Transaction-currency-to-CNY rate by transaction date |
 | settlement_amount | decimal(15,2) | po.SETTLE_AMT | Settlement amount |
 | settlement_currency | varchar(10) | po.SETTLE_CURR_CD | Settlement currency |
 | commission_amount | decimal(15,2) | pd.COMMISSION_AMT | Commission |
@@ -278,162 +339,38 @@ Based on ISO 20022 standard for financial messaging:
 
 ---
 
-### 4.3 dwd_person (Person Identity)
+### 4.3 Deferred Semantic DWD Candidates
 
-**Purpose:** Consolidated person identity information from realname verification.
+The following sources should not be replicated into DWD just because they are
+useful downstream. They remain STG sources until a DWD table adds durable
+business semantics, combines multiple sources, or defines a canonical row grain
+that is different from the source table.
 
-**Grain:** One row per person realname record (ID)
+| Source | Do not create DWD if it only does this | Create DWD only when it does this |
+|--------|----------------------------------------|-----------------------------------|
+| `stg_cust_person_realname_info` | Rename person KYC columns | Define canonical person identity semantics used across customers, graph, and case investigation |
+| `stg_cust_enterprise_realname_info` | Rename enterprise KYC columns | Define canonical business identity semantics, including selected current identity and historical identity records |
+| `stg_cust_realname_enterprise_ref_person` | Copy enterprise-person relationship rows | Normalize roles such as legal representative, director, shareholder, controller, or UBO |
+| `stg_cust_bank_acct_info` | Copy bank-account rows | Define canonical customer account semantics across payment, payout, and graph use cases |
+| `stg_cust_collections_acct` | Copy collection-account rows | Define canonical collection-account semantics across VA, collection, balance, and graph use cases |
+| `stg_cust_store_info` | Copy store rows | Normalize stores, storefronts, platforms, and merchant-channel semantics |
+| `stg_cust_user_login_log` | Copy login events | Build behavioral summaries in DWS or normalize device/IP/session semantics for a concrete use case |
+| `stg_cust_foreign_trade_order` | Copy trade-order rows | Join logistics and normalize trade-document, buyer, seller, goods, and store evidence semantics |
 
-**Source Tables:** pr (stg_cust_person_realname_info)
+For the current implementation, the DWD backlog is intentionally small:
 
-| Column | Type | Source | Description |
-|--------|------|--------|-------------|
-| id | bigint | pr.ID | Primary key |
-| cust_id | bigint | pr.CUST_ID | Customer ID (FK) |
-| real_name | varchar(100) | pr.REAL_NAME | Verified real name |
-| en_name | varchar(255) | pr.EN_NAME | English name |
-| cert_type | varchar(20) | pr.CERT_TYPE | ID_CARD / PASSPORT / etc. |
-| cert_no | varchar(100) | pr.CERT_NO | Certificate number |
-| cert_address | varchar(500) | pr.CERT_ADDRESS | Address on certificate |
-| residence_address | varchar(500) | pr.RESIDENCE_ADDRESS | Current residence |
-| mobile | varchar(50) | pr.MOBILE | Mobile number |
-| email | varchar(100) | pr.EMAIL | Email address |
-| verify_status | varchar(20) | pr.VERIFY_STATUS | VERIFIED / PENDING / REJECTED |
-| verify_time | timestamp | pr.VERIFY_TIME | When verified |
-| verify_remark | varchar(500) | pr.VERIFY_REMARK | Verification notes |
-| create_user | varchar(100) | pr.CREATE_USER | Created by |
-| create_time | timestamp | pr.CREATE_TIME | Record creation |
-| lst_upd_user | varchar(100) | pr.LST_UPD_USER | Last updated by |
-| lst_upd_time | timestamp | pr.LST_UPD_TIME | Last update |
-| dt | date | pr.CREATE_TIME | Partition column |
-
----
-
-### 4.4 dwd_enterprise (Enterprise Identity)
-
-**Purpose:** Consolidated enterprise identity information from realname verification.
-
-**Grain:** One row per enterprise realname record (ID)
-
-**Source Tables:** er (stg_cust_enterprise_realname_info)
-
-| Column | Type | Source | Description |
-|--------|------|--------|-------------|
-| id | bigint | er.ID | Primary key |
-| cust_id | bigint | er.CUST_ID | Customer ID (FK) |
-| enterprise_name | varchar(200) | er.ENTERPRISE_NAME | Company name (Chinese) |
-| en_name | varchar(255) | er.EN_NAME | English name |
-| unified_social_credit_code | varchar(50) | er.UNIFIED_SOCIAL_CREDIT_CODE | Credit code |
-| legal_person_name | varchar(100) | er.LEGAL_PERSON_NAME | Legal representative |
-| cert_no | varchar(100) | er.CERT_NO | Business license no |
-| cert_address | varchar(500) | er.CERT_ADDRESS | Registered address |
-| residence_address | varchar(500) | er.RESIDENCE_ADDRESS | Operating address |
-| company_website_url | varchar(500) | er.COMPANY_WEBSITE_URL | Company website |
-| verify_status | varchar(20) | er.VERIFY_STATUS | VERIFIED / PENDING / REJECTED |
-| verify_time | timestamp | er.VERIFY_TIME | When verified |
-| verify_remark | varchar(500) | er.VERIFY_REMARK | Verification notes |
-| create_user | varchar(100) | er.CREATE_USER | Created by |
-| create_time | timestamp | er.CREATE_TIME | Record creation |
-| lst_upd_user | varchar(100) | er.LST_UPD_USER | Last updated by |
-| lst_upd_time | timestamp | er.LST_UPD_TIME | Last update |
-| dt | date | er.CREATE_TIME | Partition column |
-
----
-
-### 4.5 dwd_store (Customer Stores)
-
-**Purpose:** Customer store/platform information.
-
-**Grain:** One row per store (ID)
-
-**Source Tables:** si (stg_cust_store_info)
-
-| Column | Type | Source | Description |
-|--------|------|--------|-------------|
-| id | bigint | si.ID | Primary key |
-| cust_id | bigint | si.CUST_ID | Customer ID (FK) |
-| store_name | varchar(200) | si.STORE_NAME | Store name |
-| store_url | varchar(500) | si.STORE_URL | Store URL |
-| store_type | varchar(50) | si.STORE_TYPE | Platform type |
-| store_status | varchar(32) | si.STORE_STATUS | ACTIVE / INACTIVE |
-| storeholder_name | varchar(100) | si.STOREHOLDER_NAME | Store holder |
-| create_user | varchar(100) | si.CREATE_USER | Created by |
-| create_time | timestamp | si.CREATE_TIME | Record creation |
-| lst_upd_user | varchar(100) | si.LST_UPD_USER | Last updated by |
-| lst_upd_time | timestamp | si.LST_UPD_TIME | Last update |
-| dt | date | si.CREATE_TIME | Partition column |
-
----
-
-### 4.6 dwd_foreign_trade_order (Foreign Trade)
-
-**Purpose:** Foreign trade orders with logistics information.
-
-**Grain:** One row per order (ID)
-
-**Source Tables:** ft (stg_cust_foreign_trade_order), fl (stg_cust_foreign_trade_order_logistics)
-
-| Column | Type | Source | Description |
-|--------|------|--------|-------------|
-| id | bigint | ft.ID | Primary key |
-| cust_id | bigint | ft.CUST_ID | Customer ID (FK) |
-| order_no | varchar(64) | ft.ORDER_NO | Order number |
-| order_status | varchar(32) | ft.ORDER_STATUS | Order status |
-| order_amount | decimal(18,2) | ft.ORDER_AMOUNT | Order amount |
-| currency | varchar(10) | ft.CURRENCY | Currency code |
-| buyer_name | varchar(200) | ft.BUYER_NAME | Buyer name |
-| seller_name | varchar(200) | ft.SELLER_NAME | Seller name |
-| logistics_no | varchar(64) | fl.LOGISTICS_NO | Logistics tracking |
-| logistics_status | varchar(32) | fl.LOGISTICS_STATUS | Logistics status |
-| ship_time | timestamp | fl.SHIP_TIME | Ship time |
-| goods_store_url | varchar(500) | fl.GOODS_STORE_URL | Product store URL |
-| create_user | varchar(100) | ft.CREATE_USER | Created by |
-| create_time | timestamp | ft.CREATE_TIME | Record creation |
-| lst_upd_user | varchar(100) | ft.LST_UPD_USER | Last updated by |
-| lst_upd_time | timestamp | ft.LST_UPD_TIME | Last update |
-| dt | date | ft.CREATE_TIME | Partition column |
-
----
-
-### 4.7 dwd_login_log (Login History)
-
-**Purpose:** Customer login history with IP and device information.
-
-**Grain:** One row per login (ID)
-
-**Source Tables:** ll (stg_cust_user_login_log)
-
-| Column | Type | Source | Description |
-|--------|------|--------|-------------|
-| id | bigint | ll.ID | Primary key |
-| cust_id | bigint | ll.CUST_ID | Customer ID (FK) |
-| login_type | varchar(32) | ll.LOGIN_TYPE | WEB / APP / API |
-| login_ip | varchar(50) | ll.LOGIN_IP | IP address |
-| login_time | timestamp | ll.LOGIN_TIME | Login timestamp |
-| device_type | varchar(50) | ll.DEVICE_TYPE | Device info |
-| browser | varchar(100) | ll.BROWSER | Browser info |
-| os | varchar(100) | ll.OS | Operating system |
-| create_time | timestamp | ll.CREATE_TIME | Record creation |
-| dt | date | ll.CREATE_TIME | Partition column |
-
----
+1. `dwd_customer` for canonical customer subject and selected current identity.
+2. `dwd_transaction` for canonical payment/collection transaction semantics.
 
 ## 5. Implementation Plan
 
 ### Phase 1: Core Tables (Week 1)
-- [ ] `dwd_customer` - Customer master
-- [ ] `dwd_person` - Person identity
-- [ ] `dwd_enterprise` - Enterprise identity
+- [ ] `dwd_customer` - Canonical customer subject with selected current identity
 
 ### Phase 2: Transaction Table (Week 2)
 - [ ] `dwd_transaction` - ISO 20022 model with POBO
 
-### Phase 3: Supporting Tables (Week 3)
-- [ ] `dwd_store` - Customer stores
-- [ ] `dwd_foreign_trade_order` - Foreign trade with logistics
-- [ ] `dwd_login_log` - Login history
-
-### Phase 4: Quality & Documentation (Week 4)
+### Phase 3: Quality & Documentation (Week 3)
 - [ ] Data quality checks
 - [ ] Lineage documentation
 - [ ] Performance optimization
@@ -449,8 +386,8 @@ Based on ISO 20022 standard for financial messaging:
 
 ### Design Principles
 - **No aggregations in DWD** - Aggregations belong in DWS layer
-- **Detail-level only** - One row per business entity
-- **Denormalized** - Join related data for analysis-ready tables
+- **Detail-level only** - One row per declared business subject, relationship, or event grain
+- **Grain-compatible joins only** - Join selected one-to-one context; do not create DWD replicas for one-to-many source detail
 - **Cleansed** - Standardize names, handle nulls, remove duplicates
 - **ISO 20022 Compliant** - Use standard payment terminology
 
@@ -469,7 +406,7 @@ Each DWD table must pass the following quality checks before being considered pr
 
 | Check Type | Description | Threshold |
 |------------|-------------|-----------|
-| **Row Count** | DWD row count should match STG source | 100% (no data loss) |
+| **Row Count** | DWD row count should match the declared grain and source selection rule | 100% expected rows |
 | **Null Check** | Required fields must not be null | 0% nulls for required fields |
 | **Duplicate Check** | Primary key must be unique | 0 duplicates |
 | **Referential Integrity** | FK must exist in parent table | 100% valid references |
@@ -486,6 +423,9 @@ Each DWD table must pass the following quality checks before being considered pr
 | CUST_TYPE valid | Only PERSONAL/COMPANY | `SELECT COUNT(*) FROM dwd_customer WHERE cust_type NOT IN ('PERSONAL', 'COMPANY')` |
 | RISK_LEVEL valid | Only HIGH/MEDIUM_HIGH/MEDIUM/LOW | `SELECT COUNT(*) FROM dwd_customer WHERE risk_level NOT IN ('HIGH', 'MEDIUM_HIGH', 'MEDIUM', 'LOW')` |
 | REG_TIME not null | All customers have registration time | `SELECT COUNT(*) FROM dwd_customer WHERE reg_time IS NULL` |
+| CUST_ID grain preserved | Related joins must not duplicate customers | `SELECT COUNT(*) FROM dwd_customer` must equal distinct non-deleted customers from `stg_cust_customer_info` |
+| COMPANY identity source valid | Company selected identity comes from enterprise KYC | `SELECT COUNT(*) FROM dwd_customer WHERE cust_type = 'COMPANY' AND selected_identity_type = 'PERSON'` |
+| PERSONAL identity source valid | Personal selected identity comes from person KYC | `SELECT COUNT(*) FROM dwd_customer WHERE cust_type = 'PERSONAL' AND selected_identity_type = 'ENTERPRISE'` |
 
 #### dwd_transaction
 | Rule | Description | SQL Check |
@@ -497,20 +437,6 @@ Each DWD table must pass the following quality checks before being considered pr
 | CREDITOR_NAME not null | Payee name required | `SELECT COUNT(*) FROM dwd_transaction WHERE creditor_name IS NULL` |
 | IS_POBO logic | POBO flag matches ultimate_debtor_name | `SELECT COUNT(*) FROM dwd_transaction WHERE is_pobo = 'Y' AND ultimate_debtor_name IS NULL` |
 | IS_ONWARD logic | Onward flag matches creditor vs ultimate creditor | `SELECT COUNT(*) FROM dwd_transaction WHERE is_onward_payment = 'Y' AND creditor_name = ultimate_debtor_name` |
-
-#### dwd_person
-| Rule | Description | SQL Check |
-|------|-------------|-----------|
-| ID unique | No duplicate records | `SELECT id, COUNT(*) FROM dwd_person GROUP BY id HAVING COUNT(*) > 1` |
-| CUST_ID exists | Customer must exist | `SELECT COUNT(*) FROM dwd_person p LEFT JOIN dwd_customer c ON p.cust_id = c.cust_id WHERE c.cust_id IS NULL` |
-| CERT_NO format | Valid certificate format | `SELECT COUNT(*) FROM dwd_person WHERE cert_no IS NOT NULL AND LENGTH(cert_no) < 5` |
-
-#### dwd_enterprise
-| Rule | Description | SQL Check |
-|------|-------------|-----------|
-| ID unique | No duplicate records | `SELECT id, COUNT(*) FROM dwd_enterprise GROUP BY id HAVING COUNT(*) > 1` |
-| CUST_ID exists | Customer must exist | `SELECT COUNT(*) FROM dwd_enterprise e LEFT JOIN dwd_customer c ON e.cust_id = c.cust_id WHERE c.cust_id IS NULL` |
-| CREDIT_CODE format | Valid social credit code | `SELECT COUNT(*) FROM dwd_enterprise WHERE unified_social_credit_code IS NOT NULL AND LENGTH(unified_social_credit_code) != 18` |
 
 ### 7.3 Audit Execution
 
@@ -543,7 +469,7 @@ CREATE TABLE dwd_audit_log (
 | Term | ISO 20022 Definition |
 |------|---------------------|
 | STG | Staging layer - 1:1 mirror of source |
-| DWD | Data Warehouse Detail - cleansed, denormalized |
+| DWD | Data Warehouse Detail - cleansed, semantic detail layer with explicit row grain |
 | DWS | Data Warehouse Summary - aggregated |
 | ADS | Application Data Store - application-specific |
 | Hudi | Apache Hudi - incremental data lake format |
@@ -564,16 +490,32 @@ CREATE TABLE dwd_audit_log (
 
 | Table | Description | Rows (June 2026) |
 |-------|-------------|------------------|
-| stg_cust_customer_info | Customer master | 1,729 |
-| stg_cust_bank_acct_info | Bank accounts | 5,346 |
-| stg_cust_collections_acct | Collection accounts | 4,005 |
-| stg_cust_enterprise_realname_info | Enterprise KYC | 2,126 |
-| stg_cust_person_realname_info | Person KYC | 5,145 |
-| stg_cust_realname_enterprise_ref_person | Enterprise-person ref | 6,496 |
-| stg_cust_store_info | Customer stores | 1,210 |
-| stg_cust_user_login_log | Login history | 118,659 |
-| stg_cust_foreign_trade_order | Foreign trade orders | 14,270 |
+| stg_cust_customer_info | Customer master | 116,786 |
+| stg_cust_bank_acct_info | Bank accounts | 306,829 non-deleted |
+| stg_cust_collections_acct | Collection accounts | 207,489 non-deleted |
+| stg_cust_enterprise_realname_info | Enterprise KYC | 128,213 non-deleted |
+| stg_cust_person_realname_info | Person KYC | 330,465 non-deleted |
+| stg_cust_realname_enterprise_ref_person | Enterprise-person ref | 284,838 non-deleted |
+| stg_cust_store_info | Customer stores | 127,788 non-deleted |
+| stg_cust_user_login_log | Login history | 6,743,433 non-deleted |
+| stg_cust_foreign_trade_order | Foreign trade orders | 195,480 non-deleted |
 | stg_cust_foreign_trade_order_logistics | Logistics | 14,270 |
 | stg_pmp_coll_order | Collection orders | 114,734 |
 | stg_pmp_pay_order | Payment orders | 33,835 |
 | stg_pmp_pay_details | Payment details | 36,194 |
+
+### Customer-Adjacent Cardinality
+
+Measured from Presto on 2026-06-13. These counts explain why `dwd_customer`
+must not collect detailed related records into arrays or sets.
+
+| Source | Raw rows | Customers | Max rows per customer | p90 rows per customer |
+|--------|----------|-----------|-----------------------|-----------------------|
+| person realname | 330,465 | 95,342 | 30 | 6 |
+| enterprise realname | 128,213 | 59,100 | 7 | 3 |
+| enterprise ref person | 284,838 | 66,858 | 30 | 6 |
+| bank accounts | 306,829 | 72,919 | 41,794 | 4 |
+| collection accounts | 207,489 | 67,607 | 1,504 | 5 |
+| stores | 127,788 | 44,220 | 1,100 | 5 |
+| login logs | 6,743,433 | 90,241 | 651,510 | 138 |
+| foreign trade orders | 195,480 | 5,123 | 1,687 | 93 |

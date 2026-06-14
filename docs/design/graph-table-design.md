@@ -7,6 +7,8 @@
 
 ---
 
+> Serving note: ADR-0006 supersedes the product serving path in this proposal. The current link-analysis product serves from the DuckDB `association_attribute_links` snapshot, not from `dwd_graph_edges`. The graph edge tables described here remain useful for warehouse analytics, offline graph exports, compatibility jobs, and future graph products, but they are not required for the current Association Link Lookup serving contract.
+
 ## 1. Overview
 
 The graph table design enables relationship discovery between customers based on shared attributes. This is used for:
@@ -37,18 +39,21 @@ The graph table design enables relationship discovery between customers based on
 | is_high_risk | char(1) | dwd_customer | High risk flag |
 | cust_status | varchar(20) | dwd_customer | NORMAL / FROZEN / STOPPED |
 | regist_country | varchar(10) | dwd_customer | Registration country |
-| node_degree | int | Derived (COUNT from edges) | Number of connections |
 | first_seen | timestamp | MIN(create_time) | First activity |
 | last_seen | timestamp | MAX(lst_upd_time) | Last activity |
 | dt | date | Derived | Partition column |
 
+`node_degree` is not stored in `dwd_graph_nodes`. It is edge-derived and changes
+whenever edge evidence changes, so the DuckDB query layer computes it from the
+canonical edge snapshot.
+
 ---
 
-### 2.2 dwd_graph_edges (Customer Connections)
+### 2.2 dwd_graph_edges (Customer Association Connections)
 
-**Purpose:** Connections between customers based on shared attributes
+**Purpose:** Association connections between customers based on shared attributes
 
-**Grain:** One row per unique connection between two customers
+**Grain:** One row per unique shared-attribute connection between two customers
 
 | Column | Type | Source | Description |
 |--------|------|--------|-------------|
@@ -58,30 +63,108 @@ The graph table design enables relationship discovery between customers based on
 | edge_type | varchar(30) | Derived | See edge types below |
 | edge_value | varchar(500) | The shared value | The actual matching value |
 | edge_source | varchar(50) | Table name | Which table created this edge |
-| confidence | decimal(3,2) | Derived | Match confidence (0-1) |
+| strength | varchar(10) | Derived | Match strength: Strong / Weak |
 | first_seen | timestamp | MIN(create_time) | First observed |
 | last_seen | timestamp | MAX(lst_upd_time) | Last observed |
 | record_count | int | COUNT | Number of records supporting this edge |
-| dt | date | Derived | Partition column |
+| dt | date | Derived | Event date for filtering, not the physical partition |
+| etl_ts | timestamp | ETL runtime | Hudi precombine timestamp |
+
+**Partition:** `edge_type`
+
+The canonical edge table must not be partitioned by `first_seen` month. Reverse
+backfills can discover older evidence for an existing edge, which legitimately
+moves `first_seen` backward. Partitioning the canonical table by that value would
+turn a normal correction into a partition move and make idempotent updates
+fragile.
+
+### 2.3 dwd_graph_edge_monthly (Monthly Edge Evidence)
+
+**Purpose:** Idempotent monthly edge evidence used to support reverse backfill.
+
+**Grain:** One row per `(edge_id, edge_source, edge_field, observed_month)`.
+
+| Column | Type | Source | Description |
+|--------|------|--------|-------------|
+| edge_month_id | bigint | Generated | Monthly evidence record key |
+| edge_id | bigint | Generated | Canonical edge ID |
+| source_cust_id | bigint | Various | Source node |
+| target_cust_id | bigint | Various | Target node |
+| edge_type | varchar(30) | Derived | Edge type |
+| edge_value | varchar(500) | The shared value | Matching value |
+| edge_source | varchar(50) | Table name | Source table |
+| edge_field | varchar(100) | Field name | Source field/spec |
+| strength | varchar(10) | Derived | Strong / Weak |
+| first_seen | timestamp | MIN(create_time) | Earliest evidence timestamp in this monthly slice |
+| last_seen | timestamp | MAX(lst_upd_time) | Latest evidence timestamp in this monthly slice |
+| record_count | int | COUNT | Evidence support count in this monthly slice |
+| observed_month | varchar(7) | Derived | `yyyy-MM`, or `unknown` if source timestamps are missing |
+| dt | date | Derived | Observed date |
+| etl_ts | timestamp | ETL runtime | Hudi precombine timestamp |
+
+**Partition:** `edge_type, edge_source, edge_field, observed_month`
+
+Backfill writes this table with partition overwrite. The canonical
+`dwd_graph_edges` table is rebuilt/refreshed by aggregating monthly evidence:
+`first_seen = min(first_seen)`, `last_seen = max(last_seen)`, and
+`record_count = sum(record_count)`.
+
+### 2.4 dwd_graph_attr_index (Monthly Attribute Index)
+
+**Purpose:** Reusable shared-attribute index for monthly edge generation.
+
+**Grain:** One row per `(edge_type, edge_source, edge_field, join_key, cust_id, observed_month)`.
+
+| Column | Type | Source | Description |
+|--------|------|--------|-------------|
+| attr_month_id | bigint | Generated | Monthly attribute index record key |
+| attr_id | bigint | Generated | Stable key for `(edge_type, edge_source, edge_field, join_key, cust_id)` |
+| cust_id | bigint | Various | Customer/node owning this attribute |
+| join_key | varchar | Normalized source value | Normalized key used for matching |
+| join_key_hash | bigint | Generated | Hash of `join_key` for diagnostics and future bucketing |
+| edge_value | varchar(500) | Source value | Display value for graph evidence |
+| strength | varchar(10) | Edge spec | Strong / Weak |
+| first_seen | timestamp | MIN(create_time) | Earliest attribute observation in the monthly slice |
+| last_seen | timestamp | MAX(lst_upd_time) | Latest attribute observation in the monthly slice |
+| record_count | int | COUNT | Number of source rows supporting the customer/key in the monthly slice |
+| observed_month | varchar(7) | Derived | `yyyy-MM`, or `unknown` if source timestamps are missing |
+| dt | date | Derived | Observed date |
+| etl_ts | timestamp | ETL runtime | Hudi precombine timestamp |
+| edge_type | varchar(30) | Edge spec | Association edge type |
+| edge_source | varchar(50) | Edge spec | Source table name |
+| edge_field | varchar(100) | Edge spec | Source field/spec |
+
+**Partition:** `edge_type, edge_source, edge_field, observed_month`
+
+The monthly graph job writes changed attributes into this table and uses the
+existing index as the historical side of the join when available. This avoids
+rescanning full raw STG history for every edge field after the index has been
+bootstrapped. The job still falls back to raw history for a spec when the index
+does not yet contain that spec, preserving correctness during bootstrap.
+
+The monthly edge job batches all generated `dwd_graph_edge_monthly` rows into a
+single Hudi write per run instead of committing once per edge field.
 
 ---
 
 ## 3. Edge Types
 
-Based on the reference file (关联图谱高价值字段20260430.xlsx), the following edge types are defined:
+Based on the reference file (关联图谱高价值字段20260430.xlsx), the following association edge types are defined:
 
 | Edge Type | Source (Alias.Field) | Edge Value Format | Strength | Rationale |
 |-----------|---------------------|-------------------|----------|-----------|
 | **SAME_PHONE** | ci.CUST_MOBILE, ci.CONTACT_MOBILE, pd.MOBILE_NO, ba.RESERVED_MOBILE, po.SAME_NAME_PAYER_MOBILE | `+8613812345678` (E.164 format) | Strong | Phone numbers are unique identifiers |
 | **SAME_EMAIL** | ci.EMAIL, ba.ENTITY_EMAIL, pd.BENEFICIARY_EMAIL | `user@example.com` | Strong | Email addresses are unique identifiers |
-| **SAME_ENTITY_NAME** | ci.NAME (COMPANY), ci.EN_NAME (COMPANY), ba.ACCT_NAME, ft.BUYER_NAME, ft.SELLER_NAME, er.LEGAL_PERSON_NAME, er.ENTERPRISE_NAME | `ABC COMPANY LTD` | Strong | Entity names are unique identifiers |
-| **SAME_PERSON_NAME** | ci.NAME (PERSONAL), ci.EN_NAME (PERSONAL), pr.NAME, pr.EN_NAME | `张三` | Weak | Person names can be similar without being same person |
+| **SAME_BUSINESS_NAME** | ci.NAME (COMPANY), ci.EN_NAME (COMPANY), ba.ACCT_NAME, er.ENTERPRISE_NAME, er.EN_NAME | `ABC COMPANY LTD` | Strong | Business names are identifiers for company, merchant, or sole-proprietor subjects (per ADR-0002) |
+| **SAME_PERSON_NAME** | ci.NAME (PERSONAL), ci.EN_NAME (PERSONAL), pr.NAME, pr.EN_NAME, er.LEGAL_PERSON_NAME | `张三` | Weak | Person names can be similar without being same person |
+| **SAME_TRADE_PARTY_NAME** | ft.BUYER_NAME, ft.SELLER_NAME | `ABC COMPANY LTD` | Weak | Trade-party names belong to transaction context, not default shared-attribute association (per ADR-0002) |
 | **SAME_ADDRESS** | pr.RESIDENCE_ADDRESS, pr.CERT_ADDRESS, ba.ENTITY_ADDRESS, co.PAYEE_ADDRESS | `北京市朝阳区xxx路xxx号` | Strong | Addresses can be shared by related entities |
 | **SAME_ID_NO** | pr.CERT_NO, ba.ID_CARD_NO, pd.IDENTITY_NO, er.CERT_NO | `ID_CARD=110101199001011234` or `PASSPORT=E12345678` | Strong | Certificate numbers are unique identifiers |
 | **SAME_STORE_URL** | si.STORE_URL, fl.GOODS_STORE_URL, er.COMPANY_WEBSITE_URL | `https://www.example.com/store` | Weak | Store URLs can be shared by related businesses |
 | **SAME_IP** | ll.LOGIN_IP | `192.168.1.1` | Weak | IPs can be shared (office, VPN, etc.) |
-| **COUNTERPARTY** | pd.PAY_ORDER_ID, pd.CUST_ID, pd.COUNTER_PARTY_ID, co.COLL_ORDER_ID, co.CUST_ID, co.COUNTER_PARTY_ID | `PAY:ORDER_ID=12345678:DEBTOR` or `COLL:ORDER_ID=87654321:CREDITOR` | Strong | Direct transaction relationship with side |
 | **SIMILAR_ADDRESS** | pr.RESIDENCE_ADDRESS, pr.CERT_ADDRESS, ba.ENTITY_ADDRESS, co.PAYEE_ADDRESS | `北京市朝阳区xxx路xxx号 \|\| 北京市朝阳区xxx路xxx号` (source \|\| target) | Strong | Fuzzy address match via embedding similarity |
+
+Transaction counterparty relationships are directional transaction-flow evidence and are intentionally excluded from `dwd_graph_edges`.
 
 ---
 
@@ -99,7 +182,7 @@ SELECT
     'SAME_PHONE' as edge_type,
     a.cust_mobile as edge_value,
     'stg_cust_customer_info' as edge_source,
-    0.9 as confidence,
+    'Strong' as strength,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
@@ -117,7 +200,7 @@ SELECT
     'SAME_PHONE' as edge_type,
     a.contact_mobile as edge_value,
     'stg_cust_customer_info' as edge_source,
-    0.9 as confidence,
+    'Strong' as strength,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
@@ -139,7 +222,7 @@ SELECT
     'SAME_EMAIL' as edge_type,
     a.email as edge_value,
     'stg_cust_customer_info' as edge_source,
-    0.9 as confidence,
+    'Strong' as strength,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
@@ -161,7 +244,7 @@ SELECT
     'SAME_ID_NO' as edge_type,
     CONCAT(a.cert_type, '=', a.cert_no) as edge_value,
     'stg_cust_person_realname_info' as edge_source,
-    0.95 as confidence,
+    'Strong' as strength,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
@@ -184,7 +267,7 @@ SELECT
     'SAME_ADDRESS' as edge_type,
     a.residence_address as edge_value,
     'stg_cust_person_realname_info' as edge_source,
-    0.8 as confidence,
+    'Strong' as strength,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
@@ -194,29 +277,190 @@ JOIN stg_cust_person_realname_info b ON a.residence_address = b.residence_addres
 WHERE a.residence_address IS NOT NULL AND a.residence_address != '';
 ```
 
-### 4.5 SAME_NAME Edges
+### 4.5 SAME_BUSINESS_NAME Edges
+
+Per ADR-0002, business-name edges use `SAME_BUSINESS_NAME` instead of `SAME_ENTITY_NAME`. This edge type covers company, merchant, and sole-proprietor business names only. Legal-person names use `SAME_PERSON_NAME`, and buyer/seller names use `SAME_TRADE_PARTY_NAME`.
 
 ```sql
--- From stg_cust_customer_info (cust_name)
+-- From stg_cust_customer_info (company customer names)
 INSERT INTO dwd_graph_edges
 SELECT 
     ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
     a.cust_id as source_cust_id,
     b.cust_id as target_cust_id,
-    'SAME_NAME' as edge_type,
+    'SAME_BUSINESS_NAME' as edge_type,
     a.cust_name as edge_value,
     'stg_cust_customer_info' as edge_source,
-    0.7 as confidence,
+    'Strong' as strength,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
     CURRENT_DATE as dt
 FROM stg_cust_customer_info a
 JOIN stg_cust_customer_info b ON a.cust_name = b.cust_name AND a.cust_id < b.cust_id
-WHERE a.cust_name IS NOT NULL AND a.cust_name != '';
+WHERE a.cust_name IS NOT NULL AND a.cust_name != ''
+  AND a.cust_type = 'COMPANY';  -- Business names only
+
+-- From stg_cust_customer_info (company English names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_BUSINESS_NAME' as edge_type,
+    a.en_name as edge_value,
+    'stg_cust_customer_info' as edge_source,
+    'Strong' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_customer_info a
+JOIN stg_cust_customer_info b ON a.en_name = b.en_name AND a.cust_id < b.cust_id
+WHERE a.en_name IS NOT NULL AND a.en_name != ''
+  AND a.cust_type = 'COMPANY';  -- Business names only
+
+-- From stg_cust_bank_acct_info (account holder names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_BUSINESS_NAME' as edge_type,
+    a.acct_name as edge_value,
+    'stg_cust_bank_acct_info' as edge_source,
+    'Strong' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_bank_acct_info a
+JOIN stg_cust_bank_acct_info b ON a.acct_name = b.acct_name AND a.cust_id < b.cust_id
+WHERE a.acct_name IS NOT NULL AND a.acct_name != '';
+
+-- From stg_cust_enterprise_realname_info (enterprise names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_BUSINESS_NAME' as edge_type,
+    a.enterprise_name as edge_value,
+    'stg_cust_enterprise_realname_info' as edge_source,
+    'Strong' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_enterprise_realname_info a
+JOIN stg_cust_enterprise_realname_info b ON a.enterprise_name = b.enterprise_name AND a.cust_id < b.cust_id
+WHERE a.enterprise_name IS NOT NULL AND a.enterprise_name != '';
+
+-- From stg_cust_enterprise_realname_info (enterprise English names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_BUSINESS_NAME' as edge_type,
+    a.en_name as edge_value,
+    'stg_cust_enterprise_realname_info' as edge_source,
+    'Strong' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_enterprise_realname_info a
+JOIN stg_cust_enterprise_realname_info b ON a.en_name = b.en_name AND a.cust_id < b.cust_id
+WHERE a.en_name IS NOT NULL AND a.en_name != '';
 ```
 
-### 4.6 SAME_STORE_URL Edges
+### 4.6 SAME_PERSON_NAME Edges
+
+Person-name edges cover legal-person names and personal customer names.
+
+```sql
+-- From stg_cust_enterprise_realname_info (legal person names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_PERSON_NAME' as edge_type,
+    a.legal_person_name as edge_value,
+    'stg_cust_enterprise_realname_info' as edge_source,
+    'Weak' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_enterprise_realname_info a
+JOIN stg_cust_enterprise_realname_info b ON a.legal_person_name = b.legal_person_name AND a.cust_id < b.cust_id
+WHERE a.legal_person_name IS NOT NULL AND a.legal_person_name != '';
+
+-- From stg_cust_customer_info (personal customer names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_PERSON_NAME' as edge_type,
+    a.cust_name as edge_value,
+    'stg_cust_customer_info' as edge_source,
+    'Weak' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_customer_info a
+JOIN stg_cust_customer_info b ON a.cust_name = b.cust_name AND a.cust_id < b.cust_id
+WHERE a.cust_name IS NOT NULL AND a.cust_name != ''
+  AND a.cust_type = 'PERSONAL';  -- Person names only
+```
+
+### 4.7 SAME_TRADE_PARTY_NAME Edges
+
+Trade-party names (buyer/seller) belong to transaction context per ADR-0002.
+
+```sql
+-- From stg_cust_foreign_trade_order (buyer names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_TRADE_PARTY_NAME' as edge_type,
+    a.buyer_name as edge_value,
+    'stg_cust_foreign_trade_order' as edge_source,
+    'Weak' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_foreign_trade_order a
+JOIN stg_cust_foreign_trade_order b ON a.buyer_name = b.buyer_name AND a.cust_id < b.cust_id
+WHERE a.buyer_name IS NOT NULL AND a.buyer_name != '';
+
+-- From stg_cust_foreign_trade_order (seller names)
+INSERT INTO dwd_graph_edges
+SELECT 
+    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
+    a.cust_id as source_cust_id,
+    b.cust_id as target_cust_id,
+    'SAME_TRADE_PARTY_NAME' as edge_type,
+    a.seller_name as edge_value,
+    'stg_cust_foreign_trade_order' as edge_source,
+    'Weak' as strength,
+    MIN(a.create_time, b.create_time) as first_seen,
+    MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
+    1 as record_count,
+    CURRENT_DATE as dt
+FROM stg_cust_foreign_trade_order a
+JOIN stg_cust_foreign_trade_order b ON a.seller_name = b.seller_name AND a.cust_id < b.cust_id
+WHERE a.seller_name IS NOT NULL AND a.seller_name != '';
+```
+
+### 4.8 SAME_STORE_URL Edges
 
 ```sql
 -- From stg_cust_store_info
@@ -228,7 +472,7 @@ SELECT
     'SAME_STORE_URL' as edge_type,
     a.store_url as edge_value,
     'stg_cust_store_info' as edge_source,
-    0.6 as confidence,
+    'Weak' as strength,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
@@ -238,7 +482,7 @@ JOIN stg_cust_store_info b ON a.store_url = b.store_url AND a.cust_id < b.cust_i
 WHERE a.store_url IS NOT NULL AND a.store_url != '';
 ```
 
-### 4.7 SAME_IP Edges
+### 4.9 SAME_IP Edges
 
 ```sql
 -- From stg_cust_user_login_log
@@ -250,7 +494,7 @@ SELECT
     'SAME_IP' as edge_type,
     a.login_ip as edge_value,
     'stg_cust_user_login_log' as edge_source,
-    0.5 as confidence,
+    'Weak' as strength,
     MIN(a.create_time, b.create_time) as first_seen,
     MAX(a.lst_upd_time, b.lst_upd_time) as last_seen,
     1 as record_count,
@@ -260,49 +504,7 @@ JOIN stg_cust_user_login_log b ON a.login_ip = b.login_ip AND a.cust_id < b.cust
 WHERE a.login_ip IS NOT NULL AND a.login_ip != '';
 ```
 
-### 4.8 COUNTERPARTY Edges
-
-```sql
--- From stg_pmp_pay_details (payment counterparty)
-INSERT INTO dwd_graph_edges
-SELECT 
-    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
-    a.cust_id as source_cust_id,
-    a.counter_party_id as target_cust_id,
-    'COUNTERPARTY' as edge_type,
-    CAST(a.pay_order_id AS VARCHAR) as edge_value,
-    'stg_pmp_pay_details' as edge_source,
-    0.95 as confidence,
-    a.create_time as first_seen,
-    a.lst_upd_time as last_seen,
-    1 as record_count,
-    CURRENT_DATE as dt
-FROM stg_pmp_pay_details a
-WHERE a.counter_party_id IS NOT NULL 
-  AND a.cust_id != a.counter_party_id
-  AND a.cust_id < a.counter_party_id;
-
--- From stg_pmp_coll_order (collection counterparty)
-INSERT INTO dwd_graph_edges
-SELECT 
-    ROW_NUMBER() OVER () + (SELECT MAX(edge_id) FROM dwd_graph_edges) as edge_id,
-    a.cust_id as source_cust_id,
-    a.counter_party_id as target_cust_id,
-    'COUNTERPARTY' as edge_type,
-    CAST(a.coll_order_id AS VARCHAR) as edge_value,
-    'stg_pmp_coll_order' as edge_source,
-    0.95 as confidence,
-    a.create_time as first_seen,
-    a.lst_upd_time as last_seen,
-    1 as record_count,
-    CURRENT_DATE as dt
-FROM stg_pmp_coll_order a
-WHERE a.counter_party_id IS NOT NULL 
-  AND a.cust_id != a.counter_party_id
-  AND a.cust_id < a.counter_party_id;
-```
-
-### 4.9 SIMILAR_ADDRESS Edges (Fuzzy Match)
+### 4.10 SIMILAR_ADDRESS Edges (Fuzzy Match)
 
 ```sql
 -- Pre-compute address embeddings
@@ -365,14 +567,11 @@ SELECT
     'SIMILAR_ADDRESS' as edge_type,
     CONCAT(a.address, ' || ', b.address) as edge_value,
     'address_embedding' as edge_source,
-    -- Confidence based on cosine similarity (0.7-0.95 range)
+    -- Strength based on cosine similarity
     CASE 
-        WHEN cosine_similarity(a.embedding, b.embedding) >= 0.95 THEN 0.95
-        WHEN cosine_similarity(a.embedding, b.embedding) >= 0.90 THEN 0.90
-        WHEN cosine_similarity(a.embedding, b.embedding) >= 0.85 THEN 0.85
-        WHEN cosine_similarity(a.embedding, b.embedding) >= 0.80 THEN 0.80
-        ELSE 0.70
-    END as confidence,
+        WHEN cosine_similarity(a.embedding, b.embedding) >= 0.90 THEN 'Strong'
+        ELSE 'Weak'
+    END as strength,
     CURRENT_TIMESTAMP as first_seen,
     CURRENT_TIMESTAMP as last_seen,
     1 as record_count,
@@ -390,14 +589,14 @@ WHERE cosine_similarity(a.embedding, b.embedding) >= 0.80  -- Similarity thresho
 ### 5.1 Find All Connections for a Customer
 
 ```sql
-SELECT target_cust_id, edge_type, edge_value, confidence
+SELECT target_cust_id, edge_type, edge_value, strength
 FROM dwd_graph_edges
 WHERE source_cust_id = 12345
 UNION ALL
-SELECT source_cust_id, edge_type, edge_value, confidence
+SELECT source_cust_id, edge_type, edge_value, strength
 FROM dwd_graph_edges
 WHERE target_cust_id = 12345
-ORDER BY confidence DESC;
+ORDER BY CASE strength WHEN 'Strong' THEN 0 ELSE 1 END;
 ```
 
 ### 5.2 Find Shortest Path Between Two Customers
@@ -427,23 +626,23 @@ SELECT * FROM path WHERE target_cust_id = 67890 LIMIT 1;
 ### 5.3 Find High-Risk Connected Customers
 
 ```sql
-SELECT DISTINCT n.cust_id, n.cust_name, n.risk_level, e.edge_type, e.confidence
+SELECT DISTINCT n.cust_id, n.cust_name, n.risk_level, e.edge_type, e.strength
 FROM dwd_graph_edges e
 JOIN dwd_graph_nodes n ON (e.target_cust_id = n.cust_id OR e.source_cust_id = n.cust_id)
 WHERE (e.source_cust_id = 12345 OR e.target_cust_id = 12345)
   AND n.risk_level IN ('HIGH', 'MEDIUM_HIGH')
   AND n.cust_id != 12345
-ORDER BY e.confidence DESC;
+ORDER BY CASE e.strength WHEN 'Strong' THEN 0 ELSE 1 END;
 ```
 
 ### 5.4 Find Shared Attributes Between Two Customers
 
 ```sql
-SELECT edge_type, edge_value, confidence
+SELECT edge_type, edge_value, strength
 FROM dwd_graph_edges
 WHERE (source_cust_id = 12345 AND target_cust_id = 67890)
    OR (source_cust_id = 67890 AND target_cust_id = 12345)
-ORDER BY confidence DESC;
+ORDER BY CASE strength WHEN 'Strong' THEN 0 ELSE 1 END;
 ```
 
 ---
@@ -459,19 +658,21 @@ ORDER BY confidence DESC;
 - Simplifies deduplication
 - Queries can use UNION ALL to get bidirectional results
 
-### 6.2 Confidence Scores
+### 6.2 Edge Strength
 
-**Decision:** Assign confidence scores based on edge type
+**Decision:** Classify each edge type as Strong or Weak based on how uniquely the attribute identifies a relationship
 
-| Edge Type | Confidence | Rationale |
-|-----------|------------|-----------|
-| SAME_CERT_NO | 0.95 | Certificate numbers are unique identifiers |
-| SAME_PHONE | 0.9 | Phone numbers are unique identifiers |
-| SAME_EMAIL | 0.9 | Email addresses are unique identifiers |
-| SAME_ADDRESS | 0.8 | Addresses can be shared by related entities |
-| SAME_NAME | 0.7 | Names can be similar without being same person |
-| SAME_STORE_URL | 0.6 | Store URLs can be shared by related businesses |
-| SAME_IP | 0.5 | IPs can be shared (office, VPN, etc.) |
+| Edge Type | Strength | Rationale |
+|-----------|----------|-----------|
+| SAME_ID_NO | Strong | Certificate numbers are unique identifiers |
+| SAME_PHONE | Strong | Phone numbers are unique identifiers |
+| SAME_EMAIL | Strong | Email addresses are unique identifiers |
+| SAME_ADDRESS | Strong | Addresses can be shared by related entities |
+| SAME_BUSINESS_NAME | Strong | Business names are identifiers for company, merchant, or sole-proprietor subjects (per ADR-0002) |
+| SAME_PERSON_NAME | Weak | Person names can be similar without being same person |
+| SAME_TRADE_PARTY_NAME | Weak | Trade-party names belong to transaction context, not default shared-attribute association (per ADR-0002) |
+| SAME_STORE_URL | Weak | Store URLs can be shared by related businesses |
+| SAME_IP | Weak | IPs can be shared (office, VPN, etc.) |
 
 ### 6.3 Edge Merging
 
@@ -505,20 +706,20 @@ ORDER BY confidence DESC;
 ## 7. Implementation Plan
 
 ### Phase 1: Table Creation (Week 1)
-- [ ] Create `dwd_graph_nodes` table
-- [ ] Create `dwd_graph_edges` table
+- [x] Create `dwd_graph_nodes` table
+- [x] Create `dwd_graph_edges` table
 - [ ] Set up partitioning
 
 ### Phase 2: Edge Generation (Week 2)
-- [ ] Implement SAME_PHONE edges
-- [ ] Implement SAME_EMAIL edges
-- [ ] Implement SAME_CERT_NO edges
+- [x] Implement SAME_PHONE edges
+- [x] Implement SAME_EMAIL edges
+- [x] Implement SAME_ID_NO edges
 
 ### Phase 3: Additional Edges (Week 3)
-- [ ] Implement SAME_ADDRESS edges
-- [ ] Implement SAME_NAME edges
-- [ ] Implement SAME_STORE_URL edges
-- [ ] Implement SAME_IP edges
+- [x] Implement SAME_ADDRESS edges
+- [x] Implement SAME_BUSINESS_NAME, SAME_PERSON_NAME, and SAME_TRADE_PARTY_NAME edges
+- [x] Implement SAME_STORE_URL edges
+- [x] Implement SAME_IP edges
 
 ### Phase 4: Query Optimization (Week 4)
 - [ ] Create indexes on edge tables
@@ -535,8 +736,7 @@ ORDER BY confidence DESC;
 |-------|-------------|-----------|
 | Node Count | All customers should have nodes | 100% coverage |
 | Edge Count | Reasonable number of edges | > 0, < 10x node count |
-| Bidirectional Coverage | All edges should have reverse | 100% |
-| Confidence Range | Confidence should be 0-1 | 100% valid |
+| Strength Values | Must be 'Strong' or 'Weak' | 100% valid |
 | No Self-Loops | source_cust_id != target_cust_id | 0 violations |
 
 ### 8.2 Edge-Specific Checks
@@ -558,7 +758,7 @@ ORDER BY confidence DESC;
 | Edge | A relationship between two customers |
 | Edge Type | The type of shared attribute (phone, email, etc.) |
 | Edge Value | The actual shared value |
-| Confidence | How reliable the edge is (0-1) |
+| Strength | How uniquely the attribute identifies the relationship (Strong / Weak) |
 | Node Degree | Number of connections a node has |
 | Cluster | A group of connected customers |
 | Path | A sequence of edges connecting two nodes |
@@ -589,7 +789,7 @@ From 关联图谱高价值字段20260430.xlsx:
 | cust_customer_info | 客户基础信息 | CUST_MOBILE | 手机号 |
 | cust_customer_info | 客户基础信息 | EMAIL | 电子邮箱 |
 | cust_customer_info | 客户基础信息 | EN_NAME | 英文名称 |
-| cust_customer_info | 客户基础信息 | NAME | 客户名称 |
+| cust_customer_info | 客户基础信息 | CUST_NAME | 客户名称 |
 | cust_customer_info | 客户基础信息 | CONTACT_MOBILE | 联系手机号 |
 | cust_foreign_trade_order | 客户外贸订单表 | BUYER_NAME | 买方名称 |
 | cust_foreign_trade_order | 客户外贸订单表 | SELLER_NAME | 卖方名称 |
@@ -609,7 +809,7 @@ From 关联图谱高价值字段20260430.xlsx:
 | cust_enterprise_realname_info | 企业实名认证信息 | COMPANY_WEBSITE_URL | 线上店铺网址 |
 | cust_enterprise_realname_info | 企业实名认证信息 | CERT_NO | 证书编号 |
 | cust_enterprise_realname_info | 企业实名认证信息 | CERT_ADDRESS | 证件所在详细地址 |
-| cust_enterprise_realname_info | 企业实名认证信息 | NAME | 客户名称 |
+| cust_enterprise_realname_info | 企业实名认证信息 | ENTERPRISE_NAME | 企业名称 |
 | cust_enterprise_realname_info | 企业实名认证信息 | EN_NAME | 企业英文名称 |
 | pmp_coll_order | 收款订单表 | PAYEE_ADDRESS | 收款方地址 |
 | cust_collections_acct | 收款账号表 | ACCT_NAME | 户名 |

@@ -1,0 +1,19 @@
+[Unit]
+Description=Skyee customer graph query service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jonas.gu
+Group=users
+WorkingDirectory=/data/home/jonas.gu/projects/skyee-ai-risk
+Environment=GRAPH_DUCKDB_PATH=/data/home/jonas.gu/projects/skyee-ai-risk/data/skyee_graph.duckdb
+Environment=GRAPH_MAX_QUERY_DEGREE=1000
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/data/home/jonas.gu/projects/skyee-ai-risk/.uv-bin/uv run --with duckdb==1.0.0 --with fastapi --with uvicorn uvicorn scripts.duckdb_graph_service:app --host 0.0.0.0 --port 8088
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
