@@ -5,6 +5,7 @@ import {
   GRAPH_SESSION_COOKIE,
   buildGraphRedirectUri,
   createSessionValue,
+  getAppBaseUrl,
   getIdentityBaseUrl,
   getIdentityClientSlug,
   getRequiredEmailDomain,
@@ -19,7 +20,7 @@ function errorRedirect(
   reason: string,
   description?: string | null
 ): NextResponse {
-  const url = new URL("/auth/error", request.url);
+  const url = new URL("/auth/error", getAppBaseUrl(request.url));
   url.searchParams.set("error", reason);
   if (description) {
     url.searchParams.set("error_description", description);
@@ -77,7 +78,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return errorRedirect(request, "invalid_user");
   }
 
-  const response = NextResponse.redirect(new URL(parsedState.returnTo, request.url));
+  const response = NextResponse.redirect(new URL(parsedState.returnTo, getAppBaseUrl(request.url)));
   response.cookies.set(GRAPH_SESSION_COOKIE, sessionValue, sessionCookieOptions);
   response.cookies.delete(GRAPH_AUTH_STATE_COOKIE);
   return response;
