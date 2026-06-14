@@ -8,7 +8,7 @@ substitutions:
   _APP_BASE_URL: https://skyee-graph-demo-czwo4jlhdq-df.a.run.app
   _GRAPH_QUERY_BASE_URL: ""
   _SOURCE_EVIDENCE_MYSQL_URL: mysql://usr_skyee_jonas_bi_view:mUewVEetS4d7w@rm-wz9o2jhv000avcrs5.mysql.rds.aliyuncs.com/usr_skyee_mw
-  _DATABASE_URL: postgresql://graph_demo:Gr4ph-D3m0!@10.58.0.11:5432/graph_demo
+  _DATABASE_URL: postgresql://graph_demo:Gr4ph-D3m0!@10.58.0.11:5432/graph_demo?sslmode=disable
   _IDENTITY_BASE_URL: https://identity-dev.1above.io
   _IDENTITY_APP_CLIENT_SLUG: skyee-ai-risk
   _IDENTITY_ORG_SLUG: skyee
