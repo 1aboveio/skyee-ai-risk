@@ -316,6 +316,15 @@ test.describe("Risk Graph panel", () => {
     await expect(page.getByRole("tab", { name: /Graph/i })).toBeVisible();
     await expect(page.getByRole("tab", { name: /Edges/i })).toBeVisible();
     await expect(page.getByRole("tab", { name: /Nodes/i })).toBeVisible();
+
+    await expect(page.getByText("High-risk enrichment unavailable")).toBeVisible();
+
+    await page.getByRole("tab", { name: /Edges/i }).click();
+    const row = page.locator("tbody tr", { hasText: "+86-138-0000-1234" });
+    await expect(row.getByText("Same Mobile Phone")).toBeVisible();
+    await row.getByRole("button", { name: /Provenance/i }).hover();
+    await expect(page.getByText("Attribute link: PRIMARY_MOBILE")).toBeVisible();
+    await expect(page.getByText("Field: cust_customer_info.CUST_MOBILE")).toBeVisible();
   });
 });
 

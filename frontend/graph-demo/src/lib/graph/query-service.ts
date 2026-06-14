@@ -224,29 +224,37 @@ function normalizeServiceResult(
   const edges = filtered.map((item, index) => edgeForRow(item, index, input));
 
   const center = nodeForCenter(input);
-  const nodes: GraphNode[] = [
-    center,
-    ...filtered.map((item) => {
-      const custId = String(item.neighbor_cust_id);
-      return {
-        custId,
-        custName: item.cust_name ?? null,
-        riskLevel: riskLevel(item.risk_level),
-        isHighRisk: toBoolean(item.is_high_risk) || highRiskIds.has(custId),
-        isSanctioned: toBoolean(item.is_sanctioned),
-        nodeDegree: Number(item.node_degree ?? 0),
-        currentBalance: decimalNumber(item.current_balance),
-        enrichmentStatus: item.enrichment_status ?? null,
-        enrichmentError: item.enrichment_error ?? null,
-      };
-    }),
-  ];
+  const nodeByCustId = new Map<string, GraphNode>();
+  for (const item of filtered) {
+    const custId = String(item.neighbor_cust_id);
+    const existing = nodeByCustId.get(custId);
+    const isHighRisk = toBoolean(item.is_high_risk) || highRiskIds.has(custId);
+    const isSanctioned = toBoolean(item.is_sanctioned);
+    if (existing) {
+      existing.isHighRisk = existing.isHighRisk || isHighRisk;
+      existing.isSanctioned = existing.isSanctioned || isSanctioned;
+      existing.nodeDegree = Math.max(existing.nodeDegree, Number(item.node_degree ?? 0));
+      continue;
+    }
+    nodeByCustId.set(custId, {
+      custId,
+      custName: item.cust_name ?? null,
+      riskLevel: riskLevel(item.risk_level),
+      isHighRisk,
+      isSanctioned,
+      nodeDegree: Number(item.node_degree ?? 0),
+      currentBalance: decimalNumber(item.current_balance),
+      enrichmentStatus: item.enrichment_status ?? null,
+      enrichmentError: item.enrichment_error ?? null,
+    });
+  }
+  const nodes: GraphNode[] = [center, ...nodeByCustId.values()];
 
   const centerNodeDegree = degree?.node_degree;
   if (typeof centerNodeDegree === "number") {
     nodes[0]!.nodeDegree = centerNodeDegree;
   } else {
-    nodes[0]!.nodeDegree = filtered.length;
+    nodes[0]!.nodeDegree = new Set(filtered.map((edge) => String(edge.neighbor_cust_id))).size;
   }
 
   return {

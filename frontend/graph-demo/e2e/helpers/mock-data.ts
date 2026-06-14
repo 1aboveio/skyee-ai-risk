@@ -261,7 +261,7 @@ export const mockGraphData = {
       lastSeen: "2025-05-20T00:00:00.000Z",
     },
   ],
-  warnings: [],
+  warnings: ["High-risk enrichment unavailable: E2E partial enrichment."],
   stats: {
     nodeCount: 3,
     edgeCount: 2,
