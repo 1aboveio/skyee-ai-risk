@@ -243,7 +243,7 @@ export async function getTransactionList(
   // We fetch effectiveLimit + 1 rows from each table to detect hasMore, then merge.
 
   const hasCursor = cursorCreateTime !== null && cursorId !== null;
-  const fetchLimit = dbFetchLimit + 1;
+  const fetchLimit = String(dbFetchLimit + 1);
 
   // Build date filter conditions
   const dateFilter: string[] = [];
@@ -264,7 +264,7 @@ export async function getTransactionList(
 
   // Outbound from pmp_pay_order (authoritative header-level records)
   const payWhere = hasCursor
-    ? `WHERE CUST_ID = ? AND (CREATE_TIME < ? OR (CREATE_TIME = ? AND PAY_ORDER_ID < ?)) ${dateFilterClause}`
+    ? `WHERE CUST_ID = ? AND (CREATE_TIME < ? OR (CREATE_TIME = ? AND PAY_ORDER_ID < CAST(? AS UNSIGNED))) ${dateFilterClause}`
     : `WHERE CUST_ID = ? ${dateFilterClause}`;
   const payParams = hasCursor
     ? [custId, cursorCreateTime, cursorCreateTime, cursorId, ...dateParams, fetchLimit]
@@ -272,7 +272,7 @@ export async function getTransactionList(
 
   // Inbound from pmp_coll_order
   const collWhere = hasCursor
-    ? `WHERE CUST_ID = ? AND (CREATE_TIME < ? OR (CREATE_TIME = ? AND COLL_ORDER_ID < ?)) ${dateFilterClause}`
+    ? `WHERE CUST_ID = ? AND (CREATE_TIME < ? OR (CREATE_TIME = ? AND COLL_ORDER_ID < CAST(? AS UNSIGNED))) ${dateFilterClause}`
     : `WHERE CUST_ID = ? ${dateFilterClause}`;
   const collParams = hasCursor
     ? [custId, cursorCreateTime, cursorCreateTime, cursorId, ...dateParams, fetchLimit]
