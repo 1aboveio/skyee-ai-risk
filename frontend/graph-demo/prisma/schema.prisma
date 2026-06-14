@@ -76,3 +76,9 @@ model FxRate {
   @@unique([baseCurrency, quoteCurrency, rateDate])
   @@index([quoteCurrency, rateDate])
 }
+
+model ReviewerLocalePreference {
+  reviewerId String   @id
+  locale     String
+  updatedAt  DateTime @updatedAt
+}

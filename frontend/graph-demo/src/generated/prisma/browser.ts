@@ -42,3 +42,8 @@ export type ReviewDecision = Prisma.ReviewDecisionModel
  * 
  */
 export type FxRate = Prisma.FxRateModel
+/**
+ * Model ReviewerLocalePreference
+ * 
+ */
+export type ReviewerLocalePreference = Prisma.ReviewerLocalePreferenceModel

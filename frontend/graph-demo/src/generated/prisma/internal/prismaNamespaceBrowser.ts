@@ -55,7 +55,8 @@ export const ModelName = {
   ReviewSession: 'ReviewSession',
   ReviewSnapshot: 'ReviewSnapshot',
   ReviewDecision: 'ReviewDecision',
-  FxRate: 'FxRate'
+  FxRate: 'FxRate',
+  ReviewerLocalePreference: 'ReviewerLocalePreference'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -134,6 +135,15 @@ export const FxRateScalarFieldEnum = {
 } as const
 
 export type FxRateScalarFieldEnum = (typeof FxRateScalarFieldEnum)[keyof typeof FxRateScalarFieldEnum]
+
+
+export const ReviewerLocalePreferenceScalarFieldEnum = {
+  reviewerId: 'reviewerId',
+  locale: 'locale',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ReviewerLocalePreferenceScalarFieldEnum = (typeof ReviewerLocalePreferenceScalarFieldEnum)[keyof typeof ReviewerLocalePreferenceScalarFieldEnum]
 
 
 export const SortOrder = {

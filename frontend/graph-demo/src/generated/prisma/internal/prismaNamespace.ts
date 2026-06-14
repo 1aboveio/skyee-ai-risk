@@ -388,7 +388,8 @@ export const ModelName = {
   ReviewSession: 'ReviewSession',
   ReviewSnapshot: 'ReviewSnapshot',
   ReviewDecision: 'ReviewDecision',
-  FxRate: 'FxRate'
+  FxRate: 'FxRate',
+  ReviewerLocalePreference: 'ReviewerLocalePreference'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -404,7 +405,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "demoSearch" | "reviewSession" | "reviewSnapshot" | "reviewDecision" | "fxRate"
+    modelProps: "demoSearch" | "reviewSession" | "reviewSnapshot" | "reviewDecision" | "fxRate" | "reviewerLocalePreference"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -778,6 +779,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    ReviewerLocalePreference: {
+      payload: Prisma.$ReviewerLocalePreferencePayload<ExtArgs>
+      fields: Prisma.ReviewerLocalePreferenceFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ReviewerLocalePreferenceFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewerLocalePreferencePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ReviewerLocalePreferenceFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewerLocalePreferencePayload>
+        }
+        findFirst: {
+          args: Prisma.ReviewerLocalePreferenceFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewerLocalePreferencePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ReviewerLocalePreferenceFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewerLocalePreferencePayload>
+        }
+        findMany: {
+          args: Prisma.ReviewerLocalePreferenceFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewerLocalePreferencePayload>[]
+        }
+        create: {
+          args: Prisma.ReviewerLocalePreferenceCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewerLocalePreferencePayload>
+        }
+        createMany: {
+          args: Prisma.ReviewerLocalePreferenceCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ReviewerLocalePreferenceCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewerLocalePreferencePayload>[]
+        }
+        delete: {
+          args: Prisma.ReviewerLocalePreferenceDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewerLocalePreferencePayload>
+        }
+        update: {
+          args: Prisma.ReviewerLocalePreferenceUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewerLocalePreferencePayload>
+        }
+        deleteMany: {
+          args: Prisma.ReviewerLocalePreferenceDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ReviewerLocalePreferenceUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ReviewerLocalePreferenceUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewerLocalePreferencePayload>[]
+        }
+        upsert: {
+          args: Prisma.ReviewerLocalePreferenceUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewerLocalePreferencePayload>
+        }
+        aggregate: {
+          args: Prisma.ReviewerLocalePreferenceAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateReviewerLocalePreference>
+        }
+        groupBy: {
+          args: Prisma.ReviewerLocalePreferenceGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ReviewerLocalePreferenceGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ReviewerLocalePreferenceCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ReviewerLocalePreferenceCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -877,6 +952,15 @@ export const FxRateScalarFieldEnum = {
 } as const
 
 export type FxRateScalarFieldEnum = (typeof FxRateScalarFieldEnum)[keyof typeof FxRateScalarFieldEnum]
+
+
+export const ReviewerLocalePreferenceScalarFieldEnum = {
+  reviewerId: 'reviewerId',
+  locale: 'locale',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ReviewerLocalePreferenceScalarFieldEnum = (typeof ReviewerLocalePreferenceScalarFieldEnum)[keyof typeof ReviewerLocalePreferenceScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -1117,6 +1201,7 @@ export type GlobalOmitConfig = {
   reviewSnapshot?: Prisma.ReviewSnapshotOmit
   reviewDecision?: Prisma.ReviewDecisionOmit
   fxRate?: Prisma.FxRateOmit
+  reviewerLocalePreference?: Prisma.ReviewerLocalePreferenceOmit
 }
 
 /* Types for Logging */
