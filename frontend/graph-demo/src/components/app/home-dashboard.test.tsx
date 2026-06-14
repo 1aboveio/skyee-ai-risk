@@ -1,10 +1,27 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
+import type { GraphIdentitySession } from "@/lib/auth/identity-session";
 import { en } from "@/lib/i18n/en";
 import { zhCN } from "@/lib/i18n/zh-CN";
-import type { GraphIdentitySession } from "@/lib/auth/identity-session";
+import { LocaleProvider, useLocale } from "@/lib/i18n/locale-provider";
 import { HomeDashboard } from "./home-dashboard";
+
+function LocaleSwitcher() {
+  const { locale, setLocale } = useLocale();
+  return (
+    <div>
+      <button type="button" onClick={() => setLocale("en")}>
+        English
+      </button>
+      <button type="button" onClick={() => setLocale("zh-CN")}>
+        简体中文
+      </button>
+      <span data-testid="current-locale">{locale}</span>
+    </div>
+  );
+}
 
 // @covers components/app/home-dashboard
 // @level unit
@@ -30,13 +47,32 @@ function makeSession(): GraphIdentitySession {
   };
 }
 
+function renderWithLocale(locale: "en" | "zh-CN") {
+  return render(
+    <LocaleProvider initialLocale={locale}>
+      <LocaleSwitcher />
+      <HomeDashboard session={makeSession()} />
+    </LocaleProvider>
+  );
+}
+
 describe("HomeDashboard", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ locale: "zh-CN" }),
+      } as Response)
+    );
+  });
+
   afterEach(() => {
     cleanup();
   });
 
   it("renders English homepage copy", () => {
-    render(<HomeDashboard session={makeSession()} locale="en" />);
+    renderWithLocale("en");
 
     expect(
       screen.getByRole("heading", { name: en.customerRiskReviewConsole })
@@ -69,7 +105,7 @@ describe("HomeDashboard", () => {
   });
 
   it("renders Chinese homepage copy", () => {
-    render(<HomeDashboard session={makeSession()} locale="zh-CN" />);
+    renderWithLocale("zh-CN");
 
     expect(
       screen.getByRole("heading", { name: zhCN.customerRiskReviewConsole })
@@ -101,8 +137,30 @@ describe("HomeDashboard", () => {
     expect(screen.getByText(zhCN.adHocInvestigation)).toBeInTheDocument();
   });
 
+  it("updates homepage labels when the locale context changes", async () => {
+    renderWithLocale("en");
+
+    expect(
+      screen.getByRole("heading", { name: en.customerRiskReviewConsole })
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "简体中文" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-locale")).toHaveTextContent("zh-CN");
+    });
+
+    expect(
+      screen.getByRole("heading", { name: zhCN.customerRiskReviewConsole })
+    ).toBeInTheDocument();
+
+    expect(screen.getByText(zhCN.homeHeroDescription)).toBeInTheDocument();
+    expect(screen.getByText(zhCN.graphNetworkSearch)).toBeInTheDocument();
+    expect(screen.getByText(zhCN.reviewWorkbench)).toBeInTheDocument();
+  });
+
   it("does not translate dynamic identity or evidence values", () => {
-    render(<HomeDashboard session={makeSession()} locale="zh-CN" />);
+    renderWithLocale("zh-CN");
 
     expect(screen.getByText("reviewer@skyee360.com")).toBeInTheDocument();
     expect(screen.getByText("Skyee")).toBeInTheDocument();

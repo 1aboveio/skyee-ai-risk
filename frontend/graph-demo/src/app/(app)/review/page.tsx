@@ -1,12 +1,9 @@
-import { headers } from "next/headers";
 import { AppShell } from "@/components/app/app-shell";
 import { ReviewEntrySearch } from "@/components/review/review-entry-search";
 import { Badge } from "@/components/ui/badge";
 import { getGraphIdentitySession } from "@/lib/auth/identity-session";
 import { ClipboardCheckIcon, DatabaseIcon, FileTextIcon, HistoryIcon } from "lucide-react";
 import { redirect } from "next/navigation";
-import { resolveInitialLocale } from "@/lib/i18n/server-locale";
-import { getReviewerLocalePreference } from "@/lib/review/store";
 
 const evidenceSections = [
   { label: "Customer profile", icon: FileTextIcon },
@@ -21,16 +18,8 @@ export default async function ReviewWorkbenchEntryPage() {
     redirect("/auth/login");
   }
 
-  const acceptLanguage = (await headers()).get("accept-language") ?? undefined;
-  const locale = await resolveInitialLocale({
-    isAuthRoute: false,
-    session,
-    acceptLanguage,
-    getReviewerLocalePreference,
-  });
-
   return (
-    <AppShell active="review" session={session} locale={locale}>
+    <AppShell active="review" session={session}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-5 md:px-6 md:py-8">
         <section className="border-b pb-5">
           <Badge variant="outline">Human Review</Badge>

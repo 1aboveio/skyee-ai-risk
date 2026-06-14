@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
-import { LocaleProvider } from "@/lib/i18n/locale-provider";
+import type { GraphIdentitySession } from "@/lib/auth/identity-session";
 import { en } from "@/lib/i18n/en";
 import { zhCN } from "@/lib/i18n/zh-CN";
-import type { GraphIdentitySession } from "@/lib/auth/identity-session";
+import { LocaleProvider } from "@/lib/i18n/locale-provider";
 import { AppShell } from "./app-shell";
 
 // @covers components/app/app-shell
@@ -34,7 +35,7 @@ function makeSession(): GraphIdentitySession {
 function renderWithLocale(locale: "en" | "zh-CN") {
   return render(
     <LocaleProvider initialLocale={locale}>
-      <AppShell active="home" session={makeSession()} locale={locale}>
+      <AppShell active="home" session={makeSession()}>
         <div data-testid="page-content">Page content</div>
       </AppShell>
     </LocaleProvider>
@@ -114,6 +115,34 @@ describe("AppShell", () => {
       en.graphNetworkSearch,
       en.reviewWorkbench,
     ]);
+  });
+
+  it("updates shell labels when the header language switcher is used", async () => {
+    renderWithLocale("en");
+
+    await userEvent.click(
+      screen.getAllByRole("button", { name: new RegExp(en.currentLanguage, "i") })[0]
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+    });
+
+    await userEvent.click(screen.getByRole("menuitem", { name: zhCN.simplifiedChinese }));
+
+    await waitFor(() => {
+      const primaryNav = screen.getByRole("navigation", {
+        name: zhCN.primaryNavigation,
+      });
+      const links = within(primaryNav).getAllByRole("link");
+      expect(links.map((link) => link.textContent)).toEqual([
+        zhCN.home,
+        zhCN.graphNetworkSearch,
+        zhCN.reviewWorkbench,
+      ]);
+    });
+
+    expect(screen.getByText(zhCN.signedIn)).toBeInTheDocument();
   });
 
   it("does not translate dynamic identity values", () => {

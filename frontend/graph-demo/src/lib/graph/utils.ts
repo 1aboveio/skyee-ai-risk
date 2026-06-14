@@ -1,3 +1,4 @@
+import { defaultLocale, type Locale } from "@/lib/i18n/resolve-locale";
 import type { GraphNode } from "./schema";
 
 export function riskVariant(node: Pick<GraphNode, "riskLevel" | "isHighRisk" | "isSanctioned">): "destructive" | "secondary" | "outline" {
@@ -14,7 +15,7 @@ export function displayName(node: GraphNode): string {
   return node.custName ?? `Customer ${node.custId}`;
 }
 
-export function formatDate(value: string | null, locale: string = "en"): string {
+export function formatDate(value: string | null, locale: Locale | string = defaultLocale): string {
   if (!value) {
     return "-";
   }
@@ -25,7 +26,7 @@ export function formatDate(value: string | null, locale: string = "en"): string 
   }).format(new Date(value));
 }
 
-export function formatDateTime(value: string | null, locale: string = "en"): string {
+export function formatDateTime(value: string | null, locale: Locale | string = defaultLocale): string {
   if (!value) {
     return "-";
   }
@@ -38,7 +39,7 @@ export function formatDateTime(value: string | null, locale: string = "en"): str
   }).format(new Date(value));
 }
 
-export function formatMoney(value: number | null, locale: string = "en", unavailableLabel: string = "Unavailable"): string {
+export function formatMoney(value: number | null, locale: Locale | string = defaultLocale, unavailableLabel: string = "Unavailable"): string {
   if (value === null) {
     return unavailableLabel;
   }

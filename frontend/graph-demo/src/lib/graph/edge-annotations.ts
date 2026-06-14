@@ -1,3 +1,5 @@
+import type { Locale } from "@/lib/i18n/resolve-locale";
+
 export type EdgeAnnotation = {
   title: string;
   titleZh: string;
@@ -177,4 +179,27 @@ export function getEdgeAnnotation(params: {
   return params.sameAttributeType
     ? edgeAnnotations[sameAttributeTypeAliases[params.sameAttributeType] ?? ""]
     : undefined;
+}
+
+export function getSameAttributeTypeLabel(
+  value: string | undefined,
+  locale: Locale
+): string {
+  if (!value) {
+    return "Unknown";
+  }
+  if (locale === "zh-CN") {
+    return sameAttributeTypeLabelsZh[value] ?? value;
+  }
+  return sameAttributeTypeLabels[value] ?? value;
+}
+
+export function getLocalizedEdgeAnnotation(
+  annotation: EdgeAnnotation,
+  locale: Locale
+): { title: string; description: string } {
+  if (locale === "zh-CN") {
+    return { title: annotation.titleZh, description: annotation.descriptionZh };
+  }
+  return { title: annotation.title, description: annotation.description };
 }
