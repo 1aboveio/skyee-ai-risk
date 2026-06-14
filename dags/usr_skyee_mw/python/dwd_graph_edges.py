@@ -15,7 +15,7 @@ Three association graph tables are maintained:
     first_seen can move backward without moving the Hudi record partition.
 
 Usage:
-    python dwd_graph_edges.py [--spark-remote <spark_connect_url>] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--bulk/--per-day] [--max-degree 100] [--use-attr-index/--no-use-attr-index] [--write-attr-index/--no-write-attr-index] [--snapshot-hudi-mode upsert] [--target all|monthly|snapshot]
+    python dwd_graph_edges.py [--spark-remote <spark_connect_url>] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--bulk/--per-day] [--max-degree 100] [--use-attr-index/--no-use-attr-index] [--write-attr-index/--no-write-attr-index] [--snapshot-hudi-mode upsert] [--target all|attr-index|monthly|snapshot]
 """
 
 import sys
@@ -105,12 +105,14 @@ class DwdGraphEdgesEtl(Etl):
         max_degree: int = MAX_DEGREE,
         use_attr_index: bool = True,
         write_attr_index: bool = True,
+        build_edges: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.max_degree = max_degree
         self.use_attr_index = use_attr_index
         self.write_attr_index = write_attr_index
+        self.build_edges = build_edges
         self._attr_index_df = None
         self._attr_index_specs = set()
         self._attr_index_loaded = False
@@ -582,23 +584,26 @@ class DwdGraphEdgesEtl(Etl):
             new_attrs = None
             index_attrs = attrs
 
-        attrs = self._filter_hot_keys(attrs, self.max_degree)
-        if new_attrs is not None:
-            new_attrs = new_attrs.join(
-                attrs.select("_join_key", "edge_type", "edge_source").distinct(),
-                on=["_join_key", "edge_type", "edge_source"],
-                how="left_semi",
-            )
-
         attr_rows = self._finish_attr_index_rows(index_attrs, src_label)
-        edges = self._generate_pairs(
-            attrs,
-            edge_type,
-            edge_source,
-            strength,
-            new_attrs=new_attrs,
-        )
-        edges = self._finish_monthly_edges(edges, src_label)
+
+        edges = None
+        if self.build_edges:
+            attrs = self._filter_hot_keys(attrs, self.max_degree)
+            if new_attrs is not None:
+                new_attrs = new_attrs.join(
+                    attrs.select("_join_key", "edge_type", "edge_source").distinct(),
+                    on=["_join_key", "edge_type", "edge_source"],
+                    how="left_semi",
+                )
+
+            edges = self._generate_pairs(
+                attrs,
+                edge_type,
+                edge_source,
+                strength,
+                new_attrs=new_attrs,
+            )
+            edges = self._finish_monthly_edges(edges, src_label)
         logger.info("Done %s/%s/%s", edge_type, edge_source, src_label)
         return edges, attr_rows
 
@@ -727,7 +732,7 @@ class DwdGraphEdgesEtl(Etl):
             attr_index.spark = self.spark
             attr_index.load(attr_index_df)
 
-        edges_df = self._union_frames(edge_frames)
+        edges_df = self._union_frames([frame for frame in edge_frames if frame is not None])
         if edges_df is not None:
             self.load(edges_df)
         if self._attr_index_df is not None:
@@ -808,11 +813,11 @@ def main(
     snapshot_hudi_mode: Annotated[str, typer.Option("--snapshot-hudi-mode")] = "upsert",
     target: Annotated[str, typer.Option("--target")] = "all",
 ):
-    if target not in {"all", "monthly", "snapshot"}:
-        raise typer.BadParameter("--target must be one of: all, monthly, snapshot")
+    if target not in {"all", "attr-index", "monthly", "snapshot"}:
+        raise typer.BadParameter("--target must be one of: all, attr-index, monthly, snapshot")
 
     spark = create_spark_session(spark_remote)
-    if target in {"all", "monthly"}:
+    if target in {"all", "attr-index", "monthly"}:
         etl = DwdGraphEdgesEtl(
             start_date=start_date,
             end_date=end_date,
@@ -820,6 +825,7 @@ def main(
             max_degree=max_degree,
             use_attr_index=use_attr_index,
             write_attr_index=write_attr_index,
+            build_edges=target != "attr-index",
         )
         etl.spark = spark
         etl()

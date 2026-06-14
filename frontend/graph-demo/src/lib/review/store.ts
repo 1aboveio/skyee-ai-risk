@@ -1,5 +1,24 @@
 import { Prisma } from "@/generated/prisma/client";
 import prisma from "@/lib/prisma";
+import { isLocale, type Locale } from "@/lib/i18n/resolve-locale";
+
+export async function getReviewerLocalePreference(
+  reviewerId: string
+): Promise<Locale | null> {
+  try {
+    const preference = await prisma.reviewerLocalePreference.findUnique({
+      where: { reviewerId },
+    });
+    if (preference && isLocale(preference.locale)) {
+      return preference.locale;
+    }
+    return null;
+  } catch {
+    // Gracefully fall back when the preference table is not yet available
+    // (e.g. local dev without a migrated database).
+    return null;
+  }
+}
 
 export async function getOrCreateReviewSession(
   custId: string,

@@ -1,5 +1,5 @@
 """
-Airflow DAG: Backfill large stg_* tables and graph edges monthly.
+Airflow DAG: Backfill large stg_* tables and graph attributes monthly.
 
 Schedule: @monthly from 2016-09-01
 Catchup: enabled
@@ -7,8 +7,9 @@ Catchup: enabled
 Tables: pmp_coll_order, cust_user_login_log, pmp_pay_details, pmp_pay_order
 
 Graph:
-    dwd_graph_edge_monthly is rebuilt for the same monthly window.
-    dwd_graph_edges is refreshed by the daily DAG from monthly evidence.
+    dwd_graph_attr_index is rebuilt for the same monthly window.
+    dwd_graph_edge_monthly can still be rebuilt from monthly source data when
+    pairwise warehouse edges are needed.
 
 Variables:
     MYSQL_DB_URL_SECRET - MySQL JDBC URL with credentials
@@ -38,7 +39,7 @@ TABLES = ["pmp_coll_order", "cust_user_login_log", "pmp_pay_details", "pmp_pay_o
 with DAG(
     dag_id="usr_skyee_mw_backfill_monthly",
     default_args=default_args,
-    description="Backfill large stg_* tables (monthly)",
+    description="Backfill large stg_* tables and graph attributes (monthly)",
     schedule="@monthly",
     start_date=datetime(2016, 9, 1),
     catchup=True,
@@ -67,6 +68,22 @@ with DAG(
         for table in TABLES
     ]
 
+    graph_attr_index = SparkSubmitOperator(
+        task_id="dwd_graph_attr_index",
+        name=f"usr_skyee_mw.backfill.monthly.dwd.graph_attr_index.{LOCAL_INTERVAL_START}",
+        application=f"{SCRIPTS_PATH}/dwd_graph_edges.py",
+        conn_id="spark_default",
+        application_args=[
+            "--start-date", LOCAL_INTERVAL_START,
+            "--end-date", LOCAL_INTERVAL_END,
+            "--bulk",
+            "--no-use-attr-index",
+            "--write-attr-index",
+            "--target", "attr-index",
+        ],
+        verbose=True,
+    )
+
     graph_edge_monthly = SparkSubmitOperator(
         task_id="dwd_graph_edge_monthly",
         name=f"usr_skyee_mw.backfill.monthly.dwd.graph_edge_monthly.{LOCAL_INTERVAL_START}",
@@ -78,10 +95,10 @@ with DAG(
             "--bulk",
             "--max-degree", "100",
             "--no-use-attr-index",
-            "--write-attr-index",
+            "--no-write-attr-index",
             "--target", "monthly",
         ],
         verbose=True,
     )
 
-    start >> stg_tasks >> graph_edge_monthly >> end
+    start >> stg_tasks >> graph_attr_index >> graph_edge_monthly >> end
