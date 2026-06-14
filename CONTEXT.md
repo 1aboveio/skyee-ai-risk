@@ -196,6 +196,50 @@ _Avoid_: Dashboard, post-case-pool workflow state
 A Risk Graph analysis mode that examines shared-attribute relationships to find related parties, likely common control, or risk propagation paths.
 _Avoid_: Transaction flow analysis, payment tracing
 
+**Association Link Lookup**:
+The interactive Risk Graph capability where a user inputs a customer ID and receives associated customer IDs grouped by derived same-attribute link type. The v1 lookup uses only two-hop customer-to-Attribute-to-customer traversal even though the Association Inverted Index may store broader Attribute Links.
+_Avoid_: Precomputed customer graph, graph algorithm, transaction flow lookup
+
+**Association Inverted Index**:
+The canonical serving contract for Association Link Lookup. It stores all available Attribute Links so linked customers can be resolved at query time without requiring every customer pair to be precomputed as a graph edge.
+_Avoid_: ETL helper table, feature index, graph edge table, required pairwise edge snapshot
+
+**Attribute**:
+A typed value that can participate in Association Link Lookup, such as a customer ID, company name, phone number, email address, identity document, account, address, IP, or store URL.
+_Avoid_: Graph node, raw field, entity
+
+**Association Attribute Type**:
+The neutral type of a non-customer Attribute used for association lookup, such as `mobile_phone`, `email`, `business_name`, `person_name`, `id_no`, `address`, `store_url`, or `ip`.
+_Avoid_: Same-attribute link type, source field, customer edge type
+
+**Attribute Link Type**:
+The source/provenance subtype of an Attribute Link, such as `customer_primary_mobile` or `bank_reserved_mobile`. It is used for display and interpretation, not as the v1 user-facing filter.
+_Avoid_: Same-attribute link type, link strength, graph edge type
+
+**Attribute Link**:
+An observed directed relationship between two Attributes, such as a customer ID linked to a mobile phone Attribute from a source field. Attribute Link metadata records Attribute Link Type, source field, observation time, and record count, but does not carry customer-to-customer interpretation such as link strength.
+_Avoid_: Customer edge, attribute property, graph edge
+
+**Same-Attribute Link Type**:
+The user-facing customer-to-customer result category derived at query time from an Association Attribute Type, such as `same_mobile_phone`, `same_email`, `same_business_name`, `same_person_name`, `same_id_no`, `same_address`, `same_store_url`, or `same_ip`.
+_Avoid_: Stored attribute type, source field, Attribute Link Type
+
+**Association Link Result**:
+A customer-to-customer lookup result derived by traversing Attribute Links through a shared non-customer Attribute. Interpretation metadata such as Same-Attribute Link Type and link strength is derived at query time and belongs to this result, not to the underlying Attribute Link rows.
+_Avoid_: Stored graph edge, attribute link, raw attribute ownership
+
+**DuckDB Association Snapshot**:
+The v1 serving implementation of the Association Inverted Index. It is a local read-only DuckDB snapshot of all directed Attribute Link rows used by the graph query service for Association Link Lookup.
+_Avoid_: Canonical graph database, live warehouse query path, HBase serving index
+
+**Association Snapshot Replacement**:
+The DuckDB Association Snapshot refresh strategy where a complete next snapshot is built, validated, and atomically promoted over the previous serving snapshot.
+_Avoid_: Incremental DuckDB patching, in-place serving database mutation
+
+**Association Index Access Path**:
+A required lookup direction of the Association Inverted Index. Association Link Lookup uses directed Attribute Links so a customer query can first discover the customer's linked Attributes, then resolve other customers sharing those Attributes.
+_Avoid_: One-way index, full attribute scan, precomputed pairwise edge lookup
+
 **Transaction Flow Analysis**:
 A Risk Graph analysis mode that examines directional transaction counterparty relationships to reconstruct money movement, payout fanout, collection fan-in, or circular flow.
 _Avoid_: Association analysis, shared-attribute matching

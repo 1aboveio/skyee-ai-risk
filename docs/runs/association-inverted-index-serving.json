@@ -1,0 +1,111 @@
+{
+  "runSlug": "association-inverted-index-serving",
+  "skill": "resolve-prd",
+  "createdAt": "2026-06-14T08:25:50Z",
+  "updatedAt": "2026-06-14T08:36:32Z",
+  "models": {
+    "implementation": "gpt-5.3-codex",
+    "review": "gpt-5.4",
+    "oracle": "gpt-5.5",
+    "confirmedAt": "2026-06-14T08:25:50Z"
+  },
+  "iteration": 1,
+  "auditBaseSha": "c953d0a29f597294b5965bcc65a34834203be408",
+  "prd": {
+    "path": "docs/prd/association-inverted-index-serving.md",
+    "issue": "#28",
+    "status": "approved",
+    "approvedAt": "2026-06-14T08:27:25Z"
+  },
+  "criteria": {
+    "path": "docs/tests/2026-06-14-association-inverted-index-serving-criteria.md",
+    "status": "approved",
+    "approvedAt": "2026-06-14T08:31:36Z"
+  },
+  "epic": "#29",
+  "units": [
+    {
+      "id": "#30",
+      "title": "DuckDB Attribute Link Lookup Core",
+      "status": "in-progress",
+      "pr": null,
+      "branch": null,
+      "lastVerdict": null,
+      "reviewRounds": 0,
+      "blocker": null,
+      "oracleConsults": [],
+      "worker": "019ec545-b6c7-76c3-a935-052f2bad9565"
+    },
+    {
+      "id": "#31",
+      "title": "Same-Attribute Filters, Provenance, Fanout",
+      "status": "queued",
+      "pr": null,
+      "branch": null,
+      "lastVerdict": null,
+      "reviewRounds": 0,
+      "blocker": "Blocked by #30",
+      "oracleConsults": []
+    },
+    {
+      "id": "#32",
+      "title": "DuckDB Snapshot Replacement Pipeline",
+      "status": "queued",
+      "pr": null,
+      "branch": null,
+      "lastVerdict": null,
+      "reviewRounds": 0,
+      "blocker": "Blocked by #30",
+      "oracleConsults": []
+    },
+    {
+      "id": "#33",
+      "title": "Live Enrichment Boundary for Link Lookup",
+      "status": "queued",
+      "pr": null,
+      "branch": null,
+      "lastVerdict": null,
+      "reviewRounds": 0,
+      "blocker": "Blocked by #30",
+      "oracleConsults": []
+    },
+    {
+      "id": "#34",
+      "title": "Graph Demo and Workbench UI Compatibility for Attribute Link Lookup",
+      "status": "queued",
+      "pr": null,
+      "branch": null,
+      "lastVerdict": null,
+      "reviewRounds": 0,
+      "blocker": "Blocked by #31 and #33",
+      "oracleConsults": []
+    },
+    {
+      "id": "#35",
+      "title": "DAG, CI, and Docs Integration for Association Inverted Index Serving",
+      "status": "queued",
+      "pr": null,
+      "branch": null,
+      "lastVerdict": null,
+      "reviewRounds": 0,
+      "blocker": "Blocked by #32 and #34",
+      "oracleConsults": []
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Approve PRD scope before criteria and issue decomposition",
+      "status": "answered",
+      "askedAt": "2026-06-14T08:25:50Z",
+      "answeredAt": "2026-06-14T08:27:25Z",
+      "answer": "PRD approved"
+    },
+    {
+      "question": "Approve test criteria before issue decomposition",
+      "status": "answered",
+      "askedAt": "2026-06-14T08:27:54Z",
+      "answeredAt": "2026-06-14T08:31:36Z",
+      "answer": "Criteria approved"
+    }
+  ]
+}
