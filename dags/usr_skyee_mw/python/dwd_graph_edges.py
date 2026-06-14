@@ -153,6 +153,38 @@ class DwdGraphEdgesEtl(Etl):
         )
 
     @staticmethod
+    def _change_time_expr(create_expr: Column = None, update_expr: Column = None) -> Column:
+        create_expr = create_expr if create_expr is not None else col("create_time")
+        update_expr = update_expr if update_expr is not None else col("lst_upd_time")
+        return coalesce(create_expr, update_expr)
+
+    @classmethod
+    def _filter_source_window(
+        cls,
+        df: DataFrame,
+        create_expr: Column = None,
+        update_expr: Column = None,
+        start_date: str = None,
+        end_date: str = None,
+    ) -> DataFrame:
+        if not start_date and not end_date:
+            return df
+
+        # STG tables are partitioned by dt = CAST(create_time AS date). Prefer
+        # dt when available so monthly graph backfills prune Hudi partitions
+        # before normalization and dedupe.
+        if "dt" in df.columns and create_expr is None:
+            date_expr = col("dt").cast("date")
+        else:
+            date_expr = cls._change_time_expr(create_expr, update_expr).cast("date")
+
+        if start_date:
+            df = df.filter(date_expr >= lit(start_date).cast("date"))
+        if end_date:
+            df = df.filter(date_expr < lit(end_date).cast("date"))
+        return df
+
+    @staticmethod
     def _dedupe(attrs: DataFrame) -> DataFrame:
         return (
             attrs.groupBy("cust_id", "_join_key", "edge_type", "edge_source", "strength")
@@ -177,7 +209,14 @@ class DwdGraphEdgesEtl(Etl):
         valid = deg.filter((col("_degree") >= 2) & (col("_degree") <= max_degree))
         return attrs.join(valid, on=["_join_key", "edge_type", "edge_source"], how="inner")
 
-    def _generate_pairs(self, attrs: DataFrame, edge_type: str, edge_source: str, strength: str) -> DataFrame:
+    def _generate_pairs(
+        self,
+        attrs: DataFrame,
+        edge_type: str,
+        edge_source: str,
+        strength: str,
+        new_attrs: DataFrame = None,
+    ) -> DataFrame:
         select_cols = [
             col("a.cust_id").alias("source_cust_id"),
             col("b.cust_id").alias("target_cust_id"),
@@ -201,12 +240,16 @@ class DwdGraphEdgesEtl(Etl):
         def _build(df_a, df_b):
             return df_a.alias("a").join(df_b.alias("b"), on=join_cond, how="inner").select(*select_cols)
 
-        if self.start_date:
-            new = attrs.filter(col("_change_time") >= self.start_date)
-            if self.end_date:
-                new = new.filter(col("_change_time") < self.end_date)
+        if new_attrs is not None:
             old = attrs.filter(col("_change_time") < self.start_date)
-            return _build(new, attrs).unionByName(_build(old, new))
+            return _build(new_attrs, attrs).unionByName(_build(old, new_attrs))
+        elif self.start_date:
+            bounded_attrs = attrs
+            if self.end_date:
+                bounded_attrs = bounded_attrs.filter(col("_change_time") < self.end_date)
+            new = bounded_attrs.filter(col("_change_time") >= self.start_date)
+            old = bounded_attrs.filter(col("_change_time") < self.start_date)
+            return _build(new, bounded_attrs).unionByName(_build(old, new))
         else:
             return _build(attrs, attrs)
 
@@ -298,22 +341,83 @@ class DwdGraphEdgesEtl(Etl):
         update_expr: Column = None,
     ):
         logger.info("Processing %s/%s/%s", edge_type, edge_source, src_label)
-        attrs = self._normalize_attrs(
-            src_df,
-            value_expr,
-            key_expr,
+        if self.start_date:
+            changed_src = self._filter_source_window(
+                src_df,
+                create_expr=create_expr,
+                update_expr=update_expr,
+                start_date=self.start_date,
+                end_date=self.end_date,
+            )
+            changed_attrs = self._normalize_attrs(
+                changed_src,
+                value_expr,
+                key_expr,
+                edge_type,
+                edge_source,
+                strength,
+                src_filter=src_filter,
+                cust_expr=cust_expr,
+                create_expr=create_expr,
+                update_expr=update_expr,
+            )
+            changed_keys = changed_attrs.select(
+                "_join_key", "edge_type", "edge_source"
+            ).distinct()
+
+            as_of_src = self._filter_source_window(
+                src_df,
+                create_expr=create_expr,
+                update_expr=update_expr,
+                end_date=self.end_date,
+            )
+            attrs = self._normalize_attrs(
+                as_of_src,
+                value_expr,
+                key_expr,
+                edge_type,
+                edge_source,
+                strength,
+                src_filter=src_filter,
+                cust_expr=cust_expr,
+                create_expr=create_expr,
+                update_expr=update_expr,
+            ).join(changed_keys, on=["_join_key", "edge_type", "edge_source"], how="left_semi")
+            attrs = self._dedupe(attrs)
+            new_attrs = attrs.filter(col("_change_time") >= self.start_date)
+            if self.end_date:
+                new_attrs = new_attrs.filter(col("_change_time") < self.end_date)
+        else:
+            attrs = self._normalize_attrs(
+                src_df,
+                value_expr,
+                key_expr,
+                edge_type,
+                edge_source,
+                strength,
+                src_filter=src_filter,
+                cust_expr=cust_expr,
+                create_expr=create_expr,
+                update_expr=update_expr,
+            )
+            attrs = self._dedupe(attrs)
+            new_attrs = None
+
+        attrs = self._filter_hot_keys(attrs, self.max_degree)
+        if new_attrs is not None:
+            new_attrs = new_attrs.join(
+                attrs.select("_join_key", "edge_type", "edge_source").distinct(),
+                on=["_join_key", "edge_type", "edge_source"],
+                how="left_semi",
+            )
+
+        edges = self._generate_pairs(
+            attrs,
             edge_type,
             edge_source,
             strength,
-            src_filter=src_filter,
-            cust_expr=cust_expr,
-            create_expr=create_expr,
-            update_expr=update_expr,
+            new_attrs=new_attrs,
         )
-        attrs = self._dedupe(attrs)
-        attrs = self._filter_hot_keys(attrs, self.max_degree)
-
-        edges = self._generate_pairs(attrs, edge_type, edge_source, strength)
         edges = self._finish_monthly_edges(edges, src_label)
         self.load(edges)
         logger.info("Done %s/%s/%s", edge_type, edge_source, src_label)
