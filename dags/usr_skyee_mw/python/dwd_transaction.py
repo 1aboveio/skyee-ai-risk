@@ -351,7 +351,7 @@ class DwdTransactionEtl(Etl):
             col("co.exchange_amt").cast(DecimalType(20, 6)).alias("exchange_amount"),
             col("co.exchange_rate").cast(DecimalType(20, 8)).alias("exchange_rate"),
             col("co.exchange_time").alias("exchange_time"),
-            self._flag(self._not_blank(col("co.refund_status"))).alias("is_refund"),
+            self._flag(col("co.refund_status") == lit("REFUNDED")).alias("is_refund"),
             self._flag(self._not_blank(col("co.refund_comm_currency_cd"))).alias(
                 "is_refund_commission"
             ),
