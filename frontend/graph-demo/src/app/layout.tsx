@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Skyee Graph Demo",
-  description: "Customer relationship graph demo",
+  title: "Skyee AI Risk",
+  description: "Customer risk review and graph investigation console",
 };
 
 export default function RootLayout({

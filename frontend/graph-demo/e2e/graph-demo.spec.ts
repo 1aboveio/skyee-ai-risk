@@ -1,7 +1,7 @@
 /**
  * E2E tests for the Graph Demo page.
  *
- * @covers /graph-demo
+ * @covers /graph
  * @level functional
  */
 import { createServer, type Server } from "node:http";
@@ -209,13 +209,13 @@ test.describe("Graph search API contract", () => {
   });
 });
 
-// @covers /graph-demo
+// @covers /graph
 // @level functional
 test.describe("Graph Demo search and filters", () => {
   test("renders initial graph results and applies same-attribute filters", async ({
     authedPage: page,
   }) => {
-    await page.goto("/");
+    await page.goto("/graph");
 
     // Heading and metric sanity
     await expect(page.getByText("Customer Graph")).toBeVisible();
@@ -236,13 +236,13 @@ test.describe("Graph Demo search and filters", () => {
   });
 });
 
-// @covers /graph-demo -> edge-annotations
+// @covers /graph -> edge-annotations
 // @level functional
 test.describe("Graph Demo annotation inspection", () => {
   test("shows provenance details for Same-Attribute links", async ({
     authedPage: page,
   }) => {
-    await page.goto("/");
+    await page.goto("/graph");
     await page.getByRole("tab", { name: "Table" }).click();
 
     const row = page.locator("tbody tr", { hasText: "+86 755 8291 0041" });
@@ -254,13 +254,13 @@ test.describe("Graph Demo annotation inspection", () => {
   });
 });
 
-// @covers /graph-demo -> partial-enrichment
+// @covers /graph -> partial-enrichment
 // @level functional
 test.describe("Graph Demo partial enrichment handling", () => {
   test("renders graph with warning and keeps visible evidence when enrichment is partial", async ({
     authedPage: page,
   }) => {
-    await page.goto("/");
+    await page.goto("/graph");
     await page.getByRole("tab", { name: "Table" }).click();
 
     await expect(page.getByText("Warnings")).toBeVisible();
