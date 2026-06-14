@@ -3,15 +3,18 @@ from pathlib import Path
 
 import duckdb
 import pytest
+from typer.testing import CliRunner
 
 import scripts.duckdb_graph_query as graph_query
 from scripts import duckdb_snapshot_refresh
 
 
 TABLE_COLUMNS = graph_query.ASSOCIATION_LINK_COLUMNS
+RUNNER = CliRunner()
 
 
 def _create_parquet_snapshot(path: Path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect()
     con.execute(
         f"CREATE TABLE association_attribute_links ({', '.join(f'{c} VARCHAR' for c in TABLE_COLUMNS)})"
@@ -33,6 +36,7 @@ def _create_parquet_snapshot(path: Path, rows: list[dict]) -> None:
 
 
 def _create_invalid_schema_parquet(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect()
     con.execute("CREATE TABLE association_attribute_links (src_attr_type VARCHAR, src_attr_value VARCHAR)")
     con.execute(
@@ -155,6 +159,32 @@ def test_refresh_rejects_invalid_snapshot_and_keeps_live_snapshot(tmp_path):
     assert _snapshot_row_count(live_db) == 1
 
 
+def test_refresh_rejects_low_row_count_after_candidate_validation(tmp_path):
+    # @covers duckdb_snapshot_refresh.minimum_row_validation
+    # @level integration
+    live_db = tmp_path / "live.duckdb"
+    candidate_source = tmp_path / "links.parquet"
+
+    _create_live_snapshot(
+        live_db,
+        [_link_row("customer", 1001, "mobile_phone", "111-0001")],
+    )
+    _create_parquet_snapshot(
+        candidate_source,
+        [_link_row("customer", 2002, "email", "alice@acme.com")],
+    )
+
+    with pytest.raises(ValueError, match="below required minimum 2"):
+        duckdb_snapshot_refresh.refresh_association_snapshot(
+            [str(candidate_source)],
+            live_db_path=str(live_db),
+            minimum_rows=2,
+        )
+
+    assert _snapshot_row_count(live_db) == 1
+    assert not Path(f"{live_db}.next").exists()
+
+
 def test_refresh_rejects_raw_hudi_storage_paths(tmp_path):
     # @covers duckdb_snapshot_refresh.raw_hudi_path_guard
     # @level integration
@@ -172,4 +202,51 @@ def test_refresh_rejects_raw_hudi_storage_paths(tmp_path):
             live_db_path=str(live_db),
         )
 
+    assert _snapshot_row_count(live_db) == 1
+
+
+def test_refresh_accepts_clean_export_paths_with_dwd_name(tmp_path):
+    # @covers duckdb_snapshot_refresh.raw_hudi_path_guard
+    # @level integration
+    live_db = tmp_path / "live.duckdb"
+    clean_export = tmp_path / "exports/dwd_association_attribute_links_export/links.parquet"
+
+    _create_parquet_snapshot(
+        clean_export,
+        [_link_row("customer", 1001, "mobile_phone", "111-0001")],
+    )
+
+    result = duckdb_snapshot_refresh.refresh_association_snapshot(
+        [str(clean_export)],
+        live_db_path=str(live_db),
+    )
+
+    assert result["rows_loaded"] == 1
+    assert _snapshot_row_count(live_db) == 1
+
+
+def test_replace_association_cli_promotes_snapshot(tmp_path):
+    # @covers duckdb_snapshot_refresh.replace_association_cli
+    # @level integration
+    live_db = tmp_path / "live.duckdb"
+    candidate_source = tmp_path / "links.parquet"
+
+    _create_parquet_snapshot(
+        candidate_source,
+        [_link_row("customer", 3003, "store_url", "https://shop.example")],
+    )
+
+    result = RUNNER.invoke(
+        duckdb_snapshot_refresh.app,
+        [
+            str(candidate_source),
+            "--live-db-path",
+            str(live_db),
+            "--minimum-rows",
+            "1",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Promoted snapshot" in result.output
     assert _snapshot_row_count(live_db) == 1

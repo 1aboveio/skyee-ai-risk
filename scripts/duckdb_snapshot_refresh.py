@@ -45,9 +45,6 @@ def _is_raw_hudi_path(path: str) -> bool:
     normalized = path.replace("\\", "/").lower()
     if any(marker in normalized for marker in _raw_hudi_markers()):
         return True
-    if "/dwd_" in normalized:
-        # Raw Hudi snapshot tables commonly use Hive table directory names like dwd_*.
-        return True
     return False
 
 
