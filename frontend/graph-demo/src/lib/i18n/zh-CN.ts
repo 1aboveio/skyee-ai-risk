@@ -14,6 +14,66 @@ export const zhCN = defineDictionary({
   transactionList: "交易列表",
   graphNetworkSearchTitle: "图谱网络搜索",
 
+  // Shell layout
+  operationsConsole: "运营控制台",
+  primaryNavigation: "主导航",
+  moduleNavigation: "模块导航",
+  signedIn: "已登录",
+  currentLanguage: "当前语言",
+  changeLanguage: "切换语言",
+  active: "当前",
+  failedToSaveLanguagePreference: "保存语言偏好失败。",
+  english: "English",
+  simplifiedChinese: "简体中文",
+
+  // Homepage
+  riskOperations: "风险运营",
+  customerRiskReviewConsole: "客户风险复核控制台",
+  homeHeroDescription:
+    "从客户身份出发，在图谱证据与人工复核之间无缝切换，无需更换工具。",
+  reviewer: "复核员",
+  access: "访问权限",
+  live: "已上线",
+  graphNetworkSearchDescription:
+    "查询客户并检查关系节点、关联、来源字段及高风险邻居。",
+  reviewWorkbenchDescription:
+    "打开客户证据包进行人工复核、记录备注、保存快照并做出最终处置。",
+  openSearch: "打开查询",
+  evidenceBoundary: "证据边界",
+  graphData: "图谱数据",
+  graphDataDescription: "网络查询与关系证据。",
+  sourceEvidence: "来源证据",
+  sourceEvidenceDescription: "客户档案、风险信号与交易记录。",
+  reviewStore: "复核存储",
+  reviewStoreDescription: "备注、快照、复核会话与处置结果。",
+  workflowPosition: "工作流位置",
+  prescreening: "预筛查",
+  secondRoundHumanReview: "第二轮人工复核",
+  adHocInvestigation: "临时调查",
+
+  // Auth error page
+  authentication: "身份验证",
+  authAccessDeniedTitle: "访问被拒绝",
+  authAccessDeniedBody:
+    "您的身份有效，但您的账户未被授权访问此 Skyee AI Risk 工作区。",
+  authApplicationNotConfiguredTitle: "应用未配置",
+  authApplicationNotConfiguredBody: "身份提供商无法识别此应用客户端。",
+  authLoginSessionExpiredTitle: "登录会话已过期",
+  authLoginSessionExpiredBody:
+    "无法验证登录请求，请重新开始登录流程。",
+  authTokenExchangeFailedTitle: "登录无法完成",
+  authTokenExchangeFailedBody: "应用无法交换身份授权码。",
+  authWrongOrganizationTitle: "组织错误",
+  authWrongOrganizationBody: "登录的账户属于另一个组织。",
+  authEmailDomainNotAllowedTitle: "邮箱域名不允许",
+  authEmailDomainNotAllowedBody: "请使用配置的 Skyee 邮箱域账户。",
+  authUserProfileIncompleteTitle: "用户资料不完整",
+  authUserProfileIncompleteBody:
+    "身份提供商返回的用户资料缺少必需的账户字段。",
+  authLoginFailedTitle: "登录失败",
+  authLoginFailedBody: "身份提供商返回了认证错误。",
+  loginWithAnotherAccount: "使用其他账户登录",
+
   // Graph Network Search
   accountBalance: "账户余额",
   allTypes: "全部关联类型",

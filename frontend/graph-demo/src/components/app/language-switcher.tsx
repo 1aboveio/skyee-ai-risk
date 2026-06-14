@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLocale } from "@/lib/i18n/locale-provider";
+import { t } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -36,22 +37,16 @@ export function LanguageSwitcher() {
       });
 
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(
-          data?.error?.message ?? `Failed to save language preference.`
-        );
+        throw new Error(t("failedToSaveLanguagePreference", nextLocale));
       }
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to save language preference."
-      );
+    } catch {
+      setError(t("failedToSaveLanguagePreference", nextLocale));
     }
   }
 
   const otherLocale = locales.find((l) => l !== locale) ?? "en";
   const triggerLabel = `${localeLabels[locale]} / ${localeLabels[otherLocale]}`;
+  const ariaLabel = `${t("currentLanguage", locale)}: ${localeLabels[locale]}. ${t("changeLanguage", locale)}.`;
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -60,7 +55,7 @@ export function LanguageSwitcher() {
           className={cn(
             "group inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-muted aria-expanded:text-foreground"
           )}
-          aria-label={`Current language: ${localeLabels[locale]}. Change language.`}
+          aria-label={ariaLabel}
         >
           <LanguagesIcon className="size-4" />
           <span className="hidden sm:inline">{triggerLabel}</span>
@@ -75,7 +70,7 @@ export function LanguageSwitcher() {
               {localeLabels[l]}
               {l === locale && (
                 <span className="ml-auto text-xs text-muted-foreground">
-                  Active
+                  {t("active", locale)}
                 </span>
               )}
             </DropdownMenuItem>
