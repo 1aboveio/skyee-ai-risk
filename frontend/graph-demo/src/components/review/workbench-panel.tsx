@@ -21,7 +21,7 @@ export function WorkbenchPanel({
   children,
 }: WorkbenchPanelProps) {
   return (
-    <Card className="h-full">
+    <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
       </CardHeader>
