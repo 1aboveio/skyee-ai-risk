@@ -74,6 +74,22 @@ with DAG(
         start >> sync_task
         stg_tasks.append(sync_task)
 
+    reconcile_mysql_to_stg = SparkSubmitOperator(
+        task_id="reconcile_mysql_to_stg",
+        name="usr_skyee_mw.dq.mysql_to_stg.{{ ds }}",
+        application=f"{SCRIPTS_PATH}/reconcile_mysql_to_stg.py",
+        conn_id="spark_default",
+        application_args=[
+            "--url", "jdbc:mysql://{{ var.value.MYSQL_DB_URL_SECRET }}",
+            "--start-date", "{{ ds }}",
+            "--end-date", "{{ next_ds }}",
+            "--run-id", "{{ run_id }}",
+            "--fail-on-mismatch",
+            "--write-results",
+        ],
+        verbose=True,
+    )
+
     graph_edges = SparkSubmitOperator(
         task_id="dwd_graph_edges",
         name="usr_skyee_mw.dwd.graph_edges.{{ ds }}",
@@ -123,6 +139,7 @@ with DAG(
         verbose=True,
     )
 
-    stg_tasks >> graph_edges >> graph_nodes
-    stg_tasks >> dwd_customer >> dwd_transaction
+    stg_tasks >> reconcile_mysql_to_stg
+    reconcile_mysql_to_stg >> graph_edges >> graph_nodes
+    reconcile_mysql_to_stg >> dwd_customer >> dwd_transaction
     [graph_nodes, dwd_transaction] >> end
