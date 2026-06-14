@@ -335,12 +335,38 @@ def test_neighbor_lookup_preserves_multiple_evidence_for_same_customer(tmp_path,
     assert len({item["neighbor_cust_id"] for item in links}) == 1
 
 
+def test_count_neighbors_counts_unique_neighbors(tmp_path, monkeypatch):
+    # @characterizes duckdb_graph_service.count_neighbors
+    # @covers duckdb_graph_service.degree_guard
+    # @level integration
+    rows = [
+        _row("customer", 2101, "cs_2101", "mobile_phone", "555-1111", "ma_1"),
+        _row("mobile_phone", "555-1111", "ma_1", "customer", 2102, "cs_2102"),
+        _row("customer", 2101, "cs_2101", "email", "same@domain.com", "em_1"),
+        _row("email", "same@domain.com", "em_1", "customer", 2102, "cs_2102"),
+    ]
+    db_path = tmp_path / "graph-unique-neighbors.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    assert graph_service._count_neighbors(2101) == 1
+
+
 def test_neighbor_lookup_works_when_only_association_attribute_links_exists(tmp_path, monkeypatch):
     # @covers duckdb_graph_service.no_edge_table_behavior
     # @level integration
     rows = [
-        _row("customer", 3001, "cs_3001", "ip", "10.0.0.1", "ip_1"),
-        _row("ip", "10.0.0.1", "ip_1", "customer", 3002, "cs_3002"),
+        {
+            **_row("customer", 3001, "cs_3001", "ip", "10.0.0.1", "ip_1"),
+            "attr_link_type": "LOGIN_ACTIVITY",
+            "source_table": "network_logs",
+            "source_field": "ip_last_seen",
+        },
+        {
+            **_row("ip", "10.0.0.1", "ip_1", "customer", 3002, "cs_3002"),
+            "attr_link_type": "LOGIN_ACTIVITY",
+            "source_table": "network_logs",
+            "source_field": "ip_last_seen",
+        },
     ]
     db_path = tmp_path / "graph-minimal.duckdb"
     _create_snapshot(db_path, rows)
@@ -357,6 +383,16 @@ def test_neighbor_lookup_works_when_only_association_attribute_links_exists(tmp_
         links = _neighbors(client, 3001)
     assert len(links) == 1
     assert links[0]["neighbor_cust_id"] == 3002
+    assert links[0]["attribute_link_type"] == "LOGIN_ACTIVITY"
+    assert links[0]["edge_type"] == "SAME_IP"
+    assert links[0]["same_attribute_type"] == "same_ip"
+    assert links[0]["strength"] == "Strong"
+    assert links[0]["provenance"]["attribute_link_type"] == "LOGIN_ACTIVITY"
+    assert links[0]["provenance"]["attribute_link_type_label"] == "Login activity"
+    assert links[0]["provenance"]["source_table"] == "network_logs"
+    assert links[0]["provenance"]["source_table_label"] == "Network logs"
+    assert links[0]["provenance"]["source_field"] == "ip_last_seen"
+    assert links[0]["provenance"]["source_field_label"] == "IP address"
 
 
 def test_neighbor_lookup_preserves_optional_graph_node_metadata(tmp_path, monkeypatch):
@@ -797,6 +833,290 @@ def test_query_helper_rejects_invalid_same_attribute_type(tmp_path):
             )
     finally:
         con.close()
+
+
+def test_query_helper_covers_all_same_attribute_filters(tmp_path):
+    # @covers duckdb_graph_query.same_attribute_filter
+    # @level integration
+    rows = [
+        _row("customer", 8101, "cs_8101", "mobile_phone", "m-01", "ma_01"),
+        _row("mobile_phone", "m-01", "ma_01", "customer", 8102, "cs_8102"),
+        _row("customer", 8101, "cs_8101", "email", "e-01", "em_01"),
+        _row("email", "e-01", "em_01", "customer", 8103, "cs_8103"),
+        _row("customer", 8101, "cs_8101", "business_name", "Acme", "bn_01"),
+        _row("business_name", "Acme", "bn_01", "customer", 8104, "cs_8104"),
+        _row("customer", 8101, "cs_8101", "person_name", "Alice", "pn_01"),
+        _row("person_name", "Alice", "pn_01", "customer", 8105, "cs_8105"),
+        _row("customer", 8101, "cs_8101", "id_no", "ID-01", "id_01"),
+        _row("id_no", "ID-01", "id_01", "customer", 8106, "cs_8106"),
+        _row("customer", 8101, "cs_8101", "address", "1 Main", "ad_01"),
+        _row("address", "1 Main", "ad_01", "customer", 8107, "cs_8107"),
+        _row("customer", 8101, "cs_8101", "store_url", "https://shop", "su_01"),
+        _row("store_url", "https://shop", "su_01", "customer", 8108, "cs_8108"),
+        _row("customer", 8101, "cs_8101", "ip", "10.1.1.1", "ip_01"),
+        _row("ip", "10.1.1.1", "ip_01", "customer", 8109, "cs_8109"),
+    ]
+    db_path = tmp_path / "graph-all-query-filters.duckdb"
+    _create_snapshot(db_path, rows)
+
+    same_filters = [
+        "same_mobile_phone",
+        "same_email",
+        "same_business_name",
+        "same_person_name",
+        "same_id_no",
+        "same_address",
+        "same_store_url",
+        "same_ip",
+    ]
+    expected_neighbor = {
+        "same_mobile_phone": 8102,
+        "same_email": 8103,
+        "same_business_name": 8104,
+        "same_person_name": 8105,
+        "same_id_no": 8106,
+        "same_address": 8107,
+        "same_store_url": 8108,
+        "same_ip": 8109,
+    }
+
+    con = duckdb.connect(str(db_path))
+    try:
+        for same_attribute_type in same_filters:
+            links = graph_query.query_association_neighbors(
+                con,
+                cust_id=8101,
+                same_attribute_type=same_attribute_type,
+            )
+            assert len(links) == 1
+            assert links[0]["neighbor_cust_id"] == expected_neighbor[same_attribute_type]
+            assert links[0]["same_attribute_type"] == same_attribute_type
+    finally:
+        con.close()
+
+
+def test_neighbor_lookup_filters_each_same_attribute_type(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.same_attribute_filter
+    # @level integration
+    rows = [
+        _row("customer", 8001, "cs_8001", "mobile_phone", "m-01", "ma_01"),
+        _row("mobile_phone", "m-01", "ma_01", "customer", 8002, "cs_8002"),
+        _row("customer", 8001, "cs_8001", "email", "a@b.com", "em_01"),
+        _row("email", "a@b.com", "em_01", "customer", 8003, "cs_8003"),
+        _row("customer", 8001, "cs_8001", "business_name", "Acme", "bn_01"),
+        _row("business_name", "Acme", "bn_01", "customer", 8004, "cs_8004"),
+        _row("customer", 8001, "cs_8001", "person_name", "Alice", "pn_01"),
+        _row("person_name", "Alice", "pn_01", "customer", 8005, "cs_8005"),
+        _row("customer", 8001, "cs_8001", "id_no", "ID-01", "id_01"),
+        _row("id_no", "ID-01", "id_01", "customer", 8006, "cs_8006"),
+        _row("customer", 8001, "cs_8001", "address", "1 Main", "ad_01"),
+        _row("address", "1 Main", "ad_01", "customer", 8007, "cs_8007"),
+        _row("customer", 8001, "cs_8001", "store_url", "https://shop", "su_01"),
+        _row("store_url", "https://shop", "su_01", "customer", 8008, "cs_8008"),
+        _row("customer", 8001, "cs_8001", "ip", "10.0.0.1", "ip_01"),
+        _row("ip", "10.0.0.1", "ip_01", "customer", 8009, "cs_8009"),
+    ]
+    db_path = tmp_path / "graph-all-filters.duckdb"
+    _create_snapshot(db_path, rows)
+    same_filters = [
+        ("same_mobile_phone", 8002),
+        ("same_email", 8003),
+        ("same_business_name", 8004),
+        ("same_person_name", 8005),
+        ("same_id_no", 8006),
+        ("same_address", 8007),
+        ("same_store_url", 8008),
+        ("same_ip", 8009),
+    ]
+
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    with TestClient(graph_service.app) as client:
+        for filter_value, expected_neighbor in same_filters:
+            response = client.get("/neighbors/8001", params={"same_attribute_type": filter_value})
+            links = response.json()
+            assert response.status_code == 200
+            assert len(links) == 1
+            assert links[0]["neighbor_cust_id"] == expected_neighbor
+            assert links[0]["same_attribute_type"] == filter_value
+
+
+def test_neighbor_lookup_rejects_high_fanout_attribute_unfiltered(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.fanout_guard_unfiltered
+    # @level integration
+    rows = []
+    for neighbor_id in [8302, 8303, 8304]:
+        rows.append(
+            _row(
+                "customer",
+                8301,
+                "cs_8301",
+                "mobile_phone",
+                "199-333",
+                "ma_33",
+            )
+        )
+        rows.append(
+            _row(
+                "mobile_phone",
+                "199-333",
+                "ma_33",
+                "customer",
+                neighbor_id,
+                f"cs_{neighbor_id}",
+            )
+        )
+
+    rows.extend(
+        [
+            _row("customer", 8301, "cs_8301", "email", "same@sample.com", "em_01"),
+            _row(
+                "email",
+                "same@sample.com",
+                "em_01",
+                "customer",
+                8399,
+                "cs_8399",
+            ),
+        ]
+    )
+    db_path = tmp_path / "graph-fanout.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.setenv("GRAPH_MAX_QUERY_DEGREE", "2")
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/neighbors/8301")
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "ATTR_FANOUT_TOO_HIGH"
+    assert detail["cust_id"] == 8301
+    assert detail["association_attribute_type"] == "mobile_phone"
+    assert detail["same_attribute_type"] == "same_mobile_phone"
+    assert detail["neighbor_count"] == 3
+    assert detail["max_degree"] == 2
+
+
+def test_neighbor_lookup_rejects_high_fanout_attribute_filtered(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.fanout_guard_filtered
+    # @level integration
+    rows = []
+    for neighbor_id in [8402, 8403, 8404]:
+        rows.append(
+            _row(
+                "customer",
+                8401,
+                "cs_8401",
+                "mobile_phone",
+                "199-444",
+                "ma_44",
+            )
+        )
+        rows.append(
+            _row(
+                "mobile_phone",
+                "199-444",
+                "ma_44",
+                "customer",
+                neighbor_id,
+                f"cs_{neighbor_id}",
+            )
+        )
+
+    rows.extend(
+        [
+            _row("customer", 8401, "cs_8401", "email", "e-123", "em_11"),
+            _row("email", "e-123", "em_11", "customer", 8405, "cs_8405"),
+        ]
+    )
+    db_path = tmp_path / "graph-fanout-filtered.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.setenv("GRAPH_MAX_QUERY_DEGREE", "2")
+
+    with TestClient(graph_service.app) as client:
+        response = client.get(
+            "/neighbors/8401",
+            params={"same_attribute_type": "same_mobile_phone"},
+        )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "ATTR_FANOUT_TOO_HIGH"
+    assert detail["cust_id"] == 8401
+    assert detail["association_attribute_type"] == "mobile_phone"
+    assert detail["same_attribute_type"] == "same_mobile_phone"
+    assert detail["neighbor_count"] == 3
+    assert detail["max_degree"] == 2
+
+
+def test_neighbor_lookup_allows_low_fanout_filter_when_total_degree_is_high(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.filtered_fanout_guard
+    # @level integration
+    rows = []
+    for neighbor_id in [8602, 8603, 8604]:
+        rows.append(
+            _row(
+                "customer",
+                8601,
+                "cs_8601",
+                "mobile_phone",
+                "199-666",
+                "ma_66",
+            )
+        )
+        rows.append(
+            _row(
+                "mobile_phone",
+                "199-666",
+                "ma_66",
+                "customer",
+                neighbor_id,
+                f"cs_{neighbor_id}",
+            )
+        )
+    rows.extend(
+        [
+            _row("customer", 8601, "cs_8601", "email", "safe@example.com", "em_safe"),
+            _row("email", "safe@example.com", "em_safe", "customer", 8699, "cs_8699"),
+        ]
+    )
+    db_path = tmp_path / "graph-filter-safe-high-degree.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.setenv("GRAPH_MAX_QUERY_DEGREE", "2")
+
+    with TestClient(graph_service.app) as client:
+        response = client.get(
+            "/neighbors/8601",
+            params={"same_attribute_type": "same_email"},
+        )
+
+    assert response.status_code == 200
+    links = response.json()
+    assert len(links) == 1
+    assert links[0]["neighbor_cust_id"] == 8699
+    assert links[0]["same_attribute_type"] == "same_email"
+
+
+def test_neighbor_lookup_rejects_unmapped_same_attribute_filter(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.same_attribute_filter_validation
+    # @level integration
+    rows = [
+        _row("customer", 8501, "cs_8501", "ip", "10.0.0.5", "ip_1"),
+        _row("ip", "10.0.0.5", "ip_1", "customer", 8502, "cs_8502"),
+    ]
+    db_path = tmp_path / "graph-unmapped-filter.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    with TestClient(graph_service.app) as client:
+        response = client.get(
+            "/neighbors/8501",
+            params={"same_attribute_type": "SAME_PHONE"},
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "INVALID_SAME_ATTRIBUTE_TYPE"
+
 
 
 def test_confirmed_risk_uses_legacy_registry_when_available(tmp_path, monkeypatch):

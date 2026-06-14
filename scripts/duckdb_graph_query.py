@@ -47,6 +47,10 @@ ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE = {
     "ip": "SAME_IP",
 }
 ALLOWED_SAME_ATTRIBUTE_TYPES = set(ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.values())
+SAME_ATTRIBUTE_TO_ASSOCIATION_ATTRIBUTE = {
+    same_attribute: attribute_type
+    for attribute_type, same_attribute in ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.items()
+}
 ASSOCIATION_LINK_COLUMNS = [
     "src_attr_type",
     "src_attr_value",
@@ -216,6 +220,12 @@ def _derive_legacy_edge_type(attribute_type: str | None) -> str | None:
     return ASSOCIATION_ATTRIBUTE_TO_LEGACY_EDGE_TYPE.get(attribute_type)
 
 
+def _resolve_same_attribute_filter(same_attribute_type: str | None) -> str | None:
+    if same_attribute_type is None:
+        return None
+    return SAME_ATTRIBUTE_TO_ASSOCIATION_ATTRIBUTE.get(same_attribute_type)
+
+
 def _customer_lookup_base_sql() -> tuple[str, str]:
     return (
         """
@@ -312,23 +322,13 @@ def query_association_neighbors(
     same_attribute_type: str | None = None,
     limit: int | None = 1000,
 ) -> list[dict[str, Any]]:
-    if same_attribute_type is None:
-        same_attribute = None
-    else:
-        same_attribute = next(
-            (
-                attribute
-                for attribute, link in ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.items()
-                if link == same_attribute_type
-            ),
-            None,
+    same_attribute = _resolve_same_attribute_filter(same_attribute_type)
+    if same_attribute_type is not None and same_attribute is None:
+        allowed = ", ".join(sorted(ALLOWED_SAME_ATTRIBUTE_TYPES))
+        raise ValueError(
+            f"Unsupported same_attribute_type: {same_attribute_type}. "
+            f"Allowed values: {allowed}"
         )
-        if same_attribute is None:
-            allowed = ", ".join(sorted(ALLOWED_SAME_ATTRIBUTE_TYPES))
-            raise ValueError(
-                f"Unsupported same_attribute_type: {same_attribute_type}. "
-                f"Allowed values: {allowed}"
-            )
 
     pre_sql, select_sql = _customer_lookup_base_sql()
     where_clause = ""
