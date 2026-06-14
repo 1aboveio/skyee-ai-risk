@@ -372,44 +372,54 @@ def _load_neighbor_metadata(cust_ids: list[int]) -> dict[int, dict[str, Any]]:
         con.close()
 
 
-def _apply_neighbor_metadata(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _apply_neighbor_metadata(
+    rows: list[dict[str, Any]],
+    adapter: SourceEvidenceDatabaseAdapter | None = None,
+) -> list[dict[str, Any]]:
     return enrich_neighbor_rows_with_metadata(
         rows=rows,
-        adapter=source_evidence_adapter,
+        adapter=adapter or source_evidence_adapter,
         batch_size=get_enrichment_batch_size(),
     )
 
 
-def _require_high_risk_enrichment():
+def _has_legacy_graph_nodes() -> bool:
+    _ensure_snapshot_exists()
+    con = duckdb.connect(get_db_path(), read_only=True)
+    try:
+        return _table_exists(con, "graph_nodes")
+    finally:
+        con.close()
+
+
+def _raise_high_risk_unavailable() -> None:
+    raise HTTPException(
+        status_code=503,
+        detail={
+            "code": "HIGH_RISK_ENRICHMENT_UNAVAILABLE",
+            "message": (
+                "High-risk neighbor lookup requires configured Source Evidence "
+                "enrichment or explicit legacy graph_nodes metadata."
+            ),
+        },
+    )
+
+
+def _high_risk_enrichment_adapter() -> SourceEvidenceDatabaseAdapter:
     if isinstance(source_evidence_adapter, NullSourceEvidenceAdapter):
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "code": "HIGH_RISK_ENRICHMENT_UNAVAILABLE",
-                "message": (
-                    "High-risk neighbor lookup requires configured Source Evidence "
-                    "enrichment."
-                ),
-            },
-        )
+        if _has_legacy_graph_nodes():
+            return DuckDbGraphNodeSourceEvidenceAdapter()
+        _raise_high_risk_unavailable()
+
     if isinstance(source_evidence_adapter, DuckDbGraphNodeSourceEvidenceAdapter):
         _ensure_snapshot_exists()
         con = duckdb.connect(get_db_path(), read_only=True)
         try:
             if not _table_exists(con, "graph_nodes"):
-                raise HTTPException(
-                    status_code=503,
-                    detail={
-                        "code": "HIGH_RISK_ENRICHMENT_UNAVAILABLE",
-                        "message": (
-                            "High-risk neighbor lookup requires configured Source "
-                            "Evidence enrichment or explicit legacy graph_nodes "
-                            "metadata."
-                        ),
-                    },
-                )
+                _raise_high_risk_unavailable()
         finally:
             con.close()
+    return source_evidence_adapter
 
 
 def _assert_high_risk_rows_enriched(rows: list[dict[str, Any]]) -> None:
@@ -711,9 +721,9 @@ def neighbors(
 
 @app.get("/high-risk/{cust_id}")
 def high_risk(cust_id: int, limit: int = Query(50, ge=1, le=500)):
-    _require_high_risk_enrichment()
+    enrichment_adapter = _high_risk_enrichment_adapter()
     assert_expandable(cust_id)
-    rows = _apply_neighbor_metadata(_build_neighbor_rows(cust_id))
+    rows = _apply_neighbor_metadata(_build_neighbor_rows(cust_id), enrichment_adapter)
     _assert_high_risk_rows_enriched(rows)
     rows = [
         row
@@ -747,7 +757,7 @@ def shared(source_cust_id: int, target_cust_id: int, limit: int = Query(50, ge=1
         for row in _build_neighbor_rows(source_cust_id)
         if row["neighbor_cust_id"] == target_cust_id
     ]
-    return rows[:limit]
+    return _apply_neighbor_metadata(rows[:limit])
 
 
 @app.get("/confirmed-risk/{cust_id}")

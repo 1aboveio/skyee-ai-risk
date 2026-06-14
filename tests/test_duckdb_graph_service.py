@@ -404,8 +404,12 @@ def test_neighbor_lookup_preserves_optional_graph_node_metadata(tmp_path, monkey
 
     with TestClient(graph_service.app) as client:
         high_risk = client.get("/high-risk/4001")
+        shared = client.get("/shared/4001/4002")
     assert high_risk.status_code == 200
     assert high_risk.json()[0]["cust_id"] == 4002
+    assert shared.status_code == 200
+    assert shared.json()[0]["cust_name"] == "Linked Customer"
+    assert shared.json()[0]["risk_level"] == "HIGH"
 
 
 def test_default_enrichment_does_not_read_duckdb_graph_nodes(tmp_path, monkeypatch):
@@ -466,6 +470,51 @@ def test_mysql_source_evidence_adapter_is_selected_when_configured(monkeypatch):
     adapter = graph_service.create_source_evidence_adapter()
 
     assert isinstance(adapter, graph_service.MySqlSourceEvidenceAdapter)
+
+
+def test_high_risk_uses_legacy_graph_nodes_when_source_evidence_unconfigured(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.high_risk_metadata_contract
+    # @level integration
+    rows = [
+        _row("customer", 4201, "cs_4201", "mobile_phone", "177-4201", "ma_4201"),
+        _row("mobile_phone", "177-4201", "ma_4201", "customer", 4202, "cs_4202"),
+    ]
+    db_path = tmp_path / "graph-default-high-risk-legacy.duckdb"
+    _create_snapshot(db_path, rows)
+    _create_graph_nodes(
+        db_path,
+        [
+            {
+                "cust_id": 4202,
+                "cust_name": "Legacy High Risk",
+                "risk_level": "HIGH",
+                "is_high_risk": "Y",
+                "is_sanctioned": "N",
+                "current_balance": 1000.0,
+                "confirmed_risk_status": "confirmed",
+                "confirmed_risk_type": "bad_customer",
+                "node_degree": 4,
+            }
+        ],
+    )
+
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.delenv("SOURCE_EVIDENCE_MYSQL_URL", raising=False)
+    monkeypatch.delenv("SOURCE_EVIDENCE_DB_URL", raising=False)
+    monkeypatch.delenv("SOURCE_EVIDENCE_ADAPTER", raising=False)
+    monkeypatch.setattr(
+        graph_service,
+        "source_evidence_adapter",
+        graph_service.create_source_evidence_adapter(),
+    )
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/high-risk/4201")
+
+    assert response.status_code == 200
+    high_risk = response.json()
+    assert high_risk[0]["cust_id"] == 4202
+    assert high_risk[0]["cust_name"] == "Legacy High Risk"
 
 
 def test_neighbors_enrichment_is_batched_and_not_per_neighbor(tmp_path, monkeypatch):
