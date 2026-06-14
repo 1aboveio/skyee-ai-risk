@@ -2,8 +2,10 @@ from datetime import datetime
 from pathlib import Path
 
 import duckdb
+import pytest
 from fastapi.testclient import TestClient
 
+import scripts.duckdb_graph_query as graph_query
 import scripts.duckdb_graph_service as graph_service
 
 
@@ -297,3 +299,52 @@ def test_high_risk_endpoint_requires_graph_node_metadata(tmp_path, monkeypatch):
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "HIGH_RISK_ENRICHMENT_UNAVAILABLE"
+
+
+def test_query_helper_filters_same_attribute_type(tmp_path):
+    # @covers duckdb_graph_query.same_attribute_filter
+    # @level integration
+    rows = [
+        _row("customer", 6001, "cs_6001", "mobile_phone", "188-0001", "ma_1"),
+        _row("mobile_phone", "188-0001", "ma_1", "customer", 6002, "cs_6002"),
+        _row("customer", 6001, "cs_6001", "email", "filter@example.com", "em_1"),
+        _row("email", "filter@example.com", "em_1", "customer", 6003, "cs_6003"),
+    ]
+    db_path = tmp_path / "graph-filter.duckdb"
+    _create_snapshot(db_path, rows)
+
+    con = duckdb.connect(str(db_path))
+    try:
+        links = graph_query.query_association_neighbors(
+            con,
+            cust_id=6001,
+            same_attribute_type="same_email",
+        )
+    finally:
+        con.close()
+
+    assert len(links) == 1
+    assert links[0]["neighbor_cust_id"] == 6003
+    assert links[0]["same_attribute_type"] == "same_email"
+
+
+def test_query_helper_rejects_invalid_same_attribute_type(tmp_path):
+    # @covers duckdb_graph_query.same_attribute_filter_validation
+    # @level integration
+    rows = [
+        _row("customer", 7001, "cs_7001", "mobile_phone", "199-0001", "ma_1"),
+        _row("mobile_phone", "199-0001", "ma_1", "customer", 7002, "cs_7002"),
+    ]
+    db_path = tmp_path / "graph-invalid-filter.duckdb"
+    _create_snapshot(db_path, rows)
+
+    con = duckdb.connect(str(db_path))
+    try:
+        with pytest.raises(ValueError, match="Unsupported same_attribute_type"):
+            graph_query.query_association_neighbors(
+                con,
+                cust_id=7001,
+                same_attribute_type="bogus",
+            )
+    finally:
+        con.close()

@@ -2,7 +2,7 @@
   "runSlug": "association-inverted-index-serving",
   "skill": "resolve-prd",
   "createdAt": "2026-06-14T08:25:50Z",
-  "updatedAt": "2026-06-14T08:53:23Z",
+  "updatedAt": "2026-06-14T09:00:34Z",
   "models": {
     "implementation": "gpt-5.3-codex",
     "review": "gpt-5.4",
@@ -31,9 +31,11 @@
       "pr": "#36",
       "branch": "issue-30-attribute-link-core",
       "lastVerdict": "NEEDS_CHANGES",
-      "reviewRounds": 1,
+      "reviewRounds": 2,
       "blocker": null,
-      "oracleConsults": [],
+      "oracleConsults": [
+        "Skipped after second NEEDS_CHANGES because remaining finding was a mechanical same_attribute_type validation bug with direct regression coverage."
+      ],
       "worker": "019ec545-b6c7-76c3-a935-052f2bad9565"
     },
     {

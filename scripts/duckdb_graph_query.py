@@ -36,6 +36,7 @@ ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE = {
     "store_url": "same_store_url",
     "ip": "same_ip",
 }
+ALLOWED_SAME_ATTRIBUTE_TYPES = set(ASSOCIATION_ATTRIBUTE_TO_SAME_ATTRIBUTE.values())
 ASSOCIATION_LINK_COLUMNS = [
     "src_attr_type",
     "src_attr_value",
@@ -306,6 +307,12 @@ def query_association_neighbors(
             ),
             None,
         )
+        if same_attribute is None:
+            allowed = ", ".join(sorted(ALLOWED_SAME_ATTRIBUTE_TYPES))
+            raise ValueError(
+                f"Unsupported same_attribute_type: {same_attribute_type}. "
+                f"Allowed values: {allowed}"
+            )
 
     pre_sql, select_sql = _customer_lookup_base_sql()
     where_clause = ""
