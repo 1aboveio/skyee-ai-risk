@@ -2,7 +2,7 @@
   "runSlug": "association-inverted-index-serving",
   "skill": "resolve-prd",
   "createdAt": "2026-06-14T08:25:50Z",
-  "updatedAt": "2026-06-14T10:17:31Z",
+  "updatedAt": "2026-06-14T11:39:55Z",
   "models": {
     "implementation": "gpt-5.3-codex",
     "review": "gpt-5.4",
@@ -78,11 +78,11 @@
     {
       "id": "#34",
       "title": "Graph Demo and Workbench UI Compatibility for Attribute Link Lookup",
-      "status": "in-progress",
-      "pr": null,
+      "status": "merge-ready",
+      "pr": "#40",
       "branch": "issue-34-ui-compat",
-      "lastVerdict": null,
-      "reviewRounds": 0,
+      "lastVerdict": "PASS",
+      "reviewRounds": 2,
       "blocker": null,
       "oracleConsults": [],
       "worker": "019ec5a2-d5d2-7e93-a443-c6fee9a92007"
@@ -95,7 +95,7 @@
       "branch": null,
       "lastVerdict": null,
       "reviewRounds": 0,
-      "blocker": "Waiting on #32 and #34",
+      "blocker": null,
       "oracleConsults": []
     }
   ],
