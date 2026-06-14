@@ -13,11 +13,13 @@ Examples:
 from __future__ import annotations
 
 import os
+import logging
+import time
 from typing import Any
 from urllib.parse import urlparse
 
 import duckdb
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 
 from scripts.live_enrichment import SourceEvidenceDatabaseAdapter, enrich_neighbor_rows_with_metadata
 
@@ -77,6 +79,41 @@ SAME_ATTRIBUTE_TO_ASSOCIATION_ATTRIBUTE = {
 }
 
 app = FastAPI(title="Skyee Association Link Lookup Service")
+logging.basicConfig(
+    level=os.getenv("GRAPH_QUERY_LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("duckdb_graph_service")
+
+
+@app.middleware("http")
+async def log_request_timing(request: Request, call_next):
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (time.perf_counter() - start) * 1000
+        logger.exception(
+            "request_timing method=%s path=%s query=%r status=error duration_ms=%.2f",
+            request.method,
+            request.url.path,
+            request.url.query,
+            duration_ms,
+        )
+        raise
+
+    duration_ms = (time.perf_counter() - start) * 1000
+    response.headers["X-Process-Time-Ms"] = f"{duration_ms:.2f}"
+    response.headers["Server-Timing"] = f"app;dur={duration_ms:.2f}"
+    logger.info(
+        "request_timing method=%s path=%s query=%r status=%s duration_ms=%.2f",
+        request.method,
+        request.url.path,
+        request.url.query,
+        response.status_code,
+        duration_ms,
+    )
+    return response
 
 
 class NullSourceEvidenceAdapter(SourceEvidenceDatabaseAdapter):
@@ -223,11 +260,19 @@ def _table_exists(con: duckdb.DuckDBPyConnection, table_name: str) -> bool:
 def _query(sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
     _ensure_snapshot_exists()
     con = duckdb.connect(get_db_path(), read_only=True)
+    start = time.perf_counter()
     try:
         _assert_snapshot_schema(con)
         result = con.execute(sql, params or [])
         columns = [desc[0] for desc in result.description]
-        return [dict(zip(columns, row)) for row in result.fetchall()]
+        rows = [dict(zip(columns, row)) for row in result.fetchall()]
+        duration_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            "duckdb_query rows=%s duration_ms=%.2f",
+            len(rows),
+            duration_ms,
+        )
+        return rows
     finally:
         con.close()
 
@@ -241,6 +286,7 @@ def _legacy_query(
 ) -> list[dict[str, Any]]:
     _ensure_snapshot_exists()
     con = duckdb.connect(get_db_path(), read_only=True)
+    start = time.perf_counter()
     try:
         missing = [table for table in required_tables if not _table_exists(con, table)]
         if missing:
@@ -254,7 +300,14 @@ def _legacy_query(
             )
         result = con.execute(sql, params or [])
         columns = [desc[0] for desc in result.description]
-        return [dict(zip(columns, row)) for row in result.fetchall()]
+        rows = [dict(zip(columns, row)) for row in result.fetchall()]
+        duration_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            "duckdb_legacy_query rows=%s duration_ms=%.2f",
+            len(rows),
+            duration_ms,
+        )
+        return rows
     finally:
         con.close()
 
