@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n/locale-provider";
 import { displayName } from "@/lib/graph/utils";
 import type { GraphSearchResult } from "@/lib/graph/schema";
 import { cn } from "@/lib/utils";
@@ -8,6 +10,7 @@ interface GraphCanvasProps {
 }
 
 export function GraphCanvas({ result, className }: GraphCanvasProps) {
+  const { locale } = useLocale();
   const width = 760;
   const height = 440;
   const center = { x: width / 2, y: height / 2 };
@@ -27,7 +30,7 @@ export function GraphCanvas({ result, className }: GraphCanvasProps) {
     <div className={cn("overflow-hidden rounded-lg border bg-muted/20", className)}>
       <svg
         role="img"
-        aria-label="Customer relationship graph"
+        aria-label={t("customerRelationshipGraph", locale)}
         viewBox={`0 0 ${width} ${height}`}
         className="aspect-[19/11] w-full"
       >
