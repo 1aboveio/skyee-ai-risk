@@ -105,16 +105,16 @@ def enrich_neighbor_rows_with_metadata(
     if not ids:
         return rows
 
-    failed_customer_ids: set[int] = set()
-    failed_batch_error: str | None = None
+    failed_customer_errors: dict[int, str] = {}
     customer_profiles: dict[int, dict[str, Any]] = {}
 
     for batch in batch_ids(ids, batch_size):
         try:
             customer_profiles.update(adapter.get_customer_profiles(batch))
         except Exception as exc:  # pragma: no cover - defensive: adapter-specific failures
-            failed_customer_ids.update(batch)
-            failed_batch_error = f"Live enrichment batch failed: {exc}"
+            batch_error = f"Live enrichment batch failed: {exc}"
+            for customer_id in batch:
+                failed_customer_errors[customer_id] = batch_error
 
     for row in rows:
         neighbor_id = _normalize_customer_id(row.get("neighbor_cust_id"))
@@ -123,7 +123,10 @@ def enrich_neighbor_rows_with_metadata(
             _apply_enrichment_payload(row, payload, None)
             continue
 
-        should_treat_as_partial = neighbor_id in failed_customer_ids
-        _apply_enrichment_payload(row, None, failed_batch_error if should_treat_as_partial else None)
+        _apply_enrichment_payload(
+            row,
+            None,
+            failed_customer_errors.get(neighbor_id),
+        )
 
     return rows

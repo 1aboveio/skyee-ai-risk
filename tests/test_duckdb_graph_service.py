@@ -14,17 +14,23 @@ class _FakeSourceEvidenceAdapter(graph_service.SourceEvidenceDatabaseAdapter):
         self,
         payloads: dict[int, dict],
         fail_on_calls: set[int] | None = None,
+        failure_messages: dict[int, str] | None = None,
     ) -> None:
         self.payloads = payloads
         self.fail_on_calls = fail_on_calls or set()
+        self.failure_messages = failure_messages or {}
         self.calls: list[list[int]] = []
         self._call_index = 0
 
     def get_customer_profiles(self, customer_ids: list[int]) -> dict[int, dict]:
         self.calls.append(list(customer_ids))
         if self._call_index in self.fail_on_calls:
+            message = self.failure_messages.get(
+                self._call_index,
+                f"simulated source evidence timeout on call {self._call_index + 1}",
+            )
             self._call_index += 1
-            raise RuntimeError(f"simulated source evidence timeout on call {self._call_index}")
+            raise RuntimeError(message)
         self._call_index += 1
         return {
             customer_id: self.payloads[customer_id]
@@ -521,6 +527,46 @@ def test_neighbors_partial_enrichment_failure_is_returned(tmp_path, monkeypatch)
     assert linked[7004]["enrichment_status"] == "partial"
     assert linked[7004]["cust_name"] is None
     assert "simulated source evidence timeout" in linked[7004]["enrichment_error"]
+
+
+def test_neighbors_preserve_per_batch_enrichment_errors(tmp_path, monkeypatch):
+    # @covers duckdb_graph_service.partial_enrichment_failure
+    # @level integration
+    rows = [
+        _row("customer", 7101, "cs_7101", "mobile_phone", "901-1001", "ma_11"),
+        _row("mobile_phone", "901-1001", "ma_11", "customer", 7102, "cs_7102"),
+        _row("customer", 7101, "cs_7101", "email", "batch-one@example.com", "em_11"),
+        _row("email", "batch-one@example.com", "em_11", "customer", 7103, "cs_7103"),
+        _row("customer", 7101, "cs_7101", "ip", "10.71.0.4", "ip_11"),
+        _row("ip", "10.71.0.4", "ip_11", "customer", 7104, "cs_7104"),
+        _row("customer", 7101, "cs_7101", "address", "710 Main St", "addr_11"),
+        _row("address", "710 Main St", "addr_11", "customer", 7105, "cs_7105"),
+    ]
+    db_path = tmp_path / "graph-partial-two-batches.duckdb"
+    _create_snapshot(db_path, rows)
+    monkeypatch.setenv("GRAPH_DUCKDB_PATH", str(db_path))
+    monkeypatch.setenv("GRAPH_ENRICHMENT_BATCH_SIZE", "2")
+
+    fake_adapter = _FakeSourceEvidenceAdapter(
+        payloads={},
+        fail_on_calls={0, 1},
+        failure_messages={
+            0: "first batch timeout",
+            1: "second batch timeout",
+        },
+    )
+    monkeypatch.setattr(graph_service, "source_evidence_adapter", fake_adapter)
+
+    with TestClient(graph_service.app) as client:
+        response = client.get("/neighbors/7101")
+    assert response.status_code == 200
+
+    linked = {link["neighbor_cust_id"]: link for link in response.json()}
+    first_batch, second_batch = fake_adapter.calls
+    for customer_id in first_batch:
+        assert "first batch timeout" in linked[customer_id]["enrichment_error"]
+    for customer_id in second_batch:
+        assert "second batch timeout" in linked[customer_id]["enrichment_error"]
 
 
 def test_high_risk_endpoint_requires_graph_node_metadata(tmp_path, monkeypatch):
