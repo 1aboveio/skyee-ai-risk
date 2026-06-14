@@ -102,7 +102,7 @@ with DAG(
             "--end-date", LOCAL_INTERVAL_END,
             "--bulk",
             "--max-degree", "100",
-            "--use-attr-index",
+            "--no-use-attr-index",
             "--write-attr-index",
             "--target", "monthly",
         ],
