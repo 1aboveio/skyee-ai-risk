@@ -160,6 +160,10 @@ _Avoid_: Agent engineering platform, skill management console
 The generic human workbench where a reviewer examines customer-level evidence during prescreening, workflow review, second-round review, or ad hoc review. It can support final Accept or Reject decisions when used inside workflow-controlled Human Review, but it does not replace workflow ownership of state transition, permissions, or audit.
 _Avoid_: AI final decision, workflow state engine, single-stage review page
 
+**Application Locale**:
+The reviewer-facing language setting that applies consistently across the Customer Risk Review Workbench, Risk Graph views, shared navigation, and authentication surfaces. It is a signed-in reviewer preference that changes product UI language, not source evidence values; if no reviewer preference exists, browser language is detected first and unsupported or unavailable detection falls back to Simplified Chinese.
+_Avoid_: Per-module language, graph-only language toggle, browser-only language setting
+
 **Review Evidence Package**:
 A reviewable package of customer-level evidence shown in the Customer Risk Review Workbench and reusable as input to AI investigation. It organizes known facts, risk signals, graph associations, transaction patterns, confirmed-risk matches, evidence gaps, and reasoning context without becoming the final decision.
 _Avoid_: Final disposition, page state, raw data dump
